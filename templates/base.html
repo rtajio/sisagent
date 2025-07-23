@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema Bancario{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin: 0.25rem 0;
+        }
+        .sidebar .nav-link:hover {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            background-color: rgba(255,255,255,0.2);
+            color: white;
+        }
+        .main-content {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border-radius: 0.75rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+        }
+        .alert {
+            border-radius: 0.75rem;
+            border: none;
+            opacity: 1;
+            transition: opacity 1.5s;
+        }
+        .alert.hide {
+            opacity: 0;
+            transition: opacity 1.5s;
+        }
+        .table {
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .form-control, .form-select {
+            border-radius: 0.5rem;
+            border: 1px solid #dee2e6;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        /* Sistema de notificaciones mejorado con colores CRUD */
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+        }
+        
+        .notification {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            margin-bottom: 15px;
+            padding: 18px 22px;
+            border-left: 5px solid;
+            animation: slideIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            position: relative;
+            overflow: hidden;
+            transform: translateX(100%);
+        }
+        
+        /* Colores específicos para CRUD */
+        .notification.create {
+            border-left-color: #28a745;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.2);
+        }
+        
+        .notification.update {
+            border-left-color: #fd7e14;
+            background: linear-gradient(135deg, #ffe8d1 0%, #ffd8a8 100%);
+            box-shadow: 0 8px 25px rgba(253, 126, 20, 0.2);
+        }
+        
+        .notification.delete {
+            border-left-color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.2);
+        }
+        
+        .notification.success {
+            border-left-color: #28a745;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.2);
+        }
+        
+        .notification.warning {
+            border-left-color: #ffc107;
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            box-shadow: 0 8px 25px rgba(255, 193, 7, 0.2);
+        }
+        
+        .notification.error {
+            border-left-color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.2);
+        }
+        
+        .notification.info {
+            border-left-color: #17a2b8;
+            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+            box-shadow: 0 8px 25px rgba(23, 162, 184, 0.2);
+        }
+        
+        .notification-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .notification-icon {
+            font-size: 1.4em;
+            flex-shrink: 0;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .notification.create .notification-icon {
+            color: #28a745;
+        }
+        
+        .notification.update .notification-icon {
+            color: #fd7e14;
+        }
+        
+        .notification.delete .notification-icon {
+            color: #dc3545;
+        }
+        
+        .notification.success .notification-icon {
+            color: #28a745;
+        }
+        
+        .notification.warning .notification-icon {
+            color: #856404;
+        }
+        
+        .notification.error .notification-icon {
+            color: #dc3545;
+        }
+        
+        .notification.info .notification-icon {
+            color: #17a2b8;
+        }
+        
+        .notification-message {
+            flex-grow: 1;
+            font-weight: 600;
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+        
+        .notification-close {
+            background: none;
+            border: none;
+            font-size: 1.1em;
+            cursor: pointer;
+            color: #666;
+            padding: 4px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+        
+        .notification-close:hover {
+            color: #333;
+            background-color: rgba(0,0,0,0.1);
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+        
+        .notification.hiding {
+            animation: fadeOut 1.5s ease-out forwards;
+        }
+        
+        /* Barra de progreso para auto-cierre */
+        .notification-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 4px;
+            background: rgba(0,0,0,0.1);
+            animation: progress 10s linear;
+            border-radius: 0 0 12px 12px;
+        }
+        
+        .notification.create .notification-progress {
+            background: rgba(40, 167, 69, 0.3);
+        }
+        
+        .notification.update .notification-progress {
+            background: rgba(253, 126, 20, 0.3);
+        }
+        
+        .notification.delete .notification-progress {
+            background: rgba(220, 53, 69, 0.3);
+        }
+        
+        @keyframes progress {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+        
+        /* Efecto de vibración para notificaciones importantes */
+        .notification.important {
+            animation: slideIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), vibrate 0.3s ease-in-out 0.5s;
+        }
+        
+        @keyframes vibrate {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-2px); }
+            75% { transform: translateX(2px); }
+        }
+    </style>
+</head>
+<body>
+    <div id="notification-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
+    <audio id="notif-success" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
+    <audio id="notif-error" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
+    <audio id="notif-warning" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
+    <audio id="notif-info" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
+    
+    {% if current_user.is_authenticated %}
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <div class="text-center mb-4">
+                        <h5 class="text-white">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            SISAGENT
+                        </h5>
+                        <small class="text-muted">Sistema Bancario</small>
+                    </div>
+                    
+                    <ul class="nav flex-column">
+                        {% if current_user.es_admin %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                                <i class="fas fa-list me-2"></i>
+                                Operaciones
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_sucursales' %}active{% endif %}" href="{{ url_for('admin_sucursales') }}">
+                                <i class="fas fa-building me-2"></i>
+                                Sucursales
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_usuarios' %}active{% endif %}" href="{{ url_for('admin_usuarios') }}">
+                                <i class="fas fa-users me-2"></i>
+                                Usuarios
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}" href="{{ url_for('reportes') }}">
+                                <i class="fas fa-chart-bar me-2"></i>
+                                Reportes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'editar_perfil_admin' %}active{% endif %}" href="{{ url_for('editar_perfil_admin') }}">
+                                <i class="fas fa-user-cog me-2"></i>
+                                Mi Perfil
+                            </a>
+                        </li>
+
+                        {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}" href="{{ url_for('user_dashboard') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                                <i class="fas fa-list me-2"></i>
+                                Operaciones
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li class="nav-item mt-3">
+                            <a class="nav-link text-danger" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt me-2"></i>
+                                Cerrar Sesión
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+            
+            <!-- Contenido principal -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">{% block page_title %}{% endblock %}</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        {% block page_actions %}{% endblock %}
+                    </div>
+                </div>
+                
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    {% else %}
+        {% block auth_content %}{% endblock %}
+    {% endif %}
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Audio para notificaciones con sonidos reales mejorados -->
+    <audio id="notification-sound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" type="audio/wav">
+    </audio>
+    
+    <!-- Audio adicional para diferentes tipos de notificaciones -->
+    <audio id="create-sound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" type="audio/wav">
+    </audio>
+    
+    <audio id="update-sound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" type="audio/wav">
+    </audio>
+    
+    <audio id="delete-sound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" type="audio/wav">
+    </audio>
+    
+    <!-- Sistema de notificaciones mejorado con sonidos CRUD -->
+    <script>
+    // Variable global para AudioContext
+    let audioContext = null;
+    let audioInitialized = false;
+    
+    // Función para inicializar AudioContext
+    function initAudioContext() {
+        if (audioInitialized) return;
+        
+        try {
+            // Crear AudioContext solo cuando sea necesario
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            // Si está suspendido, reanudarlo
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            
+            audioInitialized = true;
+            console.log('AudioContext inicializado correctamente');
+        } catch (e) {
+            console.error('Error al inicializar AudioContext:', e);
+            audioInitialized = false;
+        }
+    }
+    
+    // Función para generar beep uniforme y fuerte
+    function playBeep(frequency = 800, duration = 300, type = 'sine') {
+        // Inicializar AudioContext si no está inicializado
+        if (!audioInitialized) {
+            initAudioContext();
+        }
+        
+        try {
+            if (!audioContext || audioContext.state === 'closed') {
+                throw new Error('AudioContext no disponible');
+            }
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+            
+            // Configurar volumen MUY ALTO y uniforme
+            gainNode.gain.setValueAtTime(0.8, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration / 1000);
+            
+            console.log(`Reproduciendo beep fuerte: ${frequency}Hz, ${duration}ms, ${type}`);
+        } catch (e) {
+            console.error('Error al reproducir beep:', e);
+            playFallbackSound();
+        }
+    }
+    
+    // Función fallback mejorada para reproducir sonido
+    function playFallbackSound() {
+        try {
+            const audio = document.getElementById('notification-sound');
+            if (audio) {
+                audio.currentTime = 0;
+                audio.volume = 0.5;
+                const playPromise = audio.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log('Sonido fallback reproducido correctamente');
+                    }).catch(e => {
+                        console.error('Error al reproducir sonido fallback:', e);
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Error en fallback sound:', e);
+        }
+    }
+    
+    // Función para reproducir sonido uniforme y fuerte
+    function playNotificationSound(type) {
+        console.log(`Reproduciendo sonido fuerte para tipo: ${type}`);
+        
+        // Verificar si el audio está habilitado
+        const audioEnabled = localStorage.getItem('notificationAudioEnabled') !== 'false';
+        if (!audioEnabled) {
+            console.log('Audio deshabilitado por el usuario');
+            return;
+        }
+        
+        try {
+            // SONIDO UNIFORME Y FUERTE PARA TODOS LOS TIPOS
+            switch(type) {
+                case 'create':
+                case 'success':
+                case 'update':
+                case 'warning':
+                case 'delete':
+                case 'error':
+                case 'info':
+                default:
+                    // Sonido uniforme: BEEP FUERTE Y CLARO
+                    playBeep(800, 400, 'sine');
+                    break;
+            }
+        } catch (e) {
+            console.error('Error en playNotificationSound:', e);
+            playFallbackSound();
+        }
+    }
+    
+    // Función para reproducir sonidos de audio HTML
+    function playAudioSound(audioId) {
+        try {
+            const audio = document.getElementById(audioId);
+            if (audio) {
+                audio.currentTime = 0;
+                audio.volume = 0.6;
+                const playPromise = audio.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log(`Sonido ${audioId} reproducido correctamente`);
+                    }).catch(e => {
+                        console.error(`Error al reproducir ${audioId}:`, e);
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error en playAudioSound ${audioId}:`, e);
+        }
+    }
+    
+    // Inicializar audio cuando se carga la página
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Inicializando sistema de audio...');
+        
+        // Intentar inicializar AudioContext
+        initAudioContext();
+    });
+    
+    // Función para mostrar notificaciones CRUD mejoradas - SIN DUPLICADOS
+    let activeNotifications = new Set();
+    
+    function showNotification(message, type = 'success', isImportant = false) {
+        const container = document.getElementById('notification-container');
+        if (!container) {
+            console.error('Contenedor de notificaciones no encontrado');
+            return;
+        }
+        
+        // Verificar si ya existe una notificación con el mismo mensaje
+        if (activeNotifications.has(message)) {
+            console.log('🔄 Notificación ya activa, saltando:', message);
+            return;
+        }
+        
+        // Marcar como activa
+        activeNotifications.add(message);
+        
+        // Crear elemento de notificación
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        if (isImportant) {
+            notification.classList.add('important');
+        }
+        
+        // Iconos específicos para CRUD
+        const icons = {
+            'create': 'fas fa-plus-circle',
+            'update': 'fas fa-edit',
+            'delete': 'fas fa-trash-alt',
+            'success': 'fas fa-check-circle',
+            'warning': 'fas fa-exclamation-triangle',
+            'error': 'fas fa-times-circle',
+            'info': 'fas fa-info-circle'
+        };
+        
+        // Sanitizar el mensaje para evitar XSS
+        const sanitizedMessage = message.replace(/[<>]/g, '');
+        
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="notification-icon ${icons[type] || icons.info}"></i>
+                <span class="notification-message">${sanitizedMessage}</span>
+                <button class="notification-close" onclick="closeNotification(this)" title="Cerrar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="notification-progress"></div>
+        `;
+        
+        // Agregar al contenedor
+        container.appendChild(notification);
+        
+        // Reproducir sonido específico según el tipo
+        playNotificationSound(type);
+        
+        // Auto-eliminar después de 3 segundos mínimo + animación de transparencia
+        setTimeout(() => {
+            const closeButton = notification.querySelector('.notification-close');
+            if (closeButton) {
+                closeNotification(closeButton);
+            }
+            // Remover del set de notificaciones activas
+            activeNotifications.delete(message);
+        }, 3000);
+    }
+    
+    // Función para cerrar notificación
+    function closeNotification(button) {
+        const notification = button.closest('.notification');
+        if (notification) {
+            const messageElement = notification.querySelector('.notification-message');
+            const message = messageElement ? messageElement.textContent : '';
+            
+            notification.classList.add('hiding');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+                // Remover del set de notificaciones activas
+                if (message) {
+                    activeNotifications.delete(message);
+                }
+            }, 1500); // Duración de la animación fadeOut
+        }
+    }
+    
+    // Función para actualizar IDs de operaciones
+    function updateOperationIds() {
+        const table = document.querySelector('table');
+        if (table) {
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach((row, index) => {
+                const idCell = row.querySelector('td:first-child');
+                if (idCell) {
+                    idCell.textContent = index + 1;
+                }
+            });
+        }
+    }
+    
+    // Función global para notificaciones CRUD
+    window.showCRUDNotification = function(message, action) {
+        let type = 'success';
+        let isImportant = false;
+        
+        switch(action) {
+            case 'create':
+            case 'add':
+            case 'register':
+                type = 'create';
+                isImportant = true;
+                break;
+            case 'update':
+            case 'edit':
+            case 'modify':
+                type = 'update';
+                break;
+            case 'delete':
+            case 'remove':
+            case 'eliminate':
+                type = 'delete';
+                isImportant = true;
+                break;
+            case 'error':
+                type = 'error';
+                break;
+            case 'warning':
+                type = 'warning';
+                break;
+            case 'info':
+                type = 'info';
+                break;
+        }
+        
+        showNotification(message, type, isImportant);
+    };
+    
+    // Sistema mejorado de detección de mensajes flash - SIN DUPLICADOS
+    let processedMessages = new Set();
+    
+    function processFlashMessages() {
+        console.log('🔍 Buscando mensajes flash...');
+        
+        // Buscar mensajes flash por diferentes selectores
+        const selectors = [
+            '.alert',
+            '.alert-success', 
+            '.alert-warning', 
+            '.alert-danger', 
+            '.alert-info',
+            '[class*="alert"]'
+        ];
+        
+        let flashMessages = [];
+        selectors.forEach(selector => {
+            const messages = document.querySelectorAll(selector);
+            flashMessages = flashMessages.concat(Array.from(messages));
+        });
+        
+        console.log(`📨 Encontrados ${flashMessages.length} mensajes flash`);
+        
+        flashMessages.forEach(function(message) {
+            // Obtener el texto del mensaje
+            const messageText = message.textContent.replace(/[×✕]/g, '').trim();
+            
+            // Evitar procesar el mismo mensaje múltiples veces
+            if (processedMessages.has(messageText)) {
+                console.log('🔄 Mensaje ya procesado, saltando:', messageText);
+                message.style.display = 'none';
+                message.remove();
+                return;
+            }
+            
+            // Marcar como procesado
+            processedMessages.add(messageText);
+            
+            let type = 'success';
+            let isImportant = false;
+            const messageLower = messageText.toLowerCase();
+            
+            console.log('📝 Procesando mensaje:', messageText);
+            
+            // Determinar tipo basado en las clases CSS
+            if (message.classList.contains('alert-danger') || message.classList.contains('alert-error')) {
+                type = 'error';
+            } else if (message.classList.contains('alert-warning')) {
+                type = 'warning';
+            } else if (message.classList.contains('alert-info')) {
+                type = 'info';
+            } else if (message.classList.contains('alert-success')) {
+                type = 'success';
+            }
+            
+            // Determinar tipo basado en el contenido del mensaje
+            if (messageLower.includes('creado') || messageLower.includes('agregado') || messageLower.includes('registrado') || messageLower.includes('añadido')) {
+                type = 'create';
+                isImportant = true;
+            } else if (messageLower.includes('actualizado') || messageLower.includes('modificado') || messageLower.includes('editado') || messageLower.includes('cambiado')) {
+                type = 'update';
+            } else if (messageLower.includes('eliminado') || messageLower.includes('borrado') || messageLower.includes('removido')) {
+                type = 'delete';
+                isImportant = true;
+            } else if (messageLower.includes('error') || messageLower.includes('falló') || messageLower.includes('denegado') || messageLower.includes('invalido')) {
+                type = 'error';
+            } else if (messageLower.includes('advertencia') || messageLower.includes('cuidado') || messageLower.includes('atención')) {
+                type = 'warning';
+            } else if (messageLower.includes('info') || messageLower.includes('información')) {
+                type = 'info';
+            }
+            
+            console.log(`✅ Mostrando notificación: ${type} - ${messageText}`);
+            
+            // Remover el mensaje original
+            message.style.display = 'none';
+            message.remove();
+            
+            // Mostrar como notificación CRUD
+            showNotification(messageText, type, isImportant);
+            
+            // Actualizar IDs si es una operación CRUD
+            if (messageLower.includes('operación') || messageLower.includes('Operación')) {
+                setTimeout(updateOperationIds, 100);
+            }
+        });
+    }
+    
+    // Sistema de detección mejorado - PROCESAMIENTO ÚNICO
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Inicializando sistema de notificaciones...');
+        
+        // Procesar mensajes flash existentes una sola vez
+        setTimeout(processFlashMessages, 200);
+        
+        // Observar cambios en el DOM para capturar nuevos mensajes flash
+        const observer = new MutationObserver(function(mutations) {
+            let shouldProcess = false;
+            
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) {
+                            // Verificar si el nodo es un mensaje flash
+                            if (node.classList && (
+                                node.classList.contains('alert') ||
+                                node.classList.contains('alert-success') ||
+                                node.classList.contains('alert-warning') ||
+                                node.classList.contains('alert-danger') ||
+                                node.classList.contains('alert-info')
+                            )) {
+                                shouldProcess = true;
+                            }
+                            
+                            // Verificar si el nodo contiene mensajes flash
+                            if (node.querySelector && node.querySelector('.alert')) {
+                                shouldProcess = true;
+                            }
+                        }
+                    });
+                }
+            });
+            
+            if (shouldProcess) {
+                console.log('🔄 Cambios detectados, procesando mensajes flash...');
+                setTimeout(processFlashMessages, 200);
+            }
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        // Actualizar IDs inicialmente
+        updateOperationIds();
+        
+        console.log('✅ Sistema de notificaciones inicializado');
+    });
+    </script>
+    
+    {% block scripts %}
+<script>
+function showNotification(message, type = 'success') {
+    const container = document.getElementById('notification-container');
+    const notif = document.createElement('div');
+    notif.className = `alert alert-${type} shadow mb-2`;
+    notif.innerHTML = message;
+    container.appendChild(notif);
+    // Sonido
+    let audioId = 'notif-success';
+    if(type === 'error') audioId = 'notif-error';
+    else if(type === 'warning' || type === 'warn') audioId = 'notif-warning';
+    else if(type === 'info') audioId = 'notif-info';
+    document.getElementById(audioId).play();
+    setTimeout(() => {
+        notif.classList.add('hide');
+        setTimeout(() => notif.remove(), 2000);
+    }, 4000);
+}
+</script>
+{% endblock %}
+{% if get_flashed_messages(with_categories=true) %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Evitar doble notificación si viene de AJAX
+        if (!localStorage.getItem('notificacion_actualizacion')) {
+            {% for category, message in get_flashed_messages(with_categories=true) %}
+            showNotification("{{ message|escape }}", "{{ category }}");
+            {% endfor %}
+        } else {
+            localStorage.removeItem('notificacion_actualizacion');
+        }
+    });
+</script>
+{% endif %}
+</body>
+</html> 

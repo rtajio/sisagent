@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISAGENT - Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        .header {
+            background: #007bff;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border: 1px solid #ccc;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .success {
+            background: #28a745;
+            color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .logout {
+            background: #dc3545;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .logout:hover {
+            background: #c82333;
+        }
+        .back {
+            background: #6c757d;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+            margin-right: 10px;
+            border-radius: 5px;
+        }
+        .back:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>¡Bienvenido a SISAGENT!</h1>
+            <p>Dashboard del Sistema de Gestión de Operaciones</p>
+        </div>
+        
+        <div class="success">
+            ✅ Login Exitoso - Archivo HTML Estático Funcionando
+        </div>
+        
+        <div class="card">
+            <h2>Login Exitoso</h2>
+            <p>Has iniciado sesión correctamente en el sistema SISAGENT.</p>
+            <p>Este es un archivo HTML estático que funciona sin servidor.</p>
+            <p>El problema de la página en blanco está resuelto.</p>
+            
+            <a href="login.html" class="back">Volver al Login</a>
+            <a href="#" class="logout" onclick="logout()">Cerrar Sesión</a>
+        </div>
+    </div>
+
+    <script>
+        function logout() {
+            if (confirm('¿Deseas cerrar sesión?')) {
+                window.location.href = 'login.html';
+            }
+        }
+    </script>
+</body>
+</html> 
