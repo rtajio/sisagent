@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Operaciones - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exchange-alt me-2"></i>
+                        Registro de Operaciones
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Formulario de Nueva Operación -->
+                    <form method="POST" action="{{ url_for('registrar_operacion') }}" class="mb-4">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label for="monto" class="form-label">Monto (S/)</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="monto" 
+                                       name="monto" 
+                                       step="0.01" 
+                                       min="0" 
+                                       required>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="comision" class="form-label">Comisión (S/)</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="comision" 
+                                       name="comision" 
+                                       step="0.01" 
+                                       min="0" 
+                                       required>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="medio" class="form-label">Medio de Pago</label>
+                                <select class="form-select" id="medio" name="medio" required>
+                                    <option value="">Seleccionar...</option>
+                                    <option value="BBVA">BBVA</option>
+                                    <option value="BCP">BCP</option>
+                                    <option value="Interbank">Interbank</option>
+                                    <option value="Scotiabank">Scotiabank</option>
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Yape">Yape</option>
+                                    <option value="Plin">Plin</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="sucursal_id" class="form-label">Sucursal</label>
+                                {% if sucursales and sucursales|length > 0 %}
+                                    <select class="form-select" id="sucursal_id" name="sucursal_id" required>
+                                        <option value="">Seleccionar...</option>
+                                        {% for sucursal in sucursales %}
+                                            <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
+                                        {% endfor %}
+                                    </select>
+                                {% else %}
+                                    <input type="text" class="form-control" value="{{ current_user.sucursal.nombre if current_user.sucursal else 'Sin sucursal' }}" readonly>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-success" id="btnRegistrar">
+                                    <i class="fas fa-plus me-2"></i>
+                                    Registrar Operación
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Tabla de Operaciones -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Hora</th>
+                                    <th>Monto</th>
+                                    <th>Comisión</th>
+                                    <th>Medio</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for operacion in operaciones %}
+                                <tr id="fila-{{ operacion.id }}">
+                                    <td>{{ operacion.id }}</td>
+                                    <td>{{ operacion.hora.strftime('%H:%M:%S') }}</td>
+                                    <td class="font-weight-bold" id="monto-{{ operacion.id }}">
+                                        S/ {{ "%.2f"|format(operacion.monto) }}
+                                    </td>
+                                    <td class="text-success font-weight-bold" id="comision-{{ operacion.id }}">
+                                        S/ {{ "%.2f"|format(operacion.comision) }}
+                                    </td>
+                                    <td id="medio-{{ operacion.id }}">
+                                        <span class="badge bg-primary">{{ operacion.medio }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit({{ operacion.id }}, '{{ operacion.hora.strftime('%H:%M:%S') }}', {{ operacion.monto }}, {{ operacion.comision }}, '{{ operacion.medio }}')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <form method="POST" action="{{ url_for('eliminar_operacion', operacion_id=operacion.id) }}" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que quieres eliminar esta operación?')">
+                                                <button type="submit" class="btn btn-outline-danger" title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Edición de Operación -->
+<div class="modal fade" id="modalEdicion" tabindex="-1" aria-labelledby="modalEdicionLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalEdicionLabel">
+                    <i class="fas fa-edit me-2"></i>
+                    Editar Operación
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" id="formEdicion">
+                    <input type="hidden" id="operacionIdModal" name="operacion_id">
+                    
+                    <div class="mb-3">
+                        <label for="montoModal" class="form-label">Monto (S/)</label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="montoModal" 
+                               name="monto" 
+                               step="0.01" 
+                               min="0" 
+                               required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="comisionModal" class="form-label">Comisión (S/)</label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="comisionModal" 
+                               name="comision" 
+                               step="0.01" 
+                               min="0" 
+                               required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="medioModal" class="form-label">Medio de Pago</label>
+                        <select class="form-select" id="medioModal" name="medio" required>
+                            <option value="BBVA">BBVA</option>
+                            <option value="BCP">BCP</option>
+                            <option value="Interbank">Interbank</option>
+                            <option value="Scotiabank">Scotiabank</option>
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Yape">Yape</option>
+                            <option value="Plin">Plin</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>
+                    Cancelar
+                </button>
+                <button type="submit" form="formEdicion" class="btn btn-primary">
+                    <i class="fas fa-save me-2"></i>
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleEdit(id, hora, monto, comision, medio) {
+    const fila = document.getElementById(`fila-${id}`);
+    fila.innerHTML = `
+        <td>${id}</td>
+        <td>${hora}</td>
+        <td><input type='number' id='edit-monto-${id}' value='${monto}' step='0.01' min='0' class='form-control form-control-sm'></td>
+        <td><input type='number' id='edit-comision-${id}' value='${comision}' step='0.01' min='0' class='form-control form-control-sm'></td>
+        <td>
+            <select id='edit-medio-${id}' class='form-select form-select-sm'>
+                <option value='BBVA' ${medio==='BBVA'?'selected':''}>BBVA</option>
+                <option value='BCP' ${medio==='BCP'?'selected':''}>BCP</option>
+                <option value='Interbank' ${medio==='Interbank'?'selected':''}>Interbank</option>
+                <option value='Scotiabank' ${medio==='Scotiabank'?'selected':''}>Scotiabank</option>
+                <option value='Efectivo' ${medio==='Efectivo'?'selected':''}>Efectivo</option>
+                <option value='Yape' ${medio==='Yape'?'selected':''}>Yape</option>
+                <option value='Plin' ${medio==='Plin'?'selected':''}>Plin</option>
+            </select>
+        </td>
+        <td>
+            <div class='btn-group btn-group-sm' role='group'>
+                <button type='button' class='btn btn-success' onclick='guardarCambios(${id})'><i class='fas fa-save'></i></button>
+                <button type='button' class='btn btn-secondary' onclick='cancelarEdicion(${id}, ${monto}, ${comision}, "${medio}")'><i class='fas fa-times'></i></button>
+            </div>
+        </td>
+    `;
+}
+
+function guardarCambios(id) {
+    const monto = document.getElementById(`edit-monto-${id}`).value;
+    const comision = document.getElementById(`edit-comision-${id}`).value;
+    const medio = document.getElementById(`edit-medio-${id}`).value;
+    fetch(`/api/operaciones/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monto, comision, medio })
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Operación actualizada exitosamente', 'warning');
+            // Espera 6 segundos (4 de notificación + 2 de transición) antes de recargar
+            setTimeout(() => location.reload(), 6000);
+        } else {
+            showNotification('Error al actualizar la operación', 'error');
+        }
+    })
+    .catch(() => showNotification('Error de red al actualizar la operación', 'error'));
+}
+
+function cancelarEdicion(id, monto, comision, medio) {
+    location.reload();
+}
+</script>
+{% endblock %} 
