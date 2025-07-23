@@ -1144,7 +1144,6 @@ def api_eliminar_operacion(operacion_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        
         # Crear usuario admin por defecto si no existe
         admin = Usuario.query.filter_by(username='admin').first()
         if not admin:
@@ -1158,5 +1157,6 @@ if __name__ == '__main__':
             )
             db.session.add(admin)
             db.session.commit()
-    
-    app.run(host='0.0.0.0', debug=True, use_reloader=False, port=5000) 
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', debug=True, use_reloader=False, port=port) 
