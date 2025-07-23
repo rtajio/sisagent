@@ -1,0 +1,9 @@
+Flask
+Flask-SQLAlchemy
+Flask-Login
+Flask-Cors
+python-dotenv
+pytz
+requests
+beautifulsoup4
+gunicorn 
