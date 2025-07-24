@@ -11,13 +11,24 @@ from sqlalchemy import extract
 load_dotenv()
 
 app = Flask(__name__)
+
+# Configuración para Railway
+if os.environ.get('DATABASE_URL'):
+    # Para Railway con PostgreSQL
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Para desarrollo local
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent.db'
+
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Configurar CORS para permitir peticiones desde el frontend
+# Configurar CORS para permitir peticiones desde cualquier origen en producción
 from flask_cors import CORS
-CORS(app, origins=['http://127.0.0.1:5000', 'http://localhost:5000', 'http://127.0.0.1:5001', 'http://localhost:5001'])
+CORS(app, origins=['*'])
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -1303,4 +1314,6 @@ if __name__ == '__main__':
             db.session.commit()
     import os
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', debug=True, use_reloader=False, port=port) 
+    # En producción, no usar debug mode
+    debug_mode = os.environ.get('FLASK_ENV') == 'development'
+    app.run(host='0.0.0.0', debug=debug_mode, use_reloader=False, port=port) 
