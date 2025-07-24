@@ -107,6 +107,11 @@ class MedioSucursal(db.Model):
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
 
+# Health check endpoint para Railway
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy', 'message': 'SISAGENT is running'}), 200
+
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1297,21 +1302,25 @@ def toggle_medio_sucursal(sucursal_id):
 
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        # Crear usuario admin por defecto si no existe
-        admin = Usuario.query.filter_by(username='admin').first()
-        if not admin:
-            admin = Usuario(
-                username='admin',
-                email='admin@sisagent.com',
-                password_hash=generate_password_hash('61442159'),
-                nombre_completo='Administrador SISAGENT',
-                es_admin=True,
-                sucursal_id=None  # El admin no tiene sucursal asignada inicialmente
-            )
-            db.session.add(admin)
-            db.session.commit()
+    try:
+        with app.app_context():
+            db.create_all()
+            # Crear usuario admin por defecto si no existe
+            admin = Usuario.query.filter_by(username='admin').first()
+            if not admin:
+                admin = Usuario(
+                    username='admin',
+                    email='admin@sisagent.com',
+                    password_hash=generate_password_hash('61442159'),
+                    nombre_completo='Administrador SISAGENT',
+                    es_admin=True,
+                    sucursal_id=None  # El admin no tiene sucursal asignada inicialmente
+                )
+                db.session.add(admin)
+                db.session.commit()
+    except Exception as e:
+        print(f"Error durante la inicialización: {e}")
+    
     import os
     port = int(os.environ.get("PORT", 5000))
     # En producción, no usar debug mode

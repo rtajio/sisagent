@@ -1,1 +1,1 @@
-web: gunicorn wsgi:app 
+web: python init_db.py && gunicorn wsgi:application 
