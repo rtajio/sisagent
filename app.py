@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 import os
 from dotenv import load_dotenv
+from sqlalchemy import extract
 
 load_dotenv()
 
@@ -26,8 +27,7 @@ login_manager.login_view = 'login'
 # Configuración de zona horaria (UTC-5 para Perú)
 peru_tz = pytz.timezone('America/Lima')
 
-# Medios de pago disponibles
-MEDIOS_PAGO = ['BCP', 'KS', 'IBK', 'BN', 'AQP', 'NIUBIZ', 'CONFIANZA', 'BBVA', 'ICA', 'IZIPAY', 'CULQI', 'BIM']
+# Medios de pago se obtienen dinámicamente de la base de datos
 
 # Modelos de base de datos
 class Sucursal(db.Model):
@@ -76,6 +76,22 @@ class ComisionMensual(db.Model):
     total_comision = db.Column(db.Numeric(10, 2), default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class MedioPago(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre_abreviado = db.Column(db.String(20), unique=True, nullable=False)
+    nombre_completo = db.Column(db.String(100), nullable=False)
+    activo = db.Column(db.Boolean, default=True)
+    orden = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class MedioSucursal(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    medio_pago_id = db.Column(db.Integer, db.ForeignKey('medio_pago.id'), nullable=False)
+    activo = db.Column(db.Boolean, default=True)
+    sucursal = db.relationship('Sucursal', backref='medios_sucursal')
+    medio_pago = db.relationship('MedioPago', backref='sucursales_medio')
+
 @login_manager.user_loader
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
@@ -117,25 +133,50 @@ def admin_dashboard():
     if not current_user.es_admin:
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
-    
-    # Estadísticas para admin
-    total_sucursales = Sucursal.query.filter_by(activa=True).count()
-    total_usuarios = Usuario.query.filter_by(activo=True).count()
-    
-    # Comisiones del día actual
+
     hoy = datetime.now(peru_tz).date()
-    comisiones_hoy = db.session.query(
-        Sucursal.nombre,
-        db.func.coalesce(db.func.sum(ComisionDiaria.total_comision), 0).label('total')
-    ).outerjoin(ComisionDiaria, 
-                (Sucursal.id == ComisionDiaria.sucursal_id) & 
-                (ComisionDiaria.fecha == hoy)
-    ).group_by(Sucursal.id, Sucursal.nombre).all()
+    mes_actual = hoy.month
+    año_actual = hoy.year
+
+    # Optimizar consultas con una sola query por sucursal
+    sucursales = Sucursal.query.filter_by(activa=True).all()
+    comisiones_hoy = []
+    comisiones_mes = {}
     
-    return render_template('admin_dashboard.html', 
-                         total_sucursales=total_sucursales,
-                         total_usuarios=total_usuarios,
-                         comisiones_hoy=comisiones_hoy)
+    # Obtener todas las comisiones diarias en una sola consulta
+    comisiones_diarias = db.session.query(
+        ComisionDiaria.sucursal_id,
+        db.func.sum(ComisionDiaria.total_comision).label('total')
+    ).filter(
+        ComisionDiaria.fecha == hoy
+    ).group_by(ComisionDiaria.sucursal_id).all()
+    
+    # Obtener todas las comisiones mensuales en una sola consulta
+    comisiones_mensuales = db.session.query(
+        Operacion.sucursal_id,
+        db.func.sum(Operacion.comision).label('total')
+    ).filter(
+        db.extract('month', Operacion.hora) == mes_actual,
+        db.extract('year', Operacion.hora) == año_actual
+    ).group_by(Operacion.sucursal_id).all()
+    
+    # Crear diccionarios para acceso rápido
+    comisiones_diarias_dict = {cd.sucursal_id: float(cd.total) for cd in comisiones_diarias}
+    comisiones_mensuales_dict = {cm.sucursal_id: float(cm.total) for cm in comisiones_mensuales}
+    
+    for suc in sucursales:
+        total_hoy = comisiones_diarias_dict.get(suc.id, 0.0)
+        total_mes = comisiones_mensuales_dict.get(suc.id, 0.0)
+        comisiones_hoy.append((suc.id, suc.nombre, total_hoy))
+        comisiones_mes[suc.id] = total_mes
+    total_sucursales = len(sucursales)
+    total_usuarios = Usuario.query.filter_by(activo=True).count()
+    return render_template('admin_dashboard.html',
+        total_sucursales=total_sucursales,
+        total_usuarios=total_usuarios,
+        comisiones_hoy=comisiones_hoy,
+        comisiones_mes=comisiones_mes
+    )
 
 @app.route('/user')
 @login_required
@@ -143,18 +184,15 @@ def user_dashboard():
     if current_user.es_admin:
         return redirect(url_for('admin_dashboard'))
     
-    # Obtener comisión diaria del usuario
     hoy = datetime.now(peru_tz).date()
-    comision_diaria = ComisionDiaria.query.filter_by(
-        fecha=hoy, 
-        sucursal_id=current_user.sucursal_id
-    ).first()
+    # Calcular la comisión diaria SOLO de las operaciones del usuario actual
+    total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
+        Operacion.usuario_id == current_user.id,
+        db.func.date(Operacion.hora) == hoy
+    ).scalar() or 0
     
-    total_comision_hoy = comision_diaria.total_comision if comision_diaria else 0
-    
-    # Operaciones del día
     operaciones_hoy = Operacion.query.filter_by(
-        sucursal_id=current_user.sucursal_id
+        usuario_id=current_user.id
     ).filter(
         db.func.date(Operacion.hora) == hoy
     ).order_by(Operacion.hora.desc()).limit(10).all()
@@ -180,19 +218,22 @@ def crear_sucursal():
     if not current_user.es_admin:
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
-    
+    medios = MedioPago.query.order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
     if request.method == 'POST':
         nombre = request.form['nombre']
         direccion = request.form['direccion']
-        
-        nueva_sucursal = Sucursal(nombre=nombre, direccion=direccion)
-        db.session.add(nueva_sucursal)
+        sucursal = Sucursal(nombre=nombre, direccion=direccion)
+        db.session.add(sucursal)
         db.session.commit()
-        
+        # Asociar medios seleccionados
+        medios_ids = request.form.getlist('medios')
+        for medio_id in medios_ids:
+            ms = MedioSucursal(sucursal_id=sucursal.id, medio_pago_id=int(medio_id), activo=True)
+            db.session.add(ms)
+        db.session.commit()
         flash('Sucursal agregada exitosamente', 'success')
         return redirect(url_for('admin_sucursales'))
-    
-    return render_template('crear_sucursal.html')
+    return render_template('crear_sucursal.html', medios=medios)
 
 @app.route('/admin/sucursales/<int:sucursal_id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -200,19 +241,26 @@ def editar_sucursal(sucursal_id):
     if not current_user.es_admin:
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
-    
     sucursal = Sucursal.query.get_or_404(sucursal_id)
-    
+    medios = MedioPago.query.order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    medios_activos = {ms.medio_pago_id for ms in sucursal.medios_sucursal if ms.activo}
     if request.method == 'POST':
         sucursal.nombre = request.form['nombre']
         sucursal.direccion = request.form['direccion']
-        sucursal.activa = 'activa' in request.form
-        
         db.session.commit()
-        flash('Sucursal modificada exitosamente', 'warning')
+        # Actualizar medios
+        nuevos_ids = set(map(int, request.form.getlist('medios')))
+        # Desactivar los que ya no están
+        for ms in sucursal.medios_sucursal:
+            ms.activo = ms.medio_pago_id in nuevos_ids
+        # Agregar nuevos
+        existentes = {ms.medio_pago_id for ms in sucursal.medios_sucursal}
+        for medio_id in nuevos_ids - existentes:
+            db.session.add(MedioSucursal(sucursal_id=sucursal.id, medio_pago_id=medio_id, activo=True))
+        db.session.commit()
+        flash('Sucursal editada exitosamente', 'success')
         return redirect(url_for('admin_sucursales'))
-    
-    return render_template('editar_sucursal.html', sucursal=sucursal)
+    return render_template('editar_sucursal.html', sucursal=sucursal, medios=medios, medios_activos=medios_activos)
 
 @app.route('/admin/sucursales/<int:sucursal_id>/eliminar', methods=['POST'])
 @login_required
@@ -371,60 +419,72 @@ def editar_perfil_admin():
 @app.route('/operaciones')
 @login_required
 def operaciones():
-    # Obtener parámetros de filtro
     fecha = request.args.get('fecha')
     medio = request.args.get('medio')
     hora_inicio = request.args.get('hora_inicio')
     hora_fin = request.args.get('hora_fin')
-    
-    # Query base - admin puede ver todas las sucursales, usuarios solo su sucursal
+
     if current_user.es_admin:
         query = Operacion.query
         if request.args.get('sucursal_id'):
             query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
+            # Si se accede desde dashboard admin con sucursal_id, mostrar todas las operaciones sin filtrar por fecha
+            fecha = None
     else:
-        query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
-    
-    # Obtener fecha actual para comparación
+        query = Operacion.query.filter(Operacion.usuario_id == current_user.id)
+
     hoy = datetime.now(peru_tz).date()
-    
-    # Aplicar filtros
+
     if fecha:
-        # Convertir fecha string a objeto date para comparación
         fecha_objeto = datetime.strptime(fecha, '%Y-%m-%d').date()
-        
-        # Solo admin puede buscar fechas diferentes al día actual
         if not current_user.es_admin and fecha_objeto != hoy:
             flash('Solo los administradores pueden consultar operaciones de otros días', 'warning')
             fecha = None
-        
         if fecha:
             query = query.filter(db.func.date(Operacion.hora) == fecha)
     
-    # Si no hay fecha específica o no es admin, mostrar solo el día actual
-    if not fecha or not current_user.es_admin:
+    # Solo aplicar filtro de fecha si no es admin accediendo desde dashboard con sucursal_id
+    if (not fecha and not current_user.es_admin) or (fecha and not (current_user.es_admin and request.args.get('sucursal_id'))):
         query = query.filter(db.func.date(Operacion.hora) == hoy)
-    
     if medio:
         query = query.filter(Operacion.medio == medio)
-    
     if hora_inicio:
         query = query.filter(Operacion.hora >= hora_inicio)
-    
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
-    
-    operaciones = query.order_by(Operacion.hora.desc()).all()
-    
-    # Detectar si hay filtros aplicados
+
+    operaciones = query.join(Usuario).join(Sucursal).order_by(Operacion.hora.desc()).all()
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
-    return render_template('operaciones.html', 
+    # Calcular comisión del día si se accede desde dashboard admin
+    comision_dia = 0.0
+    sucursal_nombre = None
+    if current_user.es_admin and request.args.get('sucursal_id'):
+        sucursal_id = int(request.args.get('sucursal_id'))
+        sucursal = Sucursal.query.get(sucursal_id)
+        if sucursal:
+            sucursal_nombre = sucursal.nombre
+            # Calcular comisión del día para esta sucursal
+            comision_diaria = ComisionDiaria.query.filter_by(
+                fecha=hoy,
+                sucursal_id=sucursal_id
+            ).first()
+            if comision_diaria:
+                comision_dia = float(comision_diaria.total_comision)
+    
+
+    
+    # Medios activos para todos los usuarios
+    medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    return render_template('operaciones.html',
                          operaciones=operaciones,
                          fecha_actual=fecha or datetime.now(peru_tz).strftime('%Y-%m-%d'),
                          fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
                          filtros_aplicados=filtros_aplicados,
-                         sucursales=Sucursal.query.all() if current_user.es_admin else [])
+                         sucursales=Sucursal.query.all() if current_user.es_admin else [],
+                         medios_pago=medios_pago,
+                         comision_dia=comision_dia,
+                         sucursal_nombre=sucursal_nombre)
 
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
 @login_required
@@ -515,7 +575,7 @@ def editar_operacion(operacion_id):
     operacion = Operacion.query.get_or_404(operacion_id)
     
     # Verificar permisos
-    if not current_user.es_admin and operacion.sucursal_id != current_user.sucursal_id:
+    if not current_user.es_admin and operacion.usuario_id != current_user.id:
         flash('No tienes permisos para editar esta operación', 'error')
         return redirect(url_for('operaciones'))
     
@@ -620,7 +680,16 @@ def editar_operacion(operacion_id):
     
     # Pasar sucursales solo si es administrador
     sucursales = Sucursal.query.filter_by(activa=True).all() if current_user.es_admin else None
-    return render_template('editar_operacion.html', operacion=operacion, medios=MEDIOS_PAGO, sucursales=sucursales)
+    # Obtener medios de pago activos
+    medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    
+    # DEBUG TEMPORAL
+    print(f"🔍 DEBUG - Función editar_operacion()")
+    print(f"🔍 DEBUG - Medios obtenidos: {len(medios_pago)}")
+    for medio in medios_pago:
+        print(f"🔍 DEBUG - Medio: {medio.nombre_abreviado} (orden: {medio.orden})")
+    
+    return render_template('editar_operacion.html', operacion=operacion, medios_pago=medios_pago, sucursales=sucursales, version="v4")
 
 # Eliminar operación
 @app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
@@ -629,7 +698,7 @@ def eliminar_operacion(operacion_id):
     operacion = Operacion.query.get_or_404(operacion_id)
     
     # Verificar permisos
-    if not current_user.es_admin and operacion.sucursal_id != current_user.sucursal_id:
+    if not current_user.es_admin and operacion.usuario_id != current_user.id:
         flash('No tienes permisos para eliminar esta operación', 'error')
         return redirect(url_for('operaciones'))
     
@@ -720,25 +789,22 @@ def reportes():
         flash('Acceso denegado. Solo los administradores pueden generar reportes.', 'error')
         return redirect(url_for('dashboard'))
     
-    return render_template('reportes.html', sucursales=Sucursal.query.all())
+    # Obtener medios de pago y sucursales
+    medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    sucursales = Sucursal.query.all()
+    
+    return render_template('reportes.html', sucursales=sucursales, medios_pago=medios_pago)
+
+
 
 @app.route('/api/reportes/operaciones')
 @login_required
 def api_reportes_operaciones():
-    if not current_user.es_admin:
-        return jsonify({'error': 'Acceso denegado'}), 403
-    
-    # Obtener parámetros de filtro
     fecha_inicio = request.args.get('fecha_inicio')
     fecha_fin = request.args.get('fecha_fin')
     sucursal_id = request.args.get('sucursal_id')
     medio = request.args.get('medio')
-    tipo_reporte = request.args.get('tipo', 'diario')  # diario, mensual, anual
-    
-    # Query base
-    query = db.session.query(Operacion).join(Usuario).join(Sucursal)
-    
-    # Aplicar filtros
+    query = Operacion.query
     if fecha_inicio:
         query = query.filter(Operacion.hora >= fecha_inicio)
     if fecha_fin:
@@ -747,19 +813,22 @@ def api_reportes_operaciones():
         query = query.filter(Operacion.sucursal_id == sucursal_id)
     if medio:
         query = query.filter(Operacion.medio == medio)
-    
     operaciones = query.order_by(Operacion.hora.desc()).all()
     
     # Preparar datos para el reporte
     datos = []
     for op in operaciones:
+        # Obtener el nombre completo del medio
+        medio_obj = MedioPago.query.filter_by(nombre_abreviado=op.medio).first()
+        medio_nombre = medio_obj.nombre_completo if medio_obj else op.medio
+        
         datos.append({
             'id': op.id,
             'fecha': op.hora.strftime('%d/%m/%Y'),
             'hora': op.hora.strftime('%H:%M:%S'),
             'monto': float(op.monto),
             'comision': float(op.comision),
-            'medio': op.medio,
+            'medio': medio_nombre,
             'usuario': op.usuario.nombre_completo,
             'sucursal': op.sucursal.nombre if op.sucursal else 'Sin sucursal'
         })
@@ -774,122 +843,113 @@ def api_reportes_operaciones():
 @app.route('/api/reportes/exportar/<formato>')
 @login_required
 def exportar_reporte(formato):
-    if not current_user.es_admin:
-        return jsonify({'error': 'Acceso denegado'}), 403
-    
-    # Obtener parámetros de filtro
-    fecha_inicio = request.args.get('fecha_inicio')
-    fecha_fin = request.args.get('fecha_fin')
-    sucursal_id = request.args.get('sucursal_id')
-    medio = request.args.get('medio')
-    
-    # Query base
-    query = db.session.query(Operacion).join(Usuario).join(Sucursal)
-    
-    # Aplicar filtros
-    if fecha_inicio:
-        query = query.filter(Operacion.hora >= fecha_inicio)
-    if fecha_fin:
-        query = query.filter(Operacion.hora <= fecha_fin + ' 23:59:59')
-    if sucursal_id:
-        query = query.filter(Operacion.sucursal_id == sucursal_id)
-    if medio:
-        query = query.filter(Operacion.medio == medio)
-    
-    operaciones = query.order_by(Operacion.hora.desc()).all()
-    
-    if formato == 'csv':
-        import csv
-        from io import StringIO
+    try:
+        if not current_user.es_admin:
+            return 'Acceso denegado: solo el administrador puede exportar reportes.', 403
         
-        output = StringIO()
-        writer = csv.writer(output)
-        writer.writerow(['ID', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal'])
+        # Obtener parámetros de filtro
+        fecha_inicio = request.args.get('fecha_inicio')
+        fecha_fin = request.args.get('fecha_fin')
+        sucursal_id = request.args.get('sucursal_id')
+        medio = request.args.get('medio')
         
-        for op in operaciones:
-            writer.writerow([
-                op.id,
-                op.hora.strftime('%d/%m/%Y'),
-                op.hora.strftime('%H:%M:%S'),
-                float(op.monto),
-                float(op.comision),
-                op.medio,
-                op.usuario.nombre_completo,
-                op.sucursal.nombre if op.sucursal else 'Sin sucursal'
-            ])
+        # Query base
+        query = Operacion.query
         
-        from flask import Response
-        return Response(
-            output.getvalue(),
-            mimetype='text/csv',
-            headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.csv'}
-        )
-    
-    elif formato == 'xlsx':
-        try:
+        # Aplicar filtros
+        if fecha_inicio:
+            query = query.filter(Operacion.hora >= fecha_inicio)
+        if fecha_fin:
+            query = query.filter(Operacion.hora <= fecha_fin + ' 23:59:59')
+        if sucursal_id:
+            query = query.filter(Operacion.sucursal_id == sucursal_id)
+        if medio:
+            query = query.filter(Operacion.medio == medio)
+        
+        operaciones = query.order_by(Operacion.hora.desc()).all()
+        
+        # Función para obtener el nombre completo del medio
+        def get_medio_nombre(medio_abreviado):
+            medio_obj = MedioPago.query.filter_by(nombre_abreviado=medio_abreviado).first()
+            return medio_obj.nombre_completo if medio_obj else medio_abreviado
+        
+        if formato == 'csv':
+            import csv
+            from io import StringIO
+            output = StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['N°', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal'])
+            for idx, op in enumerate(operaciones, 1):
+                writer.writerow([
+                    idx,
+                    op.hora.strftime('%d/%m/%Y'),
+                    op.hora.strftime('%H:%M:%S'),
+                    float(op.monto),
+                    float(op.comision),
+                    get_medio_nombre(op.medio),
+                    op.usuario.nombre_completo,
+                    op.sucursal.nombre if op.sucursal else 'Sin sucursal'
+                ])
+            from flask import Response
+            return Response(
+                output.getvalue(),
+                mimetype='text/csv',
+                headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.csv'}
+            )
+        elif formato == 'xlsx':
             import openpyxl
             from openpyxl import Workbook
-            
+            from io import BytesIO
             wb = Workbook()
             ws = wb.active
             ws.title = "Operaciones"
-            
-            # Encabezados
-            headers = ['ID', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']
+            headers = ['N°', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']
             for col, header in enumerate(headers, 1):
                 ws.cell(row=1, column=col, value=header)
-            
-            # Datos
-            for row, op in enumerate(operaciones, 2):
-                ws.cell(row=row, column=1, value=op.id)
+            for idx, op in enumerate(operaciones, 1):
+                row = idx + 1
+                ws.cell(row=row, column=1, value=idx)
                 ws.cell(row=row, column=2, value=op.hora.strftime('%d/%m/%Y'))
                 ws.cell(row=row, column=3, value=op.hora.strftime('%H:%M:%S'))
                 ws.cell(row=row, column=4, value=float(op.monto))
                 ws.cell(row=row, column=5, value=float(op.comision))
-                ws.cell(row=row, column=6, value=op.medio)
+                ws.cell(row=row, column=6, value=get_medio_nombre(op.medio))
                 ws.cell(row=row, column=7, value=op.usuario.nombre_completo)
                 ws.cell(row=row, column=8, value=op.sucursal.nombre if op.sucursal else 'Sin sucursal')
-            
-            from io import BytesIO
             output = BytesIO()
             wb.save(output)
             output.seek(0)
-            
             from flask import Response
             return Response(
                 output.getvalue(),
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.xlsx'}
             )
-        except ImportError:
-            flash('La librería openpyxl no está instalada. Instale con: pip install openpyxl', 'error')
-            return redirect(url_for('reportes'))
-    
-    elif formato == 'pdf':
-        try:
+        elif formato == 'pdf':
             from reportlab.lib.pagesizes import letter
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
             from reportlab.lib import colors
             from io import BytesIO
-            
             output = BytesIO()
             doc = SimpleDocTemplate(output, pagesize=letter)
             elements = []
-            
-            # Datos para la tabla
-            data = [['ID', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']]
-            for op in operaciones:
+            styles = getSampleStyleSheet()
+            # Texto de prueba para verificar actualización
+            elements.append(Paragraph('REPORTE ACTUALIZADO - PRUEBA DE NUMERACIÓN CONSECUTIVA', styles['Title']))
+            elements.append(Spacer(1, 12))
+            data = [['N°', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']]
+            for idx, op in enumerate(operaciones, 1):
                 data.append([
-                    str(op.id),
+                    str(idx),
                     op.hora.strftime('%d/%m/%Y'),
                     op.hora.strftime('%H:%M:%S'),
                     f"S/ {float(op.monto):.2f}",
                     f"S/ {float(op.comision):.2f}",
-                    op.medio,
+                    get_medio_nombre(op.medio),
                     op.usuario.nombre_completo,
                     op.sucursal.nombre if op.sucursal else 'Sin sucursal'
                 ])
-            
             table = Table(data)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -904,41 +964,32 @@ def exportar_reporte(formato):
                 ('FONTSIZE', (0, 1), (-1, -1), 12),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black)
             ]))
-            
             elements.append(table)
             doc.build(elements)
             output.seek(0)
-            
             from flask import Response
             return Response(
                 output.getvalue(),
                 mimetype='application/pdf',
                 headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
             )
-        except ImportError:
-            flash('La librería reportlab no está instalada. Instale con: pip install reportlab', 'error')
-            return redirect(url_for('reportes'))
-    
-    else:
-        flash('Formato no válido', 'error')
-        return redirect(url_for('reportes'))
+        else:
+            return f'Formato no válido: {formato}', 400
+    except Exception as e:
+        import traceback
+        return f'<pre>{traceback.format_exc()}</pre>', 500
 
 
 # API para actualizar operaciones (edición inline)
 @app.route('/api/operaciones/<int:operacion_id>', methods=['PUT'])
 @login_required
 def api_actualizar_operacion(operacion_id):
-    print(f"🔧 API llamada con ID: {operacion_id}")
-    print(f"📥 Datos recibidos: {request.get_json()}")
-    
     try:
         # Obtener la operación
         operacion = Operacion.query.get_or_404(operacion_id)
-        print(f"✅ Operación encontrada: {operacion.id}")
         
         # Verificar permisos: solo el usuario que creó la operación o admin puede editarla
         if not current_user.es_admin and operacion.usuario_id != current_user.id:
-            print(f"❌ Permisos insuficientes")
             return jsonify({'success': False, 'message': 'No tienes permisos para editar esta operación'}), 403
         
         # Obtener datos del JSON
@@ -947,32 +998,25 @@ def api_actualizar_operacion(operacion_id):
         comision = data.get('comision')
         medio = data.get('medio')
         
-        print(f"📊 Datos procesados: monto={monto}, comision={comision}, medio={medio}")
-        
         # Validar datos
         if not monto or not comision or not medio:
-            print(f"❌ Datos faltantes")
             return jsonify({'success': False, 'message': 'Todos los campos son requeridos'}), 400
         
         try:
             monto = float(monto)
             comision = float(comision)
         except ValueError:
-            print(f"❌ Error en conversión de números")
             return jsonify({'success': False, 'message': 'Monto y comisión deben ser números válidos'}), 400
         
         if monto <= 0:
-            print(f"❌ Monto inválido: {monto}")
             return jsonify({'success': False, 'message': 'El monto debe ser mayor a 0'}), 400
         
         if comision < 0:
-            print(f"❌ Comisión inválida: {comision}")
             return jsonify({'success': False, 'message': 'La comisión no puede ser negativa'}), 400
         
-        # Medios de pago válidos
-        medios_validos = ['BCP', 'KS', 'IBK', 'BN', 'AQP', 'NIUBIZ', 'CONFIANZA', 'BBVA', 'ICA', 'IZIPAY', 'CULQI', 'BIM']
-        if medio not in medios_validos:
-            print(f"❌ Medio inválido: {medio}")
+        # Validar medio de pago contra la base de datos
+        medio_valido = MedioPago.query.filter_by(nombre_abreviado=medio, activo=True).first()
+        if not medio_valido:
             return jsonify({'success': False, 'message': 'Medio de pago no válido'}), 400
         
         # Guardar valores originales para actualizar comisiones
@@ -982,8 +1026,6 @@ def api_actualizar_operacion(operacion_id):
         año_operacion = operacion.hora.year
         mes_operacion = operacion.hora.month
         sucursal_id = operacion.sucursal_id
-        
-        print(f"📊 Valores originales: monto={monto_original}, comision={comision_original}")
         
         # Actualizar operación
         operacion.monto = monto
@@ -999,7 +1041,6 @@ def api_actualizar_operacion(operacion_id):
         if comision_diaria:
             # Restar comisión original y sumar nueva
             comision_diaria.total_comision = float(comision_diaria.total_comision) - comision_original + comision
-            print(f"✅ Comisión diaria actualizada")
         
         # Actualizar comisiones mensuales
         comision_mensual = ComisionMensual.query.filter_by(
@@ -1011,10 +1052,8 @@ def api_actualizar_operacion(operacion_id):
         if comision_mensual:
             # Restar comisión original y sumar nueva
             comision_mensual.total_comision = float(comision_mensual.total_comision) - comision_original + comision
-            print(f"✅ Comisión mensual actualizada")
         
         db.session.commit()
-        print(f"✅ Base de datos actualizada")
         
         # No flash aquí para evitar duplicados en AJAX
         response_data = {
@@ -1115,7 +1154,7 @@ def api_registrar_operacion():
 @login_required
 def api_eliminar_operacion(operacion_id):
     operacion = Operacion.query.get_or_404(operacion_id)
-    if not current_user.es_admin and operacion.sucursal_id != current_user.sucursal_id:
+    if not current_user.es_admin and operacion.usuario_id != current_user.id:
         return jsonify({'success': False, 'message': 'No tienes permisos para eliminar esta operación'}), 403
     monto_comision = float(operacion.comision)
     fecha_operacion = operacion.hora.date()
@@ -1139,6 +1178,111 @@ def api_eliminar_operacion(operacion_id):
         comision_mensual.total_comision = float(comision_mensual.total_comision) - float(monto_comision)
     db.session.commit()
     return jsonify({'success': True, 'message': 'Operación eliminada exitosamente'})
+
+@app.route('/admin/medios', methods=['GET', 'POST'])
+@login_required
+def admin_medios():
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        nombre_abreviado = request.form['nombre_abreviado'].strip()
+        nombre_completo = request.form['nombre_completo'].strip()
+        if nombre_abreviado and nombre_completo:
+            if not MedioPago.query.filter_by(nombre_abreviado=nombre_abreviado).first():
+                medio = MedioPago(nombre_abreviado=nombre_abreviado, nombre_completo=nombre_completo)
+                db.session.add(medio)
+                db.session.commit()
+                flash('Medio de pago agregado', 'success')
+            else:
+                flash('Ese nombre abreviado ya existe', 'warning')
+        return redirect(url_for('admin_medios'))
+    medios = MedioPago.query.order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    return render_template('admin_medios.html', medios=medios)
+
+@app.route('/admin/medios/<int:medio_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    db.session.delete(medio)
+    db.session.commit()
+    flash('Medio de pago eliminado', 'success')
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    if request.method == 'POST':
+        nombre_abreviado = request.form['nombre_abreviado'].strip()
+        nombre_completo = request.form['nombre_completo'].strip()
+        if nombre_abreviado and nombre_completo:
+            medio.nombre_abreviado = nombre_abreviado
+            medio.nombre_completo = nombre_completo
+            db.session.commit()
+            flash('Medio de pago editado', 'success')
+        return redirect(url_for('admin_medios'))
+    return render_template('editar_medio.html', medio=medio)
+
+@app.route('/admin/medios/<int:medio_id>/activar', methods=['POST'])
+@login_required
+def activar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    medio.activo = not medio.activo
+    db.session.commit()
+    flash('Estado de medio actualizado', 'success')
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/subir', methods=['POST'])
+@login_required
+def subir_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    anterior = MedioPago.query.filter(MedioPago.orden < medio.orden).order_by(MedioPago.orden.desc()).first()
+    if anterior:
+        medio.orden, anterior.orden = anterior.orden, medio.orden
+        db.session.commit()
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/bajar', methods=['POST'])
+@login_required
+def bajar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    siguiente = MedioPago.query.filter(MedioPago.orden > medio.orden).order_by(MedioPago.orden.asc()).first()
+    if siguiente:
+        medio.orden, siguiente.orden = siguiente.orden, medio.orden
+        db.session.commit()
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/sucursales/<int:sucursal_id>/toggle_medio', methods=['POST'])
+@login_required
+def toggle_medio_sucursal(sucursal_id):
+    if not current_user.es_admin:
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+    medio_id = int(request.form['medio_id'])
+    estado = request.form.get('activo') == 'true'
+    ms = MedioSucursal.query.filter_by(sucursal_id=sucursal_id, medio_pago_id=medio_id).first()
+    if ms:
+        ms.activo = estado
+    else:
+        ms = MedioSucursal(sucursal_id=sucursal_id, medio_pago_id=medio_id, activo=estado)
+        db.session.add(ms)
+    db.session.commit()
+    return jsonify({'success': True, 'activo': ms.activo})
 
 
 if __name__ == '__main__':

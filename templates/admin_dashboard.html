@@ -3,6 +3,7 @@
 {% block title %}Dashboard Administrador - Sistema Bancario{% endblock %}
 
 {% block content %}
+{% set comisiones_mes = comisiones_mes if comisiones_mes is defined else {} %}
 <!-- Mostrar mensajes flash -->
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -29,6 +30,8 @@
         </div>
     </div>
 </div>
+
+{# Eliminar el formulario de filtro de sucursales #}
 
 <!-- Estadísticas generales -->
 <div class="row mb-4">
@@ -77,7 +80,7 @@
                             Comisión Total Hoy
                         </div>
                         <div class="h5 mb-0 font-weight-bold text-gray-800">
-                            S/ {{ "%.2f"|format(comisiones_hoy|sum(attribute='total')) }}
+                            S/ {{ "%.2f"|format(comisiones_hoy | map(attribute=2) | sum) }}
                         </div>
                     </div>
                     <div class="col-auto">
@@ -88,25 +91,7 @@
         </div>
     </div>
 
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card border-left-warning shadow h-100 py-2">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                            Operaciones Hoy
-                        </div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                            <span id="operaciones-hoy">-</span>
-                        </div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-list fa-2x text-gray-300"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+
 </div>
 
 <!-- Comisiones por sucursal -->
@@ -114,7 +99,7 @@
     <div class="col-12">
         <div class="card shadow mb-4">
             <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
+                <h6 class="m-0 font-weight-bold text-white">
                     <i class="fas fa-chart-bar me-2"></i>
                     Comisiones por Sucursal - Hoy
                 </h6>
@@ -125,18 +110,22 @@
                     <table class="table table-bordered" width="100%" cellspacing="0">
                         <thead>
                             <tr>
+                                <th>N°</th>
                                 <th>Sucursal</th>
-                                <th>Comisión Total</th>
+                                <th>Comisión del Día</th>
+                                <th>Comisión del Mes</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for sucursal, total in comisiones_hoy %}
+                            {% for sucursal_id, sucursal_nombre, total in comisiones_hoy %}
                             <tr>
-                                <td>{{ sucursal }}</td>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ sucursal_nombre }}</td>
                                 <td class="font-weight-bold text-success">S/ {{ "%.2f"|format(total) }}</td>
+                                <td class="font-weight-bold text-primary">S/ {{ "%.2f"|format(comisiones_mes[sucursal_id] if comisiones_mes[sucursal_id] is defined else 0) }}</td>
                                 <td>
-                                    <a href="{{ url_for('operaciones') }}?sucursal={{ sucursal }}" class="btn btn-sm btn-outline-primary">
+                                    <a href="{{ url_for('operaciones') }}?sucursal_id={{ sucursal_id }}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye me-1"></i>
                                         Ver Operaciones
                                     </a>
@@ -157,48 +146,6 @@
     </div>
 </div>
 
-<!-- Acciones rápidas -->
-<div class="row">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
-                    <i class="fas fa-bolt me-2"></i>
-                    Acciones Rápidas
-                </h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3 mb-3">
-                        <a href="{{ url_for('crear_sucursal') }}" class="btn btn-primary w-100">
-                            <i class="fas fa-plus me-2"></i>
-                            Nueva Sucursal
-                        </a>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <a href="{{ url_for('crear_usuario') }}" class="btn btn-success w-100">
-                            <i class="fas fa-user-plus me-2"></i>
-                            Nuevo Usuario
-                        </a>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <a href="{{ url_for('operaciones') }}" class="btn btn-info w-100">
-                            <i class="fas fa-list me-2"></i>
-                            Ver Operaciones
-                        </a>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <a href="{{ url_for('admin_sucursales') }}" class="btn btn-warning w-100">
-                            <i class="fas fa-building me-2"></i>
-                            Gestionar Sucursales
-                        </a>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -221,14 +168,6 @@ function updateTime() {
 updateTime();
 setInterval(updateTime, 1000);
 
-// Actualizar contador de operaciones
-fetch('/api/operaciones/count')
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById('operaciones-hoy').textContent = data.count;
-    })
-    .catch(error => {
-        console.error('Error:', error);
-    });
+
 </script>
 {% endblock %} 

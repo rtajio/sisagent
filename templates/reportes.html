@@ -10,84 +10,61 @@
     </h1>
 </div>
 
-<!-- Filtros de reporte -->
-<div class="card shadow mb-4">
-    <div class="card-header py-3">
-        <h6 class="m-0 font-weight-bold text-primary">
-            <i class="fas fa-filter me-2"></i>
-            Filtros del Reporte
-        </h6>
+
+
+
+
+
+
+<!-- Filtros clásicos con selects -->
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <label for="fecha_inicio" class="form-label">Fecha Inicio</label>
+        <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio">
     </div>
-    <div class="card-body">
-        <form id="filtroReporteForm">
-            <div class="row">
-                <div class="col-md-3 mb-3">
-                    <label for="fecha_inicio" class="form-label">Fecha Inicio</label>
-                    <input type="date" 
-                           class="form-control" 
-                           id="fecha_inicio" 
-                           name="fecha_inicio">
-                </div>
-                
-                <div class="col-md-3 mb-3">
-                    <label for="fecha_fin" class="form-label">Fecha Fin</label>
-                    <input type="date" 
-                           class="form-control" 
-                           id="fecha_fin" 
-                           name="fecha_fin">
-                </div>
-                
-                <div class="col-md-3 mb-3">
-                    <label for="sucursal_id" class="form-label">Sucursal</label>
-                    <select class="form-select" id="sucursal_id" name="sucursal_id">
-                        <option value="">Todas las sucursales</option>
-                        {% for sucursal in sucursales %}
-                        <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="col-md-3 mb-3">
-                    <label for="medio" class="form-label">Medio de Pago</label>
-                    <select class="form-select" id="medio" name="medio">
-                        <option value="">Todos los medios</option>
-                        <option value="BCP">BCP</option>
-                        <option value="KS">KS</option>
-                        <option value="IBK">IBK</option>
-                        <option value="BN">BN</option>
-                        <option value="AQP">AQP</option>
-                        <option value="NIUBIZ">NIUBIZ</option>
-                        <option value="CONFIANZA">CONFIANZA</option>
-                        <option value="BBVA">BBVA</option>
-                        <option value="ICA">ICA</option>
-                        <option value="IZIPAY">IZIPAY</option>
-                        <option value="CULQI">CULQI</option>
-                        <option value="BIM">BIM</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="d-flex justify-content-between">
-                <button type="button" class="btn btn-primary" onclick="generarReporte()">
-                    <i class="fas fa-search me-1"></i>
-                    Generar Reporte
-                </button>
-                <div class="btn-group">
-                    <button type="button" class="btn btn-success" onclick="exportarReporte('csv')">
-                        <i class="fas fa-file-csv me-1"></i>
-                        CSV
-                    </button>
-                    <button type="button" class="btn btn-info" onclick="exportarReporte('xlsx')">
-                        <i class="fas fa-file-excel me-1"></i>
-                        Excel
-                    </button>
-                    <button type="button" class="btn btn-danger" onclick="exportarReporte('pdf')">
-                        <i class="fas fa-file-pdf me-1"></i>
-                        PDF
-                    </button>
-                </div>
-            </div>
-        </form>
+    <div class="col-md-3 mb-3">
+        <label for="fecha_fin" class="form-label">Fecha Fin</label>
+        <input type="date" class="form-control" id="fecha_fin" name="fecha_fin">
+    </div>
+    <div class="col-md-3 mb-3">
+        <label for="sucursal_id" class="form-label">Sucursal</label>
+        <select class="form-select" id="sucursal_id" name="sucursal_id">
+            <option value="">Todas</option>
+            {% for suc in sucursales %}
+                <option value="{{ suc.id }}">{{ suc.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3 mb-3">
+        <label for="medio" class="form-label">Medio</label>
+        <select class="form-select" id="medio" name="medio">
+            <option value="">Todos</option>
+            {% if medios_pago %}
+                {% for medio in medios_pago %}
+                    <option value="{{ medio.nombre_abreviado }}">{{ medio.nombre_abreviado }}</option>
+                {% endfor %}
+            {% endif %}
+        </select>
+    </div>
+</div>
+<div class="d-flex justify-content-between mb-3">
+    <button type="button" class="btn btn-primary" onclick="generarReporte()">
+        <i class="fas fa-search me-1"></i>
+        Generar Reporte
+    </button>
+    <div class="btn-group" id="grupoDescargas" style="display: none;">
+        <a id="descargarCSV" class="btn btn-success" href="#" target="_blank">
+            <i class="fas fa-file-csv me-1"></i>
+            CSV
+        </a>
+        <a id="descargarXLSX" class="btn btn-info" href="#" target="_blank">
+            <i class="fas fa-file-excel me-1"></i>
+            Excel
+        </a>
+        <a id="descargarPDF" class="btn btn-danger" href="#" target="_blank">
+            <i class="fas fa-file-pdf me-1"></i>
+            PDF
+        </a>
     </div>
 </div>
 
@@ -165,7 +142,7 @@
             <table class="table table-bordered" width="100%" cellspacing="0" id="tablaResultados">
                 <thead>
                     <tr>
-                        <th>ID</th>
+                        <th>N°</th>
                         <th>Fecha</th>
                         <th>Hora</th>
                         <th>Monto</th>
@@ -176,6 +153,7 @@
                     </tr>
                 </thead>
                 <tbody id="cuerpoTabla">
+                    {# El cuerpo se llena por JS, pero el encabezado ya es N° #}
                 </tbody>
             </table>
         </div>
@@ -218,26 +196,59 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 let reporteData = null;
+let chartMedios = null;
+let chartSucursales = null;
+
+// --- ADAPTAR JS PARA SELECTS CLÁSICOS ---
+function actualizarEnlacesDescarga() {
+    const fecha_inicio = document.getElementById('fecha_inicio').value;
+    const fecha_fin = document.getElementById('fecha_fin').value;
+    const sucursal_id = document.getElementById('sucursal_id').value;
+    const medio = document.getElementById('medio').value;
+    let params = [];
+    if (fecha_inicio) params.push('fecha_inicio=' + encodeURIComponent(fecha_inicio));
+    if (fecha_fin) params.push('fecha_fin=' + encodeURIComponent(fecha_fin));
+    if (sucursal_id) params.push('sucursal_id=' + encodeURIComponent(sucursal_id));
+    if (medio) params.push('medio=' + encodeURIComponent(medio));
+    const paramString = params.join('&');
+    document.getElementById('descargarCSV').href = `/api/reportes/exportar/csv?${paramString}`;
+    document.getElementById('descargarXLSX').href = `/api/reportes/exportar/xlsx?${paramString}`;
+    document.getElementById('descargarPDF').href = `/api/reportes/exportar/pdf?${paramString}`;
+}
 
 function generarReporte() {
-    const formData = new FormData(document.getElementById('filtroReporteForm'));
-    const params = new URLSearchParams();
-    
-    for (let [key, value] of formData.entries()) {
-        if (value) {
-            params.append(key, value);
-        }
-    }
-    
-    fetch(`/api/reportes/operaciones?${params.toString()}`)
-        .then(response => response.json())
-        .then(data => {
-            reporteData = data;
+    const fecha_inicio = document.getElementById('fecha_inicio').value;
+    const fecha_fin = document.getElementById('fecha_fin').value;
+    const sucursal_id = document.getElementById('sucursal_id').value;
+    const medio = document.getElementById('medio').value;
+    let params = [];
+    if (fecha_inicio) params.push('fecha_inicio=' + encodeURIComponent(fecha_inicio));
+    if (fecha_fin) params.push('fecha_fin=' + encodeURIComponent(fecha_fin));
+    if (sucursal_id) params.push('sucursal_id=' + encodeURIComponent(sucursal_id));
+    if (medio) params.push('medio=' + encodeURIComponent(medio));
+    const paramString = params.join('&');
+    fetch(`/api/reportes/operaciones?${paramString}`)
+        .then(async response => {
+            if (!response.ok) {
+                let errorMsg = 'Error al generar el reporte';
+                try {
+                    const data = await response.json();
+                    errorMsg = data.error || data.message || errorMsg;
+                } catch (e) {}
+                alert(errorMsg);
+                return;
+            }
+            const data = await response.json();
             mostrarResultados(data);
             generarGraficos(data);
+            if (data.operaciones && data.operaciones.length > 0) {
+                document.getElementById('grupoDescargas').style.display = '';
+                actualizarEnlacesDescarga();
+            } else {
+                document.getElementById('grupoDescargas').style.display = 'none';
+            }
         })
         .catch(error => {
-            console.error('Error:', error);
             alert('Error al generar el reporte');
         });
 }
@@ -253,10 +264,10 @@ function mostrarResultados(data) {
     const tbody = document.getElementById('cuerpoTabla');
     tbody.innerHTML = '';
     
-    data.operaciones.forEach(op => {
+    data.operaciones.forEach((op, idx) => {
         const row = tbody.insertRow();
         row.innerHTML = `
-            <td>${op.id}</td>
+            <td>${idx + 1}</td>
             <td>${op.fecha}</td>
             <td>${op.hora}</td>
             <td class="font-weight-bold">S/ ${op.monto.toFixed(2)}</td>
@@ -268,6 +279,9 @@ function mostrarResultados(data) {
     });
     
     document.getElementById('tablaReporte').style.display = 'block';
+    // Mostrar/ocultar grupo de descargas según si hay datos
+    const hayDatos = data.operaciones.length > 0;
+    document.getElementById('grupoDescargas').style.display = hayDatos ? 'inline-flex' : 'none';
 }
 
 function generarGraficos(data) {
@@ -276,9 +290,11 @@ function generarGraficos(data) {
     data.operaciones.forEach(op => {
         mediosCount[op.medio] = (mediosCount[op.medio] || 0) + 1;
     });
-    
     const ctxMedios = document.getElementById('graficoMedios').getContext('2d');
-    new Chart(ctxMedios, {
+    if (window.chartMedios) {
+        window.chartMedios.destroy();
+    }
+    window.chartMedios = new Chart(ctxMedios, {
         type: 'pie',
         data: {
             labels: Object.keys(mediosCount),
@@ -299,15 +315,16 @@ function generarGraficos(data) {
             }
         }
     });
-    
     // Gráfico por sucursales
     const sucursalesCount = {};
     data.operaciones.forEach(op => {
         sucursalesCount[op.sucursal] = (sucursalesCount[op.sucursal] || 0) + 1;
     });
-    
     const ctxSucursales = document.getElementById('graficoSucursales').getContext('2d');
-    new Chart(ctxSucursales, {
+    if (window.chartSucursales) {
+        window.chartSucursales.destroy();
+    }
+    window.chartSucursales = new Chart(ctxSucursales, {
         type: 'bar',
         data: {
             labels: Object.keys(sucursalesCount),
@@ -326,30 +343,12 @@ function generarGraficos(data) {
             }
         }
     });
-    
     document.getElementById('graficosReporte').style.display = 'block';
-}
-
-function exportarReporte(formato) {
-    if (!reporteData) {
-        alert('Primero debe generar un reporte');
-        return;
-    }
-    
-    const formData = new FormData(document.getElementById('filtroReporteForm'));
-    const params = new URLSearchParams();
-    
-    for (let [key, value] of formData.entries()) {
-        if (value) {
-            params.append(key, value);
-        }
-    }
-    
-    window.open(`/api/reportes/exportar/${formato}?${params.toString()}`, '_blank');
 }
 
 // Auto-completar fechas si están vacías
 document.addEventListener('DOMContentLoaded', function() {
+    
     const fechaInicio = document.getElementById('fecha_inicio').value;
     const fechaFin = document.getElementById('fecha_fin').value;
     
@@ -363,6 +362,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const hoy = new Date().toISOString().split('T')[0];
         document.getElementById('fecha_fin').value = hoy;
     }
+
+    // Ocultar grupo de descargas al cargar la página
+    document.getElementById('grupoDescargas').style.display = 'none';
+    // Actualizar enlaces al cargar la página
+    actualizarEnlacesDescarga();
+    // Actualizar enlaces cada vez que cambie un filtro
+    document.getElementById('fecha_inicio').addEventListener('change', actualizarEnlacesDescarga);
+    document.getElementById('fecha_fin').addEventListener('change', actualizarEnlacesDescarga);
+    document.getElementById('sucursal_id').addEventListener('change', actualizarEnlacesDescarga);
+    document.getElementById('medio').addEventListener('change', actualizarEnlacesDescarga);
 });
 </script>
 {% endblock %} 

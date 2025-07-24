@@ -70,12 +70,21 @@
                         </label>
                         <select class="form-select" id="medio" name="medio" required>
                             <option value="">Seleccione un medio de pago</option>
-                            {% for medio in medios %}
-                            <option value="{{ medio }}" {% if operacion.medio == medio %}selected{% endif %}>
-                                {{ medio }}
+                            {% for medio in medios_pago %}
+                            <option value="{{ medio.nombre_abreviado }}" {% if operacion.medio == medio.nombre_abreviado %}selected{% endif %}>
+                                {{ medio.nombre_abreviado }}
                             </option>
                             {% endfor %}
                         </select>
+                        <!-- DEBUG TEMPORAL -->
+                        <small class="text-muted">
+                            {% if medios_pago %}
+                                ✅ {{ medios_pago|length }} medios disponibles
+                                <br><strong>Medios: {% for medio in medios_pago %}{{ medio.nombre_abreviado }}{% if not loop.last %}, {% endif %}{% endfor %}</strong>
+                            {% else %}
+                                ❌ No hay medios
+                            {% endif %}
+                        </small>
                     </div>
                     
                     <!-- Información de solo lectura -->

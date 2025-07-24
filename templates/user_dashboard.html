@@ -26,7 +26,7 @@
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
                         <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                            Comisión Diaria
+                            Comisión de Turno
                         </div>
                         <div class="h5 mb-0 font-weight-bold text-gray-800">
                             S/ {{ "%.2f"|format(total_comision_hoy) }}
@@ -101,23 +101,21 @@
                     <table class="table table-bordered" width="100%" cellspacing="0">
                         <thead>
                             <tr>
+                                <th>N°</th>
                                 <th>Hora</th>
                                 <th>Monto</th>
                                 <th>Comisión</th>
                                 <th>Medio</th>
-                                <th>Usuario</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for operacion in operaciones_hoy %}
                             <tr>
+                                <td>{{ loop.index }}</td>
                                 <td>{{ operacion.hora.strftime('%H:%M:%S') }}</td>
                                 <td class="font-weight-bold">S/ {{ "%.2f"|format(operacion.monto) }}</td>
                                 <td class="text-success font-weight-bold">S/ {{ "%.2f"|format(operacion.comision) }}</td>
-                                <td>
-                                    <span class="badge bg-primary">{{ operacion.medio }}</span>
-                                </td>
-                                <td>{{ operacion.usuario.nombre_completo }}</td>
+                                <td><span class="badge bg-primary">{{ operacion.medio }}</span></td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -127,10 +125,6 @@
                 <div class="text-center py-4">
                     <i class="fas fa-clock fa-3x text-muted mb-3"></i>
                     <p class="text-muted">No hay operaciones registradas hoy</p>
-                    <a href="{{ url_for('registrar_operacion') }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-2"></i>
-                        Registrar Primera Operación
-                    </a>
                 </div>
                 {% endif %}
             </div>
@@ -138,35 +132,6 @@
     </div>
 </div>
 
-<!-- Acciones rápidas -->
-<div class="row">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
-                    <i class="fas fa-bolt me-2"></i>
-                    Acciones Rápidas
-                </h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <a href="{{ url_for('registrar_operacion') }}" class="btn btn-success w-100">
-                            <i class="fas fa-plus me-2"></i>
-                            Nueva Operación
-                        </a>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <a href="{{ url_for('operaciones') }}" class="btn btn-info w-100">
-                            <i class="fas fa-list me-2"></i>
-                            Ver Operaciones
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}

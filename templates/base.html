@@ -7,294 +7,469 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #2196f3;
+            --primary-dark: #1976d2;
+            --primary-light: #64b5f6;
+            --secondary-color: #03dac6;
+            --accent-color: #3f51b5;
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+            --danger-color: #f44336;
+            --text-dark: #263238;
+            --text-light: #546e7a;
+            --bg-light: #f5f7fa;
+            --white: #ffffff;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar responsivo */
         .sidebar {
+            background: linear-gradient(180deg, var(--primary-color) 0%, var(--accent-color) 100%);
             min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .sidebar .nav-link {
-            color: rgba(255,255,255,0.8);
-            padding: 0.75rem 1rem;
-            border-radius: 0.5rem;
-            margin: 0.25rem 0;
-        }
-        .sidebar .nav-link:hover {
-            color: white;
-            background-color: rgba(255,255,255,0.1);
-        }
-        .sidebar .nav-link.active {
-            background-color: rgba(255,255,255,0.2);
-            color: white;
-        }
-        .main-content {
-            background-color: #f8f9fa;
-            min-height: 100vh;
-        }
-        .card {
-            border: none;
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-            border-radius: 0.75rem;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-        }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
-        }
-        .alert {
-            border-radius: 0.75rem;
-            border: none;
-            opacity: 1;
-            transition: opacity 1.5s;
-        }
-        .alert.hide {
-            opacity: 0;
-            transition: opacity 1.5s;
-        }
-        .table {
-            border-radius: 0.75rem;
-            overflow: hidden;
-        }
-        .form-control, .form-select {
-            border-radius: 0.5rem;
-            border: 1px solid #dee2e6;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-        }
-        
-        /* Sistema de notificaciones mejorado con colores CRUD */
-        .notification-container {
+            box-shadow: 4px 0 15px rgba(0,0,0,0.2);
             position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            max-width: 400px;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            width: 280px;
         }
         
-        .notification {
-            background: white;
+        .sidebar.collapsed {
+            transform: translateX(-100%);
+        }
+        
+        .sidebar-header {
+            padding: 1.5rem;
+            text-align: center;
+            border-bottom: 2px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .sidebar-header h5 {
+            color: var(--white);
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .sidebar-header small {
+            color: var(--primary-light);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .user-badge {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-light));
+            color: var(--white);
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-weight: 600;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            margin-top: 0.5rem;
+            display: inline-block;
+        }
+        
+        .nav-link {
+            color: rgba(255,255,255,0.9) !important;
+            padding: 1rem 1.5rem;
+            margin: 0.2rem 0.5rem;
             border-radius: 12px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-            margin-bottom: 15px;
-            padding: 18px 22px;
-            border-left: 5px solid;
-            animation: slideIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            position: relative;
-            overflow: hidden;
-            transform: translateX(100%);
-        }
-        
-        /* Colores específicos para CRUD */
-        .notification.create {
-            border-left-color: #28a745;
-            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.2);
-        }
-        
-        .notification.update {
-            border-left-color: #fd7e14;
-            background: linear-gradient(135deg, #ffe8d1 0%, #ffd8a8 100%);
-            box-shadow: 0 8px 25px rgba(253, 126, 20, 0.2);
-        }
-        
-        .notification.delete {
-            border-left-color: #dc3545;
-            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.2);
-        }
-        
-        .notification.success {
-            border-left-color: #28a745;
-            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.2);
-        }
-        
-        .notification.warning {
-            border-left-color: #ffc107;
-            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-            box-shadow: 0 8px 25px rgba(255, 193, 7, 0.2);
-        }
-        
-        .notification.error {
-            border-left-color: #dc3545;
-            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.2);
-        }
-        
-        .notification.info {
-            border-left-color: #17a2b8;
-            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
-            box-shadow: 0 8px 25px rgba(23, 162, 184, 0.2);
-        }
-        
-        .notification-content {
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 1rem;
             display: flex;
             align-items: center;
-            gap: 12px;
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
         }
         
-        .notification-icon {
-            font-size: 1.4em;
-            flex-shrink: 0;
+        .nav-link::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .nav-link:hover::before {
+            left: 100%;
+        }
+        
+        .nav-link:hover {
+            background: linear-gradient(45deg, var(--primary-light), var(--secondary-color));
+            color: var(--white) !important;
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .nav-link.active {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-light));
+            color: var(--white) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transform: translateX(5px);
+        }
+        
+        .nav-link i {
+            font-size: 1.2rem;
+            margin-right: 0.8rem;
             width: 24px;
             text-align: center;
         }
         
-        .notification.create .notification-icon {
-            color: #28a745;
-        }
-        
-        .notification.update .notification-icon {
-            color: #fd7e14;
-        }
-        
-        .notification.delete .notification-icon {
-            color: #dc3545;
-        }
-        
-        .notification.success .notification-icon {
-            color: #28a745;
-        }
-        
-        .notification.warning .notification-icon {
-            color: #856404;
-        }
-        
-        .notification.error .notification-icon {
-            color: #dc3545;
-        }
-        
-        .notification.info .notification-icon {
-            color: #17a2b8;
-        }
-        
-        .notification-message {
-            flex-grow: 1;
-            font-weight: 600;
-            font-size: 0.95em;
-            line-height: 1.4;
-        }
-        
-        .notification-close {
-            background: none;
+        /* Botón de toggle para sidebar */
+        .sidebar-toggle {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1001;
+            background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
             border: none;
-            font-size: 1.1em;
+            color: var(--white);
+            padding: 0.75rem;
+            border-radius: 50%;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-size: 1.2rem;
             cursor: pointer;
-            color: #666;
-            padding: 4px;
-            width: 24px;
-            height: 24px;
+            transition: all 0.3s ease;
+            width: 50px;
+            height: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 50%;
-            transition: all 0.2s ease;
         }
         
-        .notification-close:hover {
-            color: #333;
-            background-color: rgba(0,0,0,0.1);
+        .sidebar-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
         }
         
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
+
+        
+        /* Contenido principal */
+        .main-content {
+            background: var(--white);
+            min-height: 100vh;
+            margin-left: 280px;
+            transition: all 0.3s ease;
+            padding: 2rem;
+            border-radius: 20px 0 0 20px;
+            box-shadow: -4px 0 15px rgba(0,0,0,0.1);
+        }
+        
+        .main-content.expanded {
+            margin-left: 0;
+        }
+        
+        .page-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: var(--white);
+            padding: 2rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .page-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        /* Botones mejorados */
+        .btn {
+            border-radius: 12px;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, var(--primary-color), var(--primary-dark));
+            color: var(--white);
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(45deg, var(--primary-dark), var(--primary-color));
+        }
+        
+        .btn-success {
+            background: linear-gradient(45deg, var(--success-color), #388e3c);
+            color: var(--white);
+        }
+        
+        .btn-warning {
+            background: linear-gradient(45deg, var(--warning-color), #f57c00);
+            color: var(--white);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(45deg, var(--danger-color), #d32f2f);
+            color: var(--white);
+        }
+        
+        .btn-info {
+            background: linear-gradient(45deg, var(--secondary-color), #00acc1);
+            color: var(--white);
+        }
+        
+        .btn-outline-info {
+            border: 2px solid var(--secondary-color);
+            color: var(--secondary-color);
+            background: transparent;
+        }
+        
+        .btn-outline-info:hover {
+            background: var(--secondary-color);
+            color: var(--white);
+        }
+        
+        .btn-outline-secondary {
+            border: 2px solid var(--text-light);
+            color: var(--text-light);
+            background: transparent;
+        }
+        
+        .btn-outline-secondary:hover {
+            background: var(--text-light);
+            color: var(--white);
+        }
+        
+        /* Tablas mejoradas */
+        .table {
+            background: var(--white);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            border: none;
+        }
+        
+        .table thead th {
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: var(--white);
+            border: none;
+            padding: 1.2rem 1rem;
+            font-weight: 700;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .table tbody tr {
+            transition: all 0.3s ease;
+        }
+        
+        .table tbody tr:hover {
+            background: linear-gradient(90deg, var(--bg-light), var(--white));
+            transform: scale(1.01);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .table tbody td {
+            padding: 1rem;
+            border: none;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 500;
+        }
+        
+        /* Cards mejoradas */
+        .card {
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.15);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: var(--white);
+            border: none;
+            padding: 1.5rem;
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+        
+        .card-body {
+            padding: 2rem;
+        }
+        
+        /* Alertas mejoradas */
+        .alert {
+            border-radius: 15px;
+            border: none;
+            padding: 1.2rem 1.5rem;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .alert-success {
+            background: linear-gradient(45deg, var(--success-color), #4caf50);
+            color: var(--white);
+        }
+        
+        .alert-danger {
+            background: linear-gradient(45deg, var(--danger-color), #f44336);
+            color: var(--white);
+        }
+        
+        .alert-warning {
+            background: linear-gradient(45deg, var(--warning-color), #ff9800);
+            color: var(--white);
+        }
+        
+        .alert-info {
+            background: linear-gradient(45deg, var(--secondary-color), #00acc1);
+            color: var(--white);
+        }
+        
+        /* Formularios mejorados */
+        .form-control, .form-select {
+            border-radius: 12px;
+            border: 2px solid #e0e0e0;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.3rem rgba(30, 136, 229, 0.25);
+            transform: translateY(-2px);
+        }
+        
+        /* Notificaciones */
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                width: 100%;
+                max-width: 320px;
             }
-            to {
+            
+            .sidebar.show {
                 transform: translateX(0);
-                opacity: 1;
+            }
+            
+            .main-content {
+                margin-left: 0;
+                padding: 1rem;
+                border-radius: 0;
+            }
+            
+            .page-title {
+                font-size: 2rem;
+            }
+            
+            .btn {
+                padding: 0.6rem 1.2rem;
+                font-size: 0.9rem;
+            }
+            
+            .table {
+                font-size: 0.9rem;
+            }
+            
+            .table thead th {
+                padding: 0.8rem 0.5rem;
+                font-size: 0.9rem;
+            }
+            
+            .table tbody td {
+                padding: 0.8rem 0.5rem;
+            }
+            
+            .card-body {
+                padding: 1.5rem;
             }
         }
         
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
+        @media (max-width: 576px) {
+            .page-header {
+                padding: 1.5rem;
             }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
+            
+            .page-title {
+                font-size: 1.8rem;
+            }
+            
+            .btn {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+            
+            .btn-toolbar {
+                flex-direction: column;
+            }
+            
+            .btn-toolbar .btn {
+                margin-right: 0 !important;
+                margin-bottom: 0.5rem;
             }
         }
-        
-        @keyframes fadeOut {
-            from {
-                opacity: 1;
-                transform: translateX(0);
-            }
-            to {
-                opacity: 0;
-                transform: translateX(100%);
-            }
-        }
-        
-        .notification.hiding {
-            animation: fadeOut 1.5s ease-out forwards;
-        }
-        
-        /* Barra de progreso para auto-cierre */
-        .notification-progress {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            height: 4px;
-            background: rgba(0,0,0,0.1);
-            animation: progress 10s linear;
-            border-radius: 0 0 12px 12px;
-        }
-        
-        .notification.create .notification-progress {
-            background: rgba(40, 167, 69, 0.3);
-        }
-        
-        .notification.update .notification-progress {
-            background: rgba(253, 126, 20, 0.3);
-        }
-        
-        .notification.delete .notification-progress {
-            background: rgba(220, 53, 69, 0.3);
-        }
-        
-        @keyframes progress {
-            from { width: 100%; }
-            to { width: 0%; }
-        }
-        
-        /* Efecto de vibración para notificaciones importantes */
-        .notification.important {
-            animation: slideIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), vibrate 0.3s ease-in-out 0.5s;
-        }
-        
-        @keyframes vibrate {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-2px); }
-            75% { transform: translateX(2px); }
-        }
+    </style>
     </style>
 </head>
 <body>
     <div id="notification-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
-    <audio id="notif-success" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
-    <audio id="notif-error" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
-    <audio id="notif-warning" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
-    <audio id="notif-info" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae6c7.mp3"></audio>
+    <!-- Elementos de audio removidos - usando Web Audio API -->
     
     {% if current_user.is_authenticated %}
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <nav class="col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse">
-                <div class="position-sticky pt-3">
-                    <div class="text-center mb-4">
-                        <h5 class="text-white">
-                            <i class="fas fa-shield-alt me-2"></i>
-                            SISAGENT
-                        </h5>
-                        <small class="text-muted">Sistema Bancario</small>
-                    </div>
+    <!-- Botón de toggle para móvil -->
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Ocultar/Mostrar Menú">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+
+    
+    <!-- Sidebar responsivo -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h5>
+                <i class="fas fa-shield-alt me-2"></i>
+                SISAGENT
+            </h5>
+            <small>Sistema Bancario</small>
+            <div class="user-badge">
+                {{ current_user.nombre_completo }}
+            </div>
+        </div>
                     
                     <ul class="nav flex-column">
                         {% if current_user.es_admin %}
@@ -323,18 +498,18 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_medios' %}active{% endif %}" href="{{ url_for('admin_medios') }}">
+                                <i class="fas fa-credit-card me-2"></i>
+                                Medios de Pago
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}" href="{{ url_for('reportes') }}">
                                 <i class="fas fa-chart-bar me-2"></i>
                                 Reportes
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'editar_perfil_admin' %}active{% endif %}" href="{{ url_for('editar_perfil_admin') }}">
-                                <i class="fas fa-user-cog me-2"></i>
-                                Mi Perfil
-                            </a>
-                        </li>
-
+                        
                         {% else %}
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}" href="{{ url_for('user_dashboard') }}">
@@ -359,14 +534,16 @@
                 </div>
             </nav>
             
-            <!-- Contenido principal -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">{% block page_title %}{% endblock %}</h1>
-                    <div class="btn-toolbar mb-2 mb-md-0">
-                        {% block page_actions %}{% endblock %}
-                    </div>
+    <!-- Contenido principal -->
+    <main class="main-content" id="mainContent">
+        <div class="page-header">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center">
+                <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+                <div class="btn-toolbar">
+                    {% block page_actions %}{% endblock %}
                 </div>
+            </div>
+        </div>
                 
                 {% block content %}{% endblock %}
             </main>
@@ -427,14 +604,36 @@
     
     // Función para generar beep uniforme y fuerte
     function playBeep(frequency = 800, duration = 300, type = 'sine') {
+        console.log(`Intentando reproducir beep: ${frequency}Hz, ${duration}ms`);
+        
         // Inicializar AudioContext si no está inicializado
         if (!audioInitialized) {
             initAudioContext();
         }
         
         try {
-            if (!audioContext || audioContext.state === 'closed') {
-                throw new Error('AudioContext no disponible');
+            // Verificar si AudioContext está disponible
+            if (!audioContext) {
+                console.log('AudioContext no disponible, creando uno nuevo');
+                initAudioContext();
+            }
+            
+            // Si el AudioContext está suspendido, intentar resumirlo
+            if (audioContext.state === 'suspended') {
+                console.log('AudioContext suspendido, intentando resumir...');
+                audioContext.resume().then(() => {
+                    console.log('AudioContext resumido correctamente');
+                    playBeep(frequency, duration, type); // Reintentar
+                }).catch(e => {
+                    console.error('Error al resumir AudioContext:', e);
+                    playFallbackSound();
+                });
+                return;
+            }
+            
+            if (audioContext.state === 'closed') {
+                console.log('AudioContext cerrado, creando uno nuevo');
+                initAudioContext();
             }
             
             const oscillator = audioContext.createOscillator();
@@ -446,14 +645,14 @@
             oscillator.frequency.value = frequency;
             oscillator.type = type;
             
-            // Configurar volumen MUY ALTO y uniforme
-            gainNode.gain.setValueAtTime(0.8, audioContext.currentTime);
+            // Configurar volumen ALTO y uniforme
+            gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
             
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + duration / 1000);
             
-            console.log(`Reproduciendo beep fuerte: ${frequency}Hz, ${duration}ms, ${type}`);
+            console.log(`✅ Beep reproducido: ${frequency}Hz, ${duration}ms, ${type}`);
         } catch (e) {
             console.error('Error al reproducir beep:', e);
             playFallbackSound();
@@ -482,59 +681,143 @@
         }
     }
     
-    // Función para reproducir sonido uniforme y fuerte
+    // Función para reproducir sonido usando Web Audio API
     function playNotificationSound(type) {
-        console.log(`Reproduciendo sonido fuerte para tipo: ${type}`);
+        console.log(`Reproduciendo sonido para tipo: ${type}`);
         
-        // Verificar si el audio está habilitado
-        const audioEnabled = localStorage.getItem('notificationAudioEnabled') !== 'false';
-        if (!audioEnabled) {
-            console.log('Audio deshabilitado por el usuario');
+        // Verificar si el sonido está habilitado
+        const soundEnabled = localStorage.getItem('notificationSoundEnabled') !== 'false';
+        if (!soundEnabled) {
+            console.log('Sonido deshabilitado por el usuario');
             return;
         }
         
         try {
-            // SONIDO UNIFORME Y FUERTE PARA TODOS LOS TIPOS
+            // Configurar frecuencias según el tipo
+            let frequency = 800; // frecuencia base
+            let duration = 300; // duración base
+            
             switch(type) {
-                case 'create':
                 case 'success':
-                case 'update':
-                case 'warning':
-                case 'delete':
+                    frequency = 800;
+                    duration = 200;
+                    break;
                 case 'error':
+                    frequency = 400;
+                    duration = 400;
+                    break;
+                case 'warning':
+                    frequency = 600;
+                    duration = 300;
+                    break;
                 case 'info':
-                default:
-                    // Sonido uniforme: BEEP FUERTE Y CLARO
-                    playBeep(800, 400, 'sine');
+                    frequency = 1000;
+                    duration = 200;
+                    break;
+                case 'create':
+                    frequency = 900;
+                    duration = 250;
+                    break;
+                case 'update':
+                    frequency = 700;
+                    duration = 300;
+                    break;
+                case 'delete':
+                    frequency = 300;
+                    duration = 500;
                     break;
             }
+            
+            // Intentar reproducir sonido con Web Audio API
+            if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
+                playBeep(frequency, duration, 'sine');
+            } else {
+                console.log('Web Audio API no disponible, usando fallback');
+                playFallbackSound();
+            }
+            
         } catch (e) {
-            console.error('Error en playNotificationSound:', e);
+            console.error('Error al reproducir sonido:', e);
+            // Intentar fallback
             playFallbackSound();
         }
     }
     
-    // Función para reproducir sonidos de audio HTML
-    function playAudioSound(audioId) {
-        try {
-            const audio = document.getElementById(audioId);
-            if (audio) {
-                audio.currentTime = 0;
-                audio.volume = 0.6;
-                const playPromise = audio.play();
-                
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        console.log(`Sonido ${audioId} reproducido correctamente`);
-                    }).catch(e => {
-                        console.error(`Error al reproducir ${audioId}:`, e);
-                    });
-                }
-            }
-        } catch (e) {
-            console.error(`Error en playAudioSound ${audioId}:`, e);
+    // Función de prueba para verificar notificaciones
+    window.testNotification = function() {
+        console.log('Función testNotification llamada');
+        showNotification('Esta es una notificación de prueba', 'success');
+        setTimeout(() => showNotification('Esta es una notificación de error', 'error'), 1000);
+        setTimeout(() => showNotification('Esta es una notificación de advertencia', 'warning'), 2000);
+        setTimeout(() => showNotification('Esta es una notificación de información', 'info'), 3000);
+    };
+    
+    // Función de prueba específica para sonido
+    window.testSound = function() {
+        console.log('Función testSound llamada');
+        console.log('Estado del AudioContext:', audioContext ? audioContext.state : 'No inicializado');
+        console.log('Sonido habilitado:', localStorage.getItem('notificationSoundEnabled'));
+        
+        // Forzar habilitación del sonido para la prueba
+        localStorage.setItem('notificationSoundEnabled', 'true');
+        
+        // Probar diferentes frecuencias
+        playBeep(800, 200, 'sine'); // Tono agudo
+        setTimeout(() => playBeep(400, 400, 'sine'), 500); // Tono grave
+        setTimeout(() => playBeep(1000, 200, 'sine'), 1000); // Tono muy agudo
+        
+        showNotification('Probando sonidos...', 'info');
+    };
+    
+    // Función para toggle del sidebar
+    window.toggleSidebar = function() {
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('mainContent');
+        
+        if (sidebar.classList.contains('collapsed')) {
+            // Mostrar sidebar
+            sidebar.classList.remove('collapsed');
+            mainContent.classList.remove('expanded');
+            localStorage.setItem('sidebarCollapsed', 'false');
+        } else {
+            // Ocultar sidebar
+            sidebar.classList.add('collapsed');
+            mainContent.classList.add('expanded');
+            localStorage.setItem('sidebarCollapsed', 'true');
         }
-    }
+    };
+    
+    // Cerrar sidebar al hacer clic fuera en móvil
+    document.addEventListener('click', function(event) {
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.querySelector('.sidebar-toggle');
+        
+        if (window.innerWidth <= 768) {
+            if (!sidebar.contains(event.target) && 
+                !sidebarToggle.contains(event.target)) {
+                sidebar.classList.add('collapsed');
+                document.getElementById('mainContent').classList.add('expanded');
+            }
+        }
+    });
+    
+    // Función para controlar el sonido
+    window.toggleSound = function() {
+        const soundEnabled = localStorage.getItem('notificationSoundEnabled') !== 'false';
+        const newState = !soundEnabled;
+        localStorage.setItem('notificationSoundEnabled', newState);
+        
+        const button = document.getElementById('soundToggle');
+        if (button) {
+            if (newState) {
+                button.innerHTML = '<i class="fas fa-volume-up"></i> Sonido';
+                button.className = 'btn btn-sm btn-outline-secondary me-2';
+            } else {
+                button.innerHTML = '<i class="fas fa-volume-mute"></i> Silenciado';
+                button.className = 'btn btn-sm btn-outline-danger me-2';
+            }
+        }
+    };
     
     // Inicializar audio cuando se carga la página
     document.addEventListener('DOMContentLoaded', function() {
@@ -542,95 +825,111 @@
         
         // Intentar inicializar AudioContext
         initAudioContext();
+        
+        // Inicializar estado del sonido
+        const soundEnabled = localStorage.getItem('notificationSoundEnabled') !== 'false';
+        const button = document.getElementById('soundToggle');
+        if (button) {
+            if (soundEnabled) {
+                button.innerHTML = '<i class="fas fa-volume-up"></i> Sonido';
+                button.className = 'btn btn-sm btn-outline-secondary me-2';
+            } else {
+                button.innerHTML = '<i class="fas fa-volume-mute"></i> Silenciado';
+                button.className = 'btn btn-sm btn-outline-danger me-2';
+            }
+        }
+        
+        // Inicializar estado del sidebar
+        const sidebarState = localStorage.getItem('sidebarCollapsed');
+        if (sidebarState === 'true') {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            
+            if (sidebar && mainContent) {
+                sidebar.classList.add('collapsed');
+                mainContent.classList.add('expanded');
+            }
+        }
     });
     
-    // Función para mostrar notificaciones CRUD mejoradas - SIN DUPLICADOS
-    let activeNotifications = new Set();
-    
-    function showNotification(message, type = 'success', isImportant = false) {
-        const container = document.getElementById('notification-container');
+    // Sistema de notificaciones simple y moderno
+    window.showNotification = function(message, type = 'success') {
+        console.log('showNotification llamada:', message, type);
+        
+        // Reproducir sonido según el tipo (si está habilitado)
+        const soundEnabled = localStorage.getItem('notificationSoundEnabled') !== 'false';
+        if (soundEnabled) {
+            playNotificationSound(type);
+        }
+        
+        // Crear contenedor si no existe
+        let container = document.getElementById('notification-container');
         if (!container) {
-            console.error('Contenedor de notificaciones no encontrado');
-            return;
+            container = document.createElement('div');
+            container.id = 'notification-container';
+            container.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                max-width: 400px;
+            `;
+            document.body.appendChild(container);
         }
         
-        // Verificar si ya existe una notificación con el mismo mensaje
-        if (activeNotifications.has(message)) {
-            console.log('🔄 Notificación ya activa, saltando:', message);
-            return;
-        }
-        
-        // Marcar como activa
-        activeNotifications.add(message);
-        
-        // Crear elemento de notificación
+        // Crear notificación
         const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        if (isImportant) {
-            notification.classList.add('important');
-        }
+        notification.style.cssText = `
+            background: ${type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : type === 'warning' ? '#fff3cd' : '#d1ecf1'};
+            color: ${type === 'success' ? '#155724' : type === 'error' ? '#721c24' : type === 'warning' ? '#856404' : '#0c5460'};
+            border: 1px solid ${type === 'success' ? '#c3e6cb' : type === 'error' ? '#f5c6cb' : type === 'warning' ? '#ffeaa7' : '#bee5eb'};
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 300px;
+            position: relative;
+            animation: slideIn 0.3s ease-out;
+        `;
         
-        // Iconos específicos para CRUD
+        // Iconos según tipo
         const icons = {
-            'create': 'fas fa-plus-circle',
-            'update': 'fas fa-edit',
-            'delete': 'fas fa-trash-alt',
-            'success': 'fas fa-check-circle',
-            'warning': 'fas fa-exclamation-triangle',
-            'error': 'fas fa-times-circle',
-            'info': 'fas fa-info-circle'
+            'success': '✅',
+            'error': '❌',
+            'warning': '⚠️',
+            'info': 'ℹ️',
+            'create': '➕',
+            'update': '✏️',
+            'delete': '🗑️'
         };
         
-        // Sanitizar el mensaje para evitar XSS
-        const sanitizedMessage = message.replace(/[<>]/g, '');
-        
         notification.innerHTML = `
-            <div class="notification-content">
-                <i class="notification-icon ${icons[type] || icons.info}"></i>
-                <span class="notification-message">${sanitizedMessage}</span>
-                <button class="notification-close" onclick="closeNotification(this)" title="Cerrar">
-                    <i class="fas fa-times"></i>
-                </button>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center;">
+                    <span style="font-size: 18px; margin-right: 10px;">${icons[type] || icons.info}</span>
+                    <span style="flex-grow: 1;">${message}</span>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 10px;">×</button>
             </div>
-            <div class="notification-progress"></div>
         `;
         
         // Agregar al contenedor
         container.appendChild(notification);
         
-        // Reproducir sonido específico según el tipo
-        playNotificationSound(type);
-        
-        // Auto-eliminar después de 3 segundos mínimo + animación de transparencia
+        // Auto-eliminar después de 5 segundos
         setTimeout(() => {
-            const closeButton = notification.querySelector('.notification-close');
-            if (closeButton) {
-                closeNotification(closeButton);
+            if (notification.parentNode) {
+                notification.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 300);
             }
-            // Remover del set de notificaciones activas
-            activeNotifications.delete(message);
-        }, 3000);
+        }, 5000);
     }
     
-    // Función para cerrar notificación
-    function closeNotification(button) {
-        const notification = button.closest('.notification');
-        if (notification) {
-            const messageElement = notification.querySelector('.notification-message');
-            const message = messageElement ? messageElement.textContent : '';
-            
-            notification.classList.add('hiding');
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-                // Remover del set de notificaciones activas
-                if (message) {
-                    activeNotifications.delete(message);
-                }
-            }, 1500); // Duración de la animación fadeOut
-        }
-    }
+
     
     // Función para actualizar IDs de operaciones
     function updateOperationIds() {
@@ -649,14 +948,12 @@
     // Función global para notificaciones CRUD
     window.showCRUDNotification = function(message, action) {
         let type = 'success';
-        let isImportant = false;
         
         switch(action) {
             case 'create':
             case 'add':
             case 'register':
                 type = 'create';
-                isImportant = true;
                 break;
             case 'update':
             case 'edit':
@@ -667,7 +964,6 @@
             case 'remove':
             case 'eliminate':
                 type = 'delete';
-                isImportant = true;
                 break;
             case 'error':
                 type = 'error';
@@ -678,9 +974,11 @@
             case 'info':
                 type = 'info';
                 break;
+            default:
+                type = 'success';
         }
         
-        showNotification(message, type, isImportant);
+        showNotification(message, type);
     };
     
     // Sistema mejorado de detección de mensajes flash - SIN DUPLICADOS
@@ -825,27 +1123,7 @@
     });
     </script>
     
-    {% block scripts %}
-<script>
-function showNotification(message, type = 'success') {
-    const container = document.getElementById('notification-container');
-    const notif = document.createElement('div');
-    notif.className = `alert alert-${type} shadow mb-2`;
-    notif.innerHTML = message;
-    container.appendChild(notif);
-    // Sonido
-    let audioId = 'notif-success';
-    if(type === 'error') audioId = 'notif-error';
-    else if(type === 'warning' || type === 'warn') audioId = 'notif-warning';
-    else if(type === 'info') audioId = 'notif-info';
-    document.getElementById(audioId).play();
-    setTimeout(() => {
-        notif.classList.add('hide');
-        setTimeout(() => notif.remove(), 2000);
-    }, 4000);
-}
-</script>
-{% endblock %}
+    {% block scripts %}{% endblock %}
 {% if get_flashed_messages(with_categories=true) %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
