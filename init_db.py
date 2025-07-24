@@ -29,50 +29,79 @@ def debug_database_config():
 
 def init_database():
     """Inicializar la base de datos y crear usuario admin"""
-    # Diagnóstico primero
-    debug_database_config()
-    
-    max_retries = 5
+    max_retries = 3
     retry_delay = 2
     
     for attempt in range(max_retries):
         try:
-            print(f"🔧 Intento {attempt + 1}/{max_retries}: Conectando a la base de datos...")
+            print(f"🔧 Intento {attempt + 1}/{max_retries}: Inicializando base de datos...")
             
-            # Importar después del diagnóstico para evitar errores tempranos
-            from app import app, db, Usuario
+            # Importar después del diagnóstico
+            from app import app, db, Usuario, Sucursal, MedioPago
             from werkzeug.security import generate_password_hash
             
             with app.app_context():
-                # Verificar conexión a la base de datos usando la sintaxis correcta de SQLAlchemy 2.0
-                with db.engine.connect() as connection:
-                    connection.execute(text("SELECT 1"))
-                    connection.commit()
-                print("✅ Conexión a la base de datos establecida")
-                
+                # Crear tablas
                 print("🔧 Creando tablas de base de datos...")
                 db.create_all()
-                print("✅ Tablas creadas exitosamente")
+                print("✅ Tablas creadas correctamente")
                 
-                # Crear usuario admin por defecto si no existe
-                admin = Usuario.query.filter_by(username='admin').first()
-                if not admin:
-                    print("👤 Creando usuario administrador...")
+                # Verificar si ya existe un usuario admin
+                admin_exists = Usuario.query.filter_by(username='admin').first()
+                if admin_exists:
+                    print("✅ Usuario admin ya existe")
+                else:
+                    # Crear usuario admin
+                    print("🔧 Creando usuario admin...")
                     admin = Usuario(
                         username='admin',
                         email='admin@sisagent.com',
-                        password_hash=generate_password_hash('61442159'),
-                        nombre_completo='Administrador SISAGENT',
-                        es_admin=True,
-                        sucursal_id=None
+                        password_hash=generate_password_hash('admin123'),
+                        nombre_completo='Administrador del Sistema',
+                        es_admin=True
                     )
                     db.session.add(admin)
+                    
+                    # Crear sucursal por defecto
+                    sucursal_default = Sucursal.query.filter_by(nombre='Sucursal Principal').first()
+                    if not sucursal_default:
+                        print("🔧 Creando sucursal por defecto...")
+                        sucursal_default = Sucursal(
+                            nombre='Sucursal Principal',
+                            direccion='Dirección Principal',
+                            activa=True
+                        )
+                        db.session.add(sucursal_default)
+                        db.session.flush()  # Para obtener el ID
+                    
+                    # Crear medios de pago por defecto
+                    medios_default = [
+                        {'abreviado': 'BCP', 'completo': 'Banco de Crédito del Perú'},
+                        {'abreviado': 'BBVA', 'completo': 'BBVA Perú'},
+                        {'abreviado': 'BN', 'completo': 'Banco de la Nación'},
+                        {'abreviado': 'IBK', 'completo': 'Interbank'},
+                        {'abreviado': 'KS', 'completo': 'Kashio'},
+                        {'abreviado': 'NIUBIZ', 'completo': 'Niubiz'},
+                        {'abreviado': 'ICA', 'completo': 'ICA'},
+                        {'abreviado': 'CONFIANZA', 'completo': 'Confianza'}
+                    ]
+                    
+                    for i, medio in enumerate(medios_default):
+                        medio_exists = MedioPago.query.filter_by(nombre_abreviado=medio['abreviado']).first()
+                        if not medio_exists:
+                            print(f"🔧 Creando medio de pago: {medio['abreviado']}")
+                            nuevo_medio = MedioPago(
+                                nombre_abreviado=medio['abreviado'],
+                                nombre_completo=medio['completo'],
+                                activo=True,
+                                orden=i+1
+                            )
+                            db.session.add(nuevo_medio)
+                    
                     db.session.commit()
-                    print("✅ Usuario administrador creado")
-                else:
-                    print("ℹ️ Usuario administrador ya existe")
+                    print("✅ Usuario admin y datos iniciales creados correctamente")
                 
-                print("🎉 Inicialización completada exitosamente")
+                print("✅ Base de datos inicializada correctamente")
                 return True
                 
         except Exception as e:
@@ -80,14 +109,19 @@ def init_database():
             if attempt < max_retries - 1:
                 print(f"⏳ Reintentando en {retry_delay} segundos...")
                 time.sleep(retry_delay)
-                retry_delay *= 2  # Backoff exponencial
+                retry_delay *= 2
             else:
                 print("💥 Error fatal: No se pudo inicializar la base de datos después de todos los intentos")
                 return False
     
     return False
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+    debug_database_config()
     success = init_database()
-    if not success:
+    if success:
+        print("🎉 Inicialización completada exitosamente")
+        sys.exit(0)
+    else:
+        print("💥 Error en la inicialización")
         sys.exit(1)
