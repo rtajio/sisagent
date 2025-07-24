@@ -8,6 +8,10 @@ if [ -d "/opt/venv" ]; then
     source /opt/venv/bin/activate
 fi
 
+# Diagnóstico de variables de entorno
+echo "🔍 Ejecutando diagnóstico de variables de entorno..."
+python debug_env.py
+
 # Inicializar base de datos
 echo "🔧 Inicializando base de datos..."
 python init_db.py

@@ -5,18 +5,43 @@ Script de inicialización de base de datos para Railway
 import os
 import sys
 import time
-from app import app, db, Usuario
-from werkzeug.security import generate_password_hash
 from sqlalchemy import text
+
+def debug_database_config():
+    """Diagnóstico de configuración de base de datos"""
+    print("🔍 DIAGNÓSTICO DE CONFIGURACIÓN DE BASE DE DATOS")
+    print("=" * 50)
+    
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        print(f"✅ DATABASE_URL encontrada")
+        if 'postgres' in database_url.lower():
+            print("✅ Tipo de base de datos: PostgreSQL")
+        elif 'mysql' in database_url.lower():
+            print("⚠️ Tipo de base de datos: MySQL (no recomendado para Railway)")
+        else:
+            print(f"❓ Tipo de base de datos: Desconocido")
+    else:
+        print("❌ DATABASE_URL no encontrada")
+        print("ℹ️ Usando SQLite para desarrollo local")
+    
+    print("=" * 50)
 
 def init_database():
     """Inicializar la base de datos y crear usuario admin"""
+    # Diagnóstico primero
+    debug_database_config()
+    
     max_retries = 5
     retry_delay = 2
     
     for attempt in range(max_retries):
         try:
             print(f"🔧 Intento {attempt + 1}/{max_retries}: Conectando a la base de datos...")
+            
+            # Importar después del diagnóstico para evitar errores tempranos
+            from app import app, db, Usuario
+            from werkzeug.security import generate_password_hash
             
             with app.app_context():
                 # Verificar conexión a la base de datos usando la sintaxis correcta de SQLAlchemy 2.0
