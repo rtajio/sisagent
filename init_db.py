@@ -7,6 +7,7 @@ import sys
 import time
 from app import app, db, Usuario
 from werkzeug.security import generate_password_hash
+from sqlalchemy import text
 
 def init_database():
     """Inicializar la base de datos y crear usuario admin"""
@@ -18,8 +19,10 @@ def init_database():
             print(f"🔧 Intento {attempt + 1}/{max_retries}: Conectando a la base de datos...")
             
             with app.app_context():
-                # Verificar conexión a la base de datos
-                db.engine.execute("SELECT 1")
+                # Verificar conexión a la base de datos usando la sintaxis correcta de SQLAlchemy 2.0
+                with db.engine.connect() as connection:
+                    connection.execute(text("SELECT 1"))
+                    connection.commit()
                 print("✅ Conexión a la base de datos establecida")
                 
                 print("🔧 Creando tablas de base de datos...")
