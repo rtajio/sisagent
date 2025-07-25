@@ -383,7 +383,11 @@
                 max-width: 320px;
             }
             
-            .sidebar.show {
+            .sidebar.collapsed {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar:not(.collapsed) {
                 transform: translateX(0);
             }
             
@@ -417,6 +421,33 @@
             
             .card-body {
                 padding: 1.5rem;
+            }
+            
+            /* Botón hamburguesa más visible en móvil */
+            .sidebar-toggle {
+                position: fixed;
+                top: 1rem;
+                left: 1rem;
+                z-index: 1001;
+                background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+                border: none;
+                color: var(--white);
+                padding: 1rem;
+                border-radius: 50%;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                font-size: 1.5rem;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                width: 60px;
+                height: 60px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .sidebar-toggle:hover {
+                transform: scale(1.1);
+                box-shadow: 0 6px 16px rgba(0,0,0,0.4);
             }
         }
         
@@ -774,16 +805,22 @@
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('mainContent');
         
+        console.log('🔄 Toggle sidebar llamado');
+        console.log('📱 Ancho de pantalla:', window.innerWidth);
+        console.log('📋 Sidebar collapsed:', sidebar.classList.contains('collapsed'));
+        
         if (sidebar.classList.contains('collapsed')) {
             // Mostrar sidebar
             sidebar.classList.remove('collapsed');
             mainContent.classList.remove('expanded');
             localStorage.setItem('sidebarCollapsed', 'false');
+            console.log('✅ Sidebar mostrado');
         } else {
             // Ocultar sidebar
             sidebar.classList.add('collapsed');
             mainContent.classList.add('expanded');
             localStorage.setItem('sidebarCollapsed', 'true');
+            console.log('✅ Sidebar ocultado');
         }
     };
     
@@ -797,6 +834,28 @@
                 !sidebarToggle.contains(event.target)) {
                 sidebar.classList.add('collapsed');
                 document.getElementById('mainContent').classList.add('expanded');
+                console.log('📱 Sidebar cerrado por clic fuera');
+            }
+        }
+    });
+    
+    // Inicializar sidebar en móvil
+    document.addEventListener('DOMContentLoaded', function() {
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('mainContent');
+        
+        // En móvil, siempre empezar con sidebar oculto
+        if (window.innerWidth <= 768) {
+            sidebar.classList.add('collapsed');
+            mainContent.classList.add('expanded');
+            console.log('📱 Sidebar inicializado oculto en móvil');
+        } else {
+            // En desktop, usar el estado guardado
+            const sidebarState = localStorage.getItem('sidebarCollapsed');
+            if (sidebarState === 'true') {
+                sidebar.classList.add('collapsed');
+                mainContent.classList.add('expanded');
+                console.log('🖥️ Sidebar inicializado oculto en desktop');
             }
         }
     });
