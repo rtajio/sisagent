@@ -30,7 +30,7 @@ if os.environ.get('DATABASE_URL'):
     print(f"✅ Usando PostgreSQL en Railway: {database_url[:20]}...")
 else:
     # Para desarrollo local y Railway sin DATABASE_URL
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
     print("✅ Usando SQLite para desarrollo local")
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
@@ -1599,17 +1599,17 @@ def supervisor_eliminar_usuario(user_id):
 @login_required
 def supervisor_cambiar_rol_usuario(user_id):
     if not current_user.es_supervisor:
-        return jsonify({'success': False, 'message': 'Acceso denegado'})
+        return jsonify({'success': False, 'message': 'Acceso denegado. Solo los supervisores pueden cambiar roles.'})
     
     usuario = Usuario.query.get_or_404(user_id)
     
     # Verificar que el usuario pertenece a la misma sucursal
     if usuario.sucursal_id != current_user.sucursal_id:
-        return jsonify({'success': False, 'message': 'No puedes modificar usuarios de otras sucursales'})
+        return jsonify({'success': False, 'message': 'Solo puedes gestionar usuarios de tu sucursal.'})
     
-    # No permitir cambiar el rol de su propia cuenta
+    # No permitir cambiar su propio rol
     if usuario.id == current_user.id:
-        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol'})
+        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol.'})
     
     data = request.get_json()
     nuevo_rol = data.get('rol')
@@ -1630,6 +1630,241 @@ def supervisor_cambiar_rol_usuario(user_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al cambiar el rol del usuario'})
+
+# NUEVAS RUTAS PARA SUPERVISOR
+
+@app.route('/supervisor/medios')
+@login_required
+def supervisor_medios():
+    """Vista para que el supervisor gestione los medios de pago de su sucursal"""
+    if not current_user.es_supervisor:
+        flash('Acceso denegado. Solo los supervisores pueden acceder a esta página.', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener todos los medios de pago
+    medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden).all()
+    
+    # Obtener los medios activos para la sucursal del supervisor
+    medios_sucursal = MedioSucursal.query.filter_by(
+        sucursal_id=current_user.sucursal_id
+    ).all()
+    
+    # Crear un diccionario para facilitar la búsqueda
+    medios_activos = {ms.medio_pago_id: ms.activo for ms in medios_sucursal}
+    
+    return render_template('supervisor_medios.html', 
+                         medios=medios, 
+                         medios_activos=medios_activos,
+                         sucursal=current_user.sucursal)
+
+@app.route('/supervisor/medios/<int:medio_id>/toggle', methods=['POST'])
+@login_required
+def supervisor_toggle_medio(medio_id):
+    """Activar/desactivar medio de pago para la sucursal del supervisor"""
+    if not current_user.es_supervisor:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    medio = MedioPago.query.get_or_404(medio_id)
+    
+    # Buscar si ya existe la relación
+    medio_sucursal = MedioSucursal.query.filter_by(
+        sucursal_id=current_user.sucursal_id,
+        medio_pago_id=medio_id
+    ).first()
+    
+    try:
+        if medio_sucursal:
+            # Cambiar estado
+            medio_sucursal.activo = not medio_sucursal.activo
+        else:
+            # Crear nueva relación
+            medio_sucursal = MedioSucursal(
+                sucursal_id=current_user.sucursal_id,
+                medio_pago_id=medio_id,
+                activo=True
+            )
+            db.session.add(medio_sucursal)
+        
+        db.session.commit()
+        
+        estado = "activado" if medio_sucursal.activo else "desactivado"
+        return jsonify({
+            'success': True, 
+            'message': f'Medio {medio.nombre_completo} {estado} para tu sucursal',
+            'activo': medio_sucursal.activo
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al actualizar el medio de pago'})
+
+@app.route('/supervisor/comisiones')
+@login_required
+def supervisor_comisiones():
+    """Vista para que el supervisor vea las comisiones de su sucursal"""
+    if not current_user.es_supervisor:
+        flash('Acceso denegado. Solo los supervisores pueden acceder a esta página.', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener comisiones del día actual
+    hoy = datetime.now().date()
+    comision_diaria = ComisionDiaria.query.filter_by(
+        fecha=hoy,
+        sucursal_id=current_user.sucursal_id
+    ).first()
+    
+    # Obtener comisiones del mes actual
+    año_actual = datetime.now().year
+    mes_actual = datetime.now().month
+    comision_mensual = ComisionMensual.query.filter_by(
+        año=año_actual,
+        mes=mes_actual,
+        sucursal_id=current_user.sucursal_id
+    ).first()
+    
+    # Obtener operaciones del día
+    operaciones_hoy = Operacion.query.filter(
+        Operacion.sucursal_id == current_user.sucursal_id,
+        db.func.date(Operacion.hora) == hoy
+    ).order_by(Operacion.hora.desc()).limit(10).all()
+    
+    return render_template('supervisor_comisiones.html',
+                         comision_diaria=comision_diaria,
+                         comision_mensual=comision_mensual,
+                         operaciones_hoy=operaciones_hoy,
+                         sucursal=current_user.sucursal)
+
+@app.route('/api/supervisor/estadisticas')
+@login_required
+def api_supervisor_estadisticas():
+    """API para obtener estadísticas del supervisor"""
+    if not current_user.es_supervisor:
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    try:
+        # Estadísticas del día
+        hoy = datetime.now().date()
+        operaciones_hoy = Operacion.query.filter(
+            Operacion.sucursal_id == current_user.sucursal_id,
+            db.func.date(Operacion.hora) == hoy
+        ).count()
+        
+        comision_diaria = ComisionDiaria.query.filter_by(
+            fecha=hoy,
+            sucursal_id=current_user.sucursal_id
+        ).first()
+        
+        # Estadísticas del mes
+        año_actual = datetime.now().year
+        mes_actual = datetime.now().month
+        comision_mensual = ComisionMensual.query.filter_by(
+            año=año_actual,
+            mes=mes_actual,
+            sucursal_id=current_user.sucursal_id
+        ).first()
+        
+        # Usuarios activos en la sucursal
+        usuarios_activos = Usuario.query.filter_by(
+            sucursal_id=current_user.sucursal_id,
+            activo=True
+        ).count()
+        
+        # Operaciones recientes (últimas 5)
+        operaciones_recientes = Operacion.query.filter_by(
+            sucursal_id=current_user.sucursal_id
+        ).order_by(Operacion.hora.desc()).limit(5).all()
+        
+        operaciones_data = []
+        for op in operaciones_recientes:
+            operaciones_data.append({
+                'id': op.id,
+                'fecha': op.hora.strftime('%d/%m/%Y %H:%M'),
+                'usuario': op.usuario.nombre_completo,
+                'monto': float(op.monto),
+                'comision': float(op.comision),
+                'medio': op.medio
+            })
+        
+        return jsonify({
+            'operaciones_hoy': operaciones_hoy,
+            'comision_dia': float(comision_diaria.total_comision) if comision_diaria else 0,
+            'comision_mes': float(comision_mensual.total_comision) if comision_mensual else 0,
+            'usuarios_activos': usuarios_activos,
+            'operaciones_recientes': operaciones_data
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/supervisor/reportes')
+@login_required
+def supervisor_reportes():
+    """Vista de reportes específicos para el supervisor"""
+    if not current_user.es_supervisor:
+        flash('Acceso denegado. Solo los supervisores pueden acceder a esta página.', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener medios de pago disponibles para la sucursal
+    medios_sucursal = MedioSucursal.query.filter_by(
+        sucursal_id=current_user.sucursal_id,
+        activo=True
+    ).join(MedioPago).all()
+    
+    medios = [ms.medio_pago for ms in medios_sucursal]
+    
+    return render_template('supervisor_reportes.html',
+                         medios=medios,
+                         sucursal=current_user.sucursal)
+
+@app.route('/api/supervisor/reportes/operaciones')
+@login_required
+def api_supervisor_reportes_operaciones():
+    """API para reportes de operaciones del supervisor"""
+    if not current_user.es_supervisor:
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    medio = request.args.get('medio')
+    
+    try:
+        # Construir consulta base
+        query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
+        
+        # Aplicar filtros
+        if fecha_inicio:
+            query = query.filter(Operacion.hora >= datetime.strptime(fecha_inicio, '%Y-%m-%d'))
+        if fecha_fin:
+            query = query.filter(Operacion.hora <= datetime.strptime(fecha_fin + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
+        if medio:
+            query = query.filter(Operacion.medio == medio)
+        
+        operaciones = query.order_by(Operacion.hora.desc()).all()
+        
+        # Calcular totales
+        total_monto = sum(float(op.monto) for op in operaciones)
+        total_comision = sum(float(op.comision) for op in operaciones)
+        
+        # Preparar datos para la tabla
+        operaciones_data = []
+        for op in operaciones:
+            operaciones_data.append({
+                'id': op.id,
+                'fecha': op.hora.strftime('%d/%m/%Y %H:%M'),
+                'usuario': op.usuario.nombre_completo,
+                'monto': float(op.monto),
+                'comision': float(op.comision),
+                'medio': op.medio
+            })
+        
+        return jsonify({
+            'operaciones': operaciones_data,
+            'total_monto': total_monto,
+            'total_comision': total_comision,
+            'cantidad': len(operaciones)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

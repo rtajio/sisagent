@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes - {{ sucursal.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-chart-pie text-primary"></i>
+                    Reportes - {{ sucursal.nombre }}
+                </h1>
+                <a href="{{ url_for('supervisor_dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver al Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-filter"></i> Filtros
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label for="fecha_inicio">Fecha Inicio</label>
+                            <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="fecha_fin">Fecha Fin</label>
+                            <input type="date" class="form-control" id="fecha_fin" name="fecha_fin">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="medio">Medio de Pago</label>
+                            <select class="form-control" id="medio" name="medio">
+                                <option value="">Todos los medios</option>
+                                {% for medio in medios %}
+                                <option value="{{ medio.nombre_abreviado }}">{{ medio.nombre_completo }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>&nbsp;</label>
+                            <button type="button" class="btn btn-primary btn-block" onclick="generarReporte()">
+                                <i class="fas fa-search"></i> Generar Reporte
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumen -->
+    <div class="row mb-4">
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Operaciones
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-operaciones">
+                                0
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-list fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Monto
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-monto">
+                                S/ 0.00
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Total Comisión
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-comision">
+                                S/ 0.00
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-percentage fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de operaciones -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-table"></i> Operaciones
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="tabla-operaciones" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Usuario</th>
+                                    <th>Monto</th>
+                                    <th>Comisión</th>
+                                    <th>Medio</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="text-center">
+                                        <i class="fas fa-info-circle"></i> Selecciona filtros y genera un reporte
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Establecer fechas por defecto (último mes)
+document.addEventListener('DOMContentLoaded', function() {
+    const hoy = new Date();
+    const haceUnMes = new Date();
+    haceUnMes.setMonth(haceUnMes.getMonth() - 1);
+    
+    document.getElementById('fecha_inicio').value = haceUnMes.toISOString().split('T')[0];
+    document.getElementById('fecha_fin').value = hoy.toISOString().split('T')[0];
+});
+
+function generarReporte() {
+    const fechaInicio = document.getElementById('fecha_inicio').value;
+    const fechaFin = document.getElementById('fecha_fin').value;
+    const medio = document.getElementById('medio').value;
+    
+    if (!fechaInicio || !fechaFin) {
+        alert('Por favor selecciona las fechas de inicio y fin');
+        return;
+    }
+    
+    if (fechaInicio > fechaFin) {
+        alert('La fecha de inicio no puede ser mayor a la fecha de fin');
+        return;
+    }
+    
+    // Mostrar loading
+    const tbody = document.querySelector('#tabla-operaciones tbody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    
+    // Construir URL con parámetros
+    let url = '/api/supervisor/reportes/operaciones?';
+    url += `fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+    if (medio) {
+        url += `&medio=${medio}`;
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error: ${data.error}</td></tr>`;
+                return;
+            }
+            
+            // Actualizar resumen
+            document.getElementById('total-operaciones').textContent = data.cantidad;
+            document.getElementById('total-monto').textContent = `S/ ${data.total_monto.toFixed(2)}`;
+            document.getElementById('total-comision').textContent = `S/ ${data.total_comision.toFixed(2)}`;
+            
+            // Actualizar tabla
+            if (data.operaciones.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No se encontraron operaciones con los filtros seleccionados</td></tr>';
+                return;
+            }
+            
+            let html = '';
+            data.operaciones.forEach(op => {
+                html += `
+                    <tr>
+                        <td>${op.fecha}</td>
+                        <td>${op.usuario}</td>
+                        <td>S/ ${op.monto.toFixed(2)}</td>
+                        <td>S/ ${op.comision.toFixed(2)}</td>
+                        <td><span class="badge badge-primary">${op.medio}</span></td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error al cargar el reporte</td></tr>';
+        });
+}
+</script>
+{% endblock %} 

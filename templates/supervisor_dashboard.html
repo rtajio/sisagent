@@ -124,13 +124,23 @@
                             </a>
                         </div>
                         <div class="col-md-3 mb-3">
-                            <a href="{{ url_for('reportes') }}" class="btn btn-info btn-block">
+                            <a href="{{ url_for('supervisor_reportes') }}" class="btn btn-info btn-block">
                                 <i class="fas fa-chart-pie"></i> Ver Reportes
                             </a>
                         </div>
                         <div class="col-md-3 mb-3">
                             <a href="{{ url_for('supervisor_crear_usuario') }}" class="btn btn-warning btn-block">
                                 <i class="fas fa-user-plus"></i> Crear Usuario
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('supervisor_medios') }}" class="btn btn-secondary btn-block">
+                                <i class="fas fa-credit-card"></i> Medios de Pago
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('supervisor_comisiones') }}" class="btn btn-success btn-block">
+                                <i class="fas fa-dollar-sign"></i> Comisiones
                             </a>
                         </div>
                     </div>
@@ -184,46 +194,65 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function cargarEstadisticas() {
-    // Simular carga de estadísticas (aquí irían las llamadas AJAX reales)
-    setTimeout(() => {
-        document.getElementById('operaciones-hoy').innerHTML = '12';
-        document.getElementById('comision-dia').innerHTML = 'S/ 45.50';
-        document.getElementById('comision-mes').innerHTML = 'S/ 1,250.00';
-        document.getElementById('usuarios-activos').innerHTML = '8';
-    }, 1000);
+    fetch('/api/supervisor/estadisticas')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error:', data.error);
+                return;
+            }
+            
+            document.getElementById('operaciones-hoy').innerHTML = data.operaciones_hoy;
+            document.getElementById('comision-dia').innerHTML = `S/ ${data.comision_dia.toFixed(2)}`;
+            document.getElementById('comision-mes').innerHTML = `S/ ${data.comision_mes.toFixed(2)}`;
+            document.getElementById('usuarios-activos').innerHTML = data.usuarios_activos;
+        })
+        .catch(error => {
+            console.error('Error al cargar estadísticas:', error);
+            document.getElementById('operaciones-hoy').innerHTML = 'Error';
+            document.getElementById('comision-dia').innerHTML = 'Error';
+            document.getElementById('comision-mes').innerHTML = 'Error';
+            document.getElementById('usuarios-activos').innerHTML = 'Error';
+        });
 }
 
 function cargarOperacionesRecientes() {
-    // Simular carga de operaciones recientes
-    setTimeout(() => {
-        const tbody = document.querySelector('#operaciones-recientes tbody');
-        tbody.innerHTML = `
-            <tr>
-                <td>23/07/2025 15:30</td>
-                <td>Juan Pérez</td>
-                <td>S/ 150.00</td>
-                <td>S/ 3.00</td>
-                <td><span class="badge badge-primary">BCP</span></td>
-                <td><span class="badge badge-success">Completada</span></td>
-            </tr>
-            <tr>
-                <td>23/07/2025 14:15</td>
-                <td>María García</td>
-                <td>S/ 75.50</td>
-                <td>S/ 1.50</td>
-                <td><span class="badge badge-info">BBVA</span></td>
-                <td><span class="badge badge-success">Completada</span></td>
-            </tr>
-            <tr>
-                <td>23/07/2025 13:45</td>
-                <td>Carlos López</td>
-                <td>S/ 200.00</td>
-                <td>S/ 4.00</td>
-                <td><span class="badge badge-warning">Interbank</span></td>
-                <td><span class="badge badge-success">Completada</span></td>
-            </tr>
-        `;
-    }, 1500);
+    fetch('/api/supervisor/estadisticas')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error:', data.error);
+                return;
+            }
+            
+            const tbody = document.querySelector('#operaciones-recientes tbody');
+            
+            if (data.operaciones_recientes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No hay operaciones recientes</td></tr>';
+                return;
+            }
+            
+            let html = '';
+            data.operaciones_recientes.forEach(op => {
+                html += `
+                    <tr>
+                        <td>${op.fecha}</td>
+                        <td>${op.usuario}</td>
+                        <td>S/ ${op.monto.toFixed(2)}</td>
+                        <td>S/ ${op.comision.toFixed(2)}</td>
+                        <td><span class="badge badge-primary">${op.medio}</span></td>
+                        <td><span class="badge badge-success">Completada</span></td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error al cargar operaciones recientes:', error);
+            const tbody = document.querySelector('#operaciones-recientes tbody');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error al cargar datos</td></tr>';
+        });
 }
 </script>
 {% endblock %} 
