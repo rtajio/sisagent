@@ -77,6 +77,7 @@ print("🔧 FIX: Corregir descuadre en edición de operaciones - mostrar columna
 print("🕐 FIX: Corregir visualización de hora - usar función format_peru_time en templates")
 print("🕐 FIX: Corregir TODAS las horas en reportes PDF/XLSX/CSV y templates de usuarios/sucursales")
 print("🔑 FIX: Asegurar que usuario admin esté disponible en Railway - credenciales: admin/61442159")
+print("🔧 FIX: Mejorar inicialización de admin con mejor logging y verificación de contraseña")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -1460,10 +1461,14 @@ def toggle_medio_sucursal(sucursal_id):
 if __name__ == '__main__':
     try:
         with app.app_context():
+            print("🔧 Inicializando base de datos...")
             db.create_all()
+            print("✅ Base de datos inicializada")
+            
             # Crear usuario admin por defecto si no existe
             admin = Usuario.query.filter_by(username='admin').first()
             if not admin:
+                print("👤 Creando usuario admin...")
                 admin = Usuario(
                     username='admin',
                     email='admin@sisagent.com',
@@ -1474,8 +1479,22 @@ if __name__ == '__main__':
                 )
                 db.session.add(admin)
                 db.session.commit()
+                print("✅ Usuario admin creado exitosamente")
+                print("   - Username: admin")
+                print("   - Contraseña: 61442159")
+            else:
+                print("✅ Usuario admin ya existe")
+                # Verificar y actualizar contraseña si es necesario
+                from werkzeug.security import check_password_hash
+                if not check_password_hash(admin.password_hash, '61442159'):
+                    print("🔑 Actualizando contraseña de admin...")
+                    admin.password_hash = generate_password_hash('61442159')
+                    db.session.commit()
+                    print("✅ Contraseña actualizada a: 61442159")
     except Exception as e:
-        print(f"Error durante la inicialización: {e}")
+        print(f"❌ Error durante la inicialización: {e}")
+        import traceback
+        traceback.print_exc()
     
     import os
     port = int(os.environ.get("PORT", 5000))
