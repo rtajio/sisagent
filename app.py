@@ -157,7 +157,6 @@ def logout():
 def dashboard():
     if current_user.es_admin:
         return redirect(url_for('admin_dashboard'))
-    elif False:  # Supervisor eliminado
     else:
         return redirect(url_for('user_dashboard'))
 
@@ -211,50 +210,6 @@ def admin_dashboard():
         comisiones_hoy=comisiones_hoy,
         comisiones_mes=comisiones_mes
     )
-
-    
-    sucursal = Sucursal.query.get(current_user.sucursal_id)
-    if not sucursal:
-        flash('Sucursal no encontrada', 'error')
-        return redirect(url_for('dashboard'))
-
-    hoy = datetime.now(peru_tz).date()
-    mes_actual = hoy.month
-    año_actual = hoy.year
-
-    
-    comision_hoy = ComisionDiaria.query.filter_by(
-        sucursal_id=current_user.sucursal_id,
-        fecha=hoy
-    ).first()
-    total_hoy = float(comision_hoy.total_comision) if comision_hoy else 0
-
-    
-    comision_mes = db.session.query(
-        db.func.sum(Operacion.comision).label('total')
-    ).filter(
-        Operacion.sucursal_id == current_user.sucursal_id,
-        db.extract('month', Operacion.hora) == mes_actual,
-        db.extract('year', Operacion.hora) == año_actual
-    ).scalar()
-    total_mes = float(comision_mes) if comision_mes else 0
-
-    # Usuarios de la sucursal
-    usuarios_sucursal = Usuario.query.filter_by(
-        sucursal_id=current_user.sucursal_id,
-        activo=True
-    ).filter(Usuario.es_admin == False).all()
-
-    # Operaciones recientes de la sucursal
-    operaciones_recientes = Operacion.query.filter_by(
-        sucursal_id=current_user.sucursal_id
-    ).order_by(Operacion.hora.desc()).limit(10).all()
-
-                         sucursal=sucursal,
-                         total_hoy=total_hoy,
-                         total_mes=total_mes,
-                         usuarios_sucursal=usuarios_sucursal,
-                         operaciones_recientes=operaciones_recientes)
 
 @app.route('/user')
 @login_required
@@ -496,7 +451,6 @@ def admin_cambiar_rol_usuario(usuario_id):
     
     try:
         usuario.es_admin = False
-        
         db.session.commit()
         return jsonify({'success': True, 'message': f'Usuario convertido a {nuevo_rol} exitosamente'})
     except Exception as e:
@@ -899,6 +853,7 @@ def api_comisiones():
 @app.route('/reportes')
 @login_required
 def reportes():
+    if not current_user.es_admin:
         flash('Acceso denegado. Solo los administradores pueden generar reportes.', 'error')
         return redirect(url_for('dashboard'))
     
@@ -908,7 +863,6 @@ def reportes():
     if current_user.es_admin:
         sucursales = Sucursal.query.all()
     else:
-        
         sucursales = [current_user.sucursal] if current_user.sucursal else []
     
     return render_template('reportes.html', sucursales=sucursales, medios_pago=medios_pago)
