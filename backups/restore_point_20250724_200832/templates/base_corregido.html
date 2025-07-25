@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema Bancario{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin: 0.25rem 0;
+        }
+        .sidebar .nav-link:hover {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            background-color: rgba(255,255,255,0.2);
+            color: white;
+        }
+        .main-content {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border-radius: 0.75rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+        }
+        .alert {
+            border-radius: 0.75rem;
+            border: none;
+        }
+        .table {
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .form-control, .form-select {
+            border-radius: 0.5rem;
+            border: 1px solid #dee2e6;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        /* Sistema de notificaciones mejorado */
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+        }
+        
+        .notification {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            margin-bottom: 10px;
+            padding: 15px 20px;
+            border-left: 4px solid;
+            animation: slideIn 0.3s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .notification.success {
+            border-left-color: #28a745;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        }
+        
+        .notification.warning {
+            border-left-color: #ffc107;
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        }
+        
+        .notification.error {
+            border-left-color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+        }
+        
+        .notification.info {
+            border-left-color: #17a2b8;
+            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+        }
+        
+        .notification-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .notification-icon {
+            font-size: 1.2em;
+            flex-shrink: 0;
+        }
+        
+        .notification.success .notification-icon {
+            color: #28a745;
+        }
+        
+        .notification.warning .notification-icon {
+            color: #856404;
+        }
+        
+        .notification.error .notification-icon {
+            color: #dc3545;
+        }
+        
+        .notification.info .notification-icon {
+            color: #17a2b8;
+        }
+        
+        .notification-message {
+            flex-grow: 1;
+            font-weight: 500;
+        }
+        
+        .notification-close {
+            background: none;
+            border: none;
+            font-size: 1.2em;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .notification-close:hover {
+            color: #333;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+        
+        .notification.hiding {
+            animation: slideOut 0.3s ease-in forwards;
+        }
+        
+        /* Barra de progreso para auto-cierre */
+        .notification-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background: rgba(0,0,0,0.1);
+            animation: progress 5s linear;
+        }
+        
+        @keyframes progress {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Contenedor de notificaciones -->
+    <div id="notification-container" class="notification-container"></div>
+    
+    {% if current_user.is_authenticated %}
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <div class="text-center mb-4">
+                        <h4 class="text-white">SISAGENT</h4>
+                        <small class="text-white-50">Sistema Bancario</small>
+                    </div>
+                    
+                    <ul class="nav flex-column">
+                        {% if current_user.es_admin %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard Admin
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_sucursales' %}active{% endif %}" href="{{ url_for('admin_sucursales') }}">
+                                <i class="fas fa-building me-2"></i>
+                                Sucursales
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_usuarios' %}active{% endif %}" href="{{ url_for('admin_usuarios') }}">
+                                <i class="fas fa-users me-2"></i>
+                                Usuarios
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}" href="{{ url_for('user_dashboard') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                                <i class="fas fa-list me-2"></i>
+                                Operaciones
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'registrar_operacion' %}active{% endif %}" href="{{ url_for('registrar_operacion') }}">
+                                <i class="fas fa-plus-circle me-2"></i>
+                                Nueva Operación
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}" href="{{ url_for('reportes') }}">
+                                <i class="fas fa-chart-bar me-2"></i>
+                                Reportes
+                            </a>
+                        </li>
+                    </ul>
+                    
+                    <hr class="text-white-50">
+                    
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt me-2"></i>
+                                Cerrar Sesión
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+            
+            <!-- Contenido principal -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">{% block page_title %}{% endblock %}</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        {% block page_actions %}{% endblock %}
+                    </div>
+                </div>
+                
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    {% else %}
+        {% block auth_content %}{% endblock %}
+    {% endif %}
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Audio para notificaciones con sonidos reales -->
+    <audio id="notification-sound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" type="audio/wav">
+    </audio>
+    
+    <!-- Sistema de notificaciones mejorado con sonidos -->
+    <script>
+    // Función para generar beep con Web Audio API
+    function playBeep(frequency = 800, duration = 200) {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = frequency;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration / 1000);
+        } catch (e) {
+            console.log('Web Audio API no disponible, usando fallback');
+            playFallbackSound();
+        }
+    }
+    
+    // Función fallback para reproducir sonido
+    function playFallbackSound() {
+        const audio = document.getElementById('notification-sound');
+        if (audio) {
+            audio.currentTime = 0;
+            audio.volume = 0.3;
+            audio.play().catch(e => console.log('No se pudo reproducir el sonido'));
+        }
+    }
+    
+    // Función para reproducir sonido según tipo
+    function playNotificationSound(type) {
+        try {
+            switch(type) {
+                case 'success':
+                    playBeep(1000, 150); // Beep agudo y corto para éxito
+                    break;
+                case 'warning':
+                    playBeep(600, 300); // Beep medio para advertencia
+                    break;
+                case 'error':
+                    playBeep(300, 500); // Beep grave y largo para error
+                    break;
+                case 'info':
+                    playBeep(800, 200); // Beep normal para info
+                    break;
+                default:
+                    playBeep(700, 250); // Beep por defecto
+            }
+        } catch (e) {
+            playFallbackSound();
+        }
+    }
+    </script>
+    
+    <script>
+    // Función para mostrar notificaciones mejoradas
+    function showNotification(message, type = 'success') {
+        const container = document.getElementById('notification-container');
+        if (!container) {
+            console.error('Contenedor de notificaciones no encontrado');
+            return;
+        }
+        
+        // Crear elemento de notificación
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        
+        // Iconos según el tipo
+        const icons = {
+            'success': 'fas fa-check-circle',
+            'warning': 'fas fa-exclamation-triangle',
+            'error': 'fas fa-times-circle',
+            'info': 'fas fa-info-circle'
+        };
+        
+        // Sanitizar el mensaje para evitar XSS
+        const sanitizedMessage = message.replace(/[<>]/g, '');
+        
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="notification-icon ${icons[type] || icons.info}"></i>
+                <span class="notification-message">${sanitizedMessage}</span>
+                <button class="notification-close" onclick="closeNotification(this)" title="Cerrar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="notification-progress"></div>
+        `;
+        
+        // Agregar al contenedor
+        container.appendChild(notification);
+        
+        // Reproducir sonido específico según el tipo
+        playNotificationSound(type);
+        
+        // Auto-eliminar después de 5 segundos
+        setTimeout(() => {
+            const closeButton = notification.querySelector('.notification-close');
+            if (closeButton) {
+                closeNotification(closeButton);
+            }
+        }, 5000);
+    }
+    
+    // Función para cerrar notificación
+    function closeNotification(button) {
+        const notification = button.closest('.notification');
+        if (notification) {
+            notification.classList.add('hiding');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 300);
+        }
+    }
+    
+    // Función para actualizar IDs de operaciones
+    function updateOperationIds() {
+        const table = document.querySelector('table');
+        if (table) {
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach((row, index) => {
+                const idCell = row.querySelector('td:first-child');
+                if (idCell) {
+                    idCell.textContent = index + 1;
+                }
+            });
+        }
+    }
+    
+    // Interceptar mensajes flash y convertirlos en notificaciones
+    document.addEventListener('DOMContentLoaded', function() {
+        // Procesar mensajes flash existentes
+        const flashMessages = document.querySelectorAll('.alert');
+        flashMessages.forEach(function(message) {
+            let type = 'success';
+            if (message.classList.contains('alert-danger')) {
+                type = 'error';
+            } else if (message.classList.contains('alert-warning')) {
+                type = 'warning';
+            } else if (message.classList.contains('alert-info')) {
+                type = 'info';
+            }
+            
+            // Obtener el texto del mensaje (excluyendo el botón de cerrar)
+            const messageText = message.textContent.replace('×', '').trim();
+            
+            // Remover el mensaje original
+            message.remove();
+            
+            // Mostrar como notificación
+            showNotification(messageText, type);
+            
+            // Actualizar IDs si es una operación CRUD
+            if (messageText.includes('operación') || messageText.includes('Operación')) {
+                setTimeout(updateOperationIds, 100);
+            }
+        });
+        
+        // Actualizar IDs inicialmente
+        updateOperationIds();
+    });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html> 

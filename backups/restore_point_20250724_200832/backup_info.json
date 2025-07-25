@@ -1,0 +1,26 @@
+{
+  "backup_name": "restore_point_20250724_200832",
+  "timestamp": "20250724_200832",
+  "description": "Punto de restauración estable - Sistema funcionando correctamente con menú hamburguesa responsive",
+  "status": {
+    "railway_healthcheck": "funcionando",
+    "database": "SQLite configurada",
+    "mobile_menu": "responsive corregido",
+    "health_endpoint": "funcionando",
+    "deployment": "Railway exitoso"
+  },
+  "files_backed_up": [
+    "app.py",
+    "wsgi.py",
+    "init_db.py",
+    "requirements.txt",
+    "Procfile",
+    "railway.toml",
+    "config.env"
+  ],
+  "directories_backed_up": [
+    "templates"
+  ],
+  "database_backed_up": false,
+  "created_at": "2025-07-24T20:08:32.720124"
+}

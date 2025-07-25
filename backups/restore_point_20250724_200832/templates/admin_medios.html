@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Medios de Pago - SISAGENT{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-credit-card me-2"></i>
+                        Medios de Pago
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="mb-4 d-flex align-items-end gap-2">
+                        <div>
+                            <label for="nombre_abreviado" class="form-label">Nombre Abreviado</label>
+                            <input type="text" class="form-control" id="nombre_abreviado" name="nombre_abreviado" required maxlength="20" placeholder="Abreviado">
+                        </div>
+                        <div>
+                            <label for="nombre_completo" class="form-label">Nombre Completo</label>
+                            <input type="text" class="form-control" id="nombre_completo" name="nombre_completo" required maxlength="100" placeholder="Nombre completo">
+                        </div>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-plus me-2"></i>Agregar
+                        </button>
+                    </form>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Abreviado</th>
+                                    <th>Nombre Completo</th>
+                                    <th>Activo</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for medio in medios %}
+                                <tr>
+                                    <td>{{ medio.id }}</td>
+                                    <td>{{ medio.nombre_abreviado }}</td>
+                                    <td>{{ medio.nombre_completo }}</td>
+                                    <td>{% if medio.activo %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-danger">No</span>{% endif %}</td>
+                                    <td>
+                                        <form method="POST" action="{{ url_for('eliminar_medio', medio_id=medio.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar este medio?')">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                        <a href="{{ url_for('editar_medio', medio_id=medio.id) }}" class="btn btn-sm btn-warning" title="Editar"><i class="fas fa-edit"></i></a>
+                                        <form method="POST" action="{{ url_for('activar_medio', medio_id=medio.id) }}" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm {% if medio.activo %}btn-secondary{% else %}btn-success{% endif %}" title="Activar/Desactivar"><i class="fas fa-toggle-{{ 'on' if medio.activo else 'off' }}"></i></button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('subir_medio', medio_id=medio.id) }}" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm btn-info" title="Subir"><i class="fas fa-arrow-up"></i></button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('bajar_medio', medio_id=medio.id) }}" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm btn-info" title="Bajar"><i class="fas fa-arrow-down"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

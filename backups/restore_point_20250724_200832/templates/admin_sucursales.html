@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Gestionar Sucursales - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-building me-2"></i>
+        Gestionar Sucursales
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('crear_sucursal') }}" class="btn btn-primary" style="background: linear-gradient(45deg, var(--primary-color), var(--accent-color)); border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+            <i class="fas fa-plus me-1"></i>
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <span>NUEVA</span>
+                <span>SUCURSAL</span>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="card shadow mb-4">
+    <div class="card-header py-3" style="background: linear-gradient(135deg, var(--primary-color), var(--accent-color));">
+        <h6 class="m-0 font-weight-bold text-white">
+            <i class="fas fa-list me-2"></i>
+            Lista de Sucursales
+        </h6>
+    </div>
+    <div class="card-body">
+        {% if sucursales %}
+        <div class="table-responsive">
+            <table class="table table-bordered" width="100%" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Dirección</th>
+                        <th>Estado</th>
+                        <th>Usuarios</th>
+                        <th>Operaciones</th>
+                        <th>Fecha Creación</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sucursal in sucursales %}
+                    <tr>
+                        <td>{{ sucursal.id }}</td>
+                        <td class="font-weight-bold">{{ sucursal.nombre }}</td>
+                        <td>{{ sucursal.direccion or 'Sin dirección' }}</td>
+                        <td>
+                            {% if sucursal.activa %}
+                            <span class="badge bg-success">Activa</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactiva</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ sucursal.usuarios|length }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary">{{ sucursal.operaciones|length }}</span>
+                        </td>
+                        <td>{{ sucursal.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{{ url_for('editar_sucursal', sucursal_id=sucursal.id) }}" 
+                                   class="btn btn-outline-warning" 
+                                   title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('eliminar_sucursal', sucursal_id=sucursal.id) }}" 
+                                      style="display: inline;">
+                                    <button type="submit" 
+                                            class="btn btn-outline-danger" 
+                                            title="Eliminar"
+                                            onclick="return confirm('¿Está seguro de que desea eliminar la sucursal \"{{ sucursal.nombre }}\"? Esta acción no se puede deshacer.')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-building fa-3x text-muted mb-3"></i>
+            <p class="text-muted">No hay sucursales registradas</p>
+            <a href="{{ url_for('crear_sucursal') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>
+                Crear Primera Sucursal
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmarEliminar(sucursalId, nombre) {
+    if (confirm(`¿Está seguro de que desea eliminar la sucursal "${nombre}"? Esta acción no se puede deshacer.`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/admin/sucursales/${sucursalId}/eliminar`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+{% endblock %} 
