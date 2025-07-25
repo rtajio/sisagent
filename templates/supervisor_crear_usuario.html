@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Usuario - {{ current_user.sucursal.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-user-plus text-primary"></i>
+                    Crear Nuevo Usuario - {{ current_user.sucursal.nombre }}
+                </h1>
+                <a href="{{ url_for('supervisor_usuarios') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver a Usuarios
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle"></i> Información del Usuario
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="crearUsuarioForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="nombre" class="form-label">Nombre Completo *</label>
+                                    <input type="text" class="form-control" id="nombre" name="nombre" 
+                                           value="{{ form.nombre.data or '' }}" required>
+                                    {% if form.nombre.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.nombre.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email *</label>
+                                    <input type="email" class="form-control" id="email" name="email" 
+                                           value="{{ form.email.data or '' }}" required>
+                                    {% if form.email.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.email.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">Contraseña *</label>
+                                    <input type="password" class="form-control" id="password" name="password" required>
+                                    {% if form.password.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.password.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        La contraseña debe tener al menos 6 caracteres.
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="confirm_password" class="form-label">Confirmar Contraseña *</label>
+                                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                                    {% if form.confirm_password.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.confirm_password.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="rol" class="form-label">Rol *</label>
+                                    <select class="form-control" id="rol" name="rol" required>
+                                        <option value="">Seleccionar rol</option>
+                                        <option value="usuario" {% if form.rol.data == 'usuario' %}selected{% endif %}>Usuario</option>
+                                        <option value="supervisor" {% if form.rol.data == 'supervisor' %}selected{% endif %}>Supervisor</option>
+                                    </select>
+                                    {% if form.rol.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.rol.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Los supervisores pueden gestionar usuarios de su sucursal.
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="activo" class="form-label">Estado</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="activo" name="activo" 
+                                               {% if form.activo.data %}checked{% endif %}>
+                                        <label class="form-check-label" for="activo">
+                                            Usuario activo
+                                        </label>
+                                    </div>
+                                    <small class="form-text text-muted">
+                                        Los usuarios inactivos no pueden acceder al sistema.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i>
+                                    <strong>Nota:</strong> El usuario será creado automáticamente en la sucursal 
+                                    <strong>{{ current_user.sucursal.nombre }}</strong>.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between">
+                                    <a href="{{ url_for('supervisor_usuarios') }}" class="btn btn-secondary">
+                                        <i class="fas fa-times"></i> Cancelar
+                                    </a>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save"></i> Crear Usuario
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('crearUsuarioForm');
+    const password = document.getElementById('password');
+    const confirmPassword = document.getElementById('confirm_password');
+
+    form.addEventListener('submit', function(e) {
+        if (password.value !== confirmPassword.value) {
+            e.preventDefault();
+            alert('Las contraseñas no coinciden');
+            confirmPassword.focus();
+            return false;
+        }
+
+        if (password.value.length < 6) {
+            e.preventDefault();
+            alert('La contraseña debe tener al menos 6 caracteres');
+            password.focus();
+            return false;
+        }
+    });
+
+    // Validación en tiempo real
+    confirmPassword.addEventListener('input', function() {
+        if (password.value !== confirmPassword.value) {
+            confirmPassword.setCustomValidity('Las contraseñas no coinciden');
+        } else {
+            confirmPassword.setCustomValidity('');
+        }
+    });
+});
+</script>
+{% endblock %} 

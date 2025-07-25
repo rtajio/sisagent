@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Supervisor - {{ current_user.sucursal.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-chart-line text-primary"></i>
+                    Dashboard Supervisor - {{ current_user.sucursal.nombre }}
+                </h1>
+                <div class="text-muted">
+                    <i class="fas fa-user-shield"></i>
+                    Supervisor: {{ current_user.nombre }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarjetas de estadísticas -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Operaciones Hoy
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="operaciones-hoy">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Comisión del Día
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="comision-dia">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Comisión del Mes
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="comision-mes">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-bar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Usuarios Activos
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="usuarios-activos">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-bolt"></i> Acciones Rápidas
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('operaciones') }}" class="btn btn-primary btn-block">
+                                <i class="fas fa-list"></i> Ver Operaciones
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('supervisor_usuarios') }}" class="btn btn-success btn-block">
+                                <i class="fas fa-users"></i> Gestionar Usuarios
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('reportes') }}" class="btn btn-info btn-block">
+                                <i class="fas fa-chart-pie"></i> Ver Reportes
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('supervisor_crear_usuario') }}" class="btn btn-warning btn-block">
+                                <i class="fas fa-user-plus"></i> Crear Usuario
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Operaciones recientes -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-clock"></i> Operaciones Recientes
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="operaciones-recientes" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Usuario</th>
+                                    <th>Monto</th>
+                                    <th>Comisión</th>
+                                    <th>Medio</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center">
+                                        <i class="fas fa-spinner fa-spin"></i> Cargando...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Cargar estadísticas
+    cargarEstadisticas();
+    cargarOperacionesRecientes();
+});
+
+function cargarEstadisticas() {
+    // Simular carga de estadísticas (aquí irían las llamadas AJAX reales)
+    setTimeout(() => {
+        document.getElementById('operaciones-hoy').innerHTML = '12';
+        document.getElementById('comision-dia').innerHTML = 'S/ 45.50';
+        document.getElementById('comision-mes').innerHTML = 'S/ 1,250.00';
+        document.getElementById('usuarios-activos').innerHTML = '8';
+    }, 1000);
+}
+
+function cargarOperacionesRecientes() {
+    // Simular carga de operaciones recientes
+    setTimeout(() => {
+        const tbody = document.querySelector('#operaciones-recientes tbody');
+        tbody.innerHTML = `
+            <tr>
+                <td>23/07/2025 15:30</td>
+                <td>Juan Pérez</td>
+                <td>S/ 150.00</td>
+                <td>S/ 3.00</td>
+                <td><span class="badge badge-primary">BCP</span></td>
+                <td><span class="badge badge-success">Completada</span></td>
+            </tr>
+            <tr>
+                <td>23/07/2025 14:15</td>
+                <td>María García</td>
+                <td>S/ 75.50</td>
+                <td>S/ 1.50</td>
+                <td><span class="badge badge-info">BBVA</span></td>
+                <td><span class="badge badge-success">Completada</span></td>
+            </tr>
+            <tr>
+                <td>23/07/2025 13:45</td>
+                <td>Carlos López</td>
+                <td>S/ 200.00</td>
+                <td>S/ 4.00</td>
+                <td><span class="badge badge-warning">Interbank</span></td>
+                <td><span class="badge badge-success">Completada</span></td>
+            </tr>
+        `;
+    }, 1500);
+}
+</script>
+{% endblock %} 

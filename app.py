@@ -73,10 +73,16 @@ class Usuario(UserMixin, db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     nombre_completo = db.Column(db.String(100), nullable=False)
     es_admin = db.Column(db.Boolean, default=False)
+    es_supervisor = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=True)
     activo = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     operaciones = db.relationship('Operacion', backref='usuario', lazy=True)
+    
+    @property
+    def es_supervisor_o_admin(self):
+        """Verifica si el usuario es supervisor o administrador"""
+        return self.es_admin or self.es_supervisor
 
 class Operacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -156,6 +162,8 @@ def logout():
 def dashboard():
     if current_user.es_admin:
         return redirect(url_for('admin_dashboard'))
+    elif current_user.es_supervisor:
+        return redirect(url_for('supervisor_dashboard'))
     else:
         return redirect(url_for('user_dashboard'))
 
@@ -209,6 +217,58 @@ def admin_dashboard():
         comisiones_hoy=comisiones_hoy,
         comisiones_mes=comisiones_mes
     )
+
+@app.route('/supervisor')
+@login_required
+def supervisor_dashboard():
+    if not current_user.es_supervisor:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Obtener datos solo de la sucursal del supervisor
+    sucursal = Sucursal.query.get(current_user.sucursal_id)
+    if not sucursal:
+        flash('Sucursal no encontrada', 'error')
+        return redirect(url_for('dashboard'))
+
+    hoy = datetime.now(peru_tz).date()
+    mes_actual = hoy.month
+    año_actual = hoy.year
+
+    # Comisión del día para la sucursal del supervisor
+    comision_hoy = ComisionDiaria.query.filter_by(
+        sucursal_id=current_user.sucursal_id,
+        fecha=hoy
+    ).first()
+    total_hoy = float(comision_hoy.total_comision) if comision_hoy else 0
+
+    # Comisión del mes para la sucursal del supervisor
+    comision_mes = db.session.query(
+        db.func.sum(Operacion.comision).label('total')
+    ).filter(
+        Operacion.sucursal_id == current_user.sucursal_id,
+        db.extract('month', Operacion.hora) == mes_actual,
+        db.extract('year', Operacion.hora) == año_actual
+    ).scalar()
+    total_mes = float(comision_mes) if comision_mes else 0
+
+    # Usuarios de la sucursal
+    usuarios_sucursal = Usuario.query.filter_by(
+        sucursal_id=current_user.sucursal_id,
+        activo=True
+    ).filter(Usuario.es_admin == False).all()
+
+    # Operaciones recientes de la sucursal
+    operaciones_recientes = Operacion.query.filter_by(
+        sucursal_id=current_user.sucursal_id
+    ).order_by(Operacion.hora.desc()).limit(10).all()
+
+    return render_template('supervisor_dashboard.html',
+                         sucursal=sucursal,
+                         total_hoy=total_hoy,
+                         total_mes=total_mes,
+                         usuarios_sucursal=usuarios_sucursal,
+                         operaciones_recientes=operaciones_recientes)
 
 @app.route('/user')
 @login_required
@@ -329,6 +389,21 @@ def admin_usuarios():
     usuarios = Usuario.query.all()
     return render_template('admin_usuarios.html', usuarios=usuarios)
 
+@app.route('/supervisor/usuarios')
+@login_required
+def supervisor_usuarios():
+    if not current_user.es_supervisor:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Solo usuarios de la sucursal del supervisor
+    usuarios = Usuario.query.filter_by(
+        sucursal_id=current_user.sucursal_id,
+        activo=True
+    ).filter(Usuario.es_admin == False).all()
+    
+    return render_template('supervisor_usuarios.html', usuarios=usuarios)
+
 @app.route('/admin/usuarios/crear', methods=['GET', 'POST'])
 @login_required
 def crear_usuario():
@@ -365,6 +440,44 @@ def crear_usuario():
         return redirect(url_for('admin_usuarios'))
     
     return render_template('crear_usuario.html', sucursales=Sucursal.query.all())
+
+@app.route('/supervisor/usuarios/crear', methods=['GET', 'POST'])
+@login_required
+def supervisor_crear_usuario():
+    if not current_user.es_supervisor:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        username = request.form['username']
+        email = request.form['email']
+        password = request.form['password']
+        nombre_completo = request.form['nombre_completo']
+        es_supervisor = 'es_supervisor' in request.form
+        
+        if Usuario.query.filter_by(username=username).first():
+            flash('El nombre de usuario ya existe', 'error')
+            return render_template('supervisor_crear_usuario.html')
+        
+        if Usuario.query.filter_by(email=email).first():
+            flash('El email ya existe', 'error')
+            return render_template('supervisor_crear_usuario.html')
+        
+        usuario = Usuario(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            nombre_completo=nombre_completo,
+            sucursal_id=current_user.sucursal_id,  # Solo puede asignar a su sucursal
+            es_supervisor=es_supervisor,
+            es_admin=False  # No puede crear administradores
+        )
+        db.session.add(usuario)
+        db.session.commit()
+        flash('Usuario creado exitosamente', 'success')
+        return redirect(url_for('supervisor_usuarios'))
+    
+    return render_template('supervisor_crear_usuario.html')
 
 @app.route('/admin/usuarios/<int:usuario_id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -462,6 +575,9 @@ def operaciones():
             query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
             # Si se accede desde dashboard admin con sucursal_id, mostrar todas las operaciones sin filtrar por fecha
             fecha = None
+    elif current_user.es_supervisor:
+        # Supervisor solo ve operaciones de su sucursal
+        query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
     else:
         query = Operacion.query.filter(Operacion.usuario_id == current_user.id)
 
@@ -819,13 +935,18 @@ def api_comisiones():
 @app.route('/reportes')
 @login_required
 def reportes():
-    if not current_user.es_admin:
-        flash('Acceso denegado. Solo los administradores pueden generar reportes.', 'error')
+    if not current_user.es_supervisor_o_admin:
+        flash('Acceso denegado. Solo los administradores y supervisores pueden generar reportes.', 'error')
         return redirect(url_for('dashboard'))
     
     # Obtener medios de pago y sucursales
     medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
-    sucursales = Sucursal.query.all()
+    
+    if current_user.es_admin:
+        sucursales = Sucursal.query.all()
+    else:
+        # Supervisor solo ve su sucursal
+        sucursales = [current_user.sucursal] if current_user.sucursal else []
     
     return render_template('reportes.html', sucursales=sucursales, medios_pago=medios_pago)
 
@@ -878,8 +999,8 @@ def api_reportes_operaciones():
 @login_required
 def exportar_reporte(formato):
     try:
-        if not current_user.es_admin:
-            return 'Acceso denegado: solo el administrador puede exportar reportes.', 403
+        if not current_user.es_supervisor_o_admin:
+            return 'Acceso denegado: solo administradores y supervisores pueden exportar reportes.', 403
         
         # Obtener parámetros de filtro
         fecha_inicio = request.args.get('fecha_inicio')
@@ -1317,6 +1438,126 @@ def toggle_medio_sucursal(sucursal_id):
         db.session.add(ms)
     db.session.commit()
     return jsonify({'success': True, 'activo': ms.activo})
+
+# Rutas para el supervisor - Editar usuarios
+@app.route('/supervisor/usuarios/<int:user_id>/editar', methods=['GET', 'POST'])
+@login_required
+def supervisor_editar_usuario(user_id):
+    if not current_user.es_supervisor:
+        flash('Acceso denegado. Solo los supervisores pueden editar usuarios.', 'error')
+        return redirect(url_for('supervisor_usuarios'))
+    
+    usuario = Usuario.query.get_or_404(user_id)
+    
+    # Verificar que el usuario pertenece a la misma sucursal
+    if usuario.sucursal_id != current_user.sucursal_id:
+        flash('No puedes editar usuarios de otras sucursales.', 'error')
+        return redirect(url_for('supervisor_usuarios'))
+    
+    if request.method == 'POST':
+        # Validar datos
+        nombre = request.form.get('nombre', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        rol = request.form.get('rol', '')
+        activo = 'activo' in request.form
+        
+        # Validaciones
+        if not nombre or not email or not rol:
+            flash('Todos los campos obligatorios deben estar completos.', 'error')
+            return render_template('supervisor_editar_usuario.html', usuario=usuario)
+        
+        if password and password != confirm_password:
+            flash('Las contraseñas no coinciden.', 'error')
+            return render_template('supervisor_editar_usuario.html', usuario=usuario)
+        
+        if password and len(password) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres.', 'error')
+            return render_template('supervisor_editar_usuario.html', usuario=usuario)
+        
+        # Verificar email único
+        if email != usuario.email:
+            existing_user = Usuario.query.filter_by(email=email).first()
+            if existing_user:
+                flash('El email ya está en uso por otro usuario.', 'error')
+                return render_template('supervisor_editar_usuario.html', usuario=usuario)
+        
+        try:
+            # Actualizar datos
+            usuario.nombre_completo = nombre
+            usuario.email = email
+            usuario.activo = activo
+            
+            # Actualizar contraseña si se proporcionó
+            if password:
+                usuario.password_hash = generate_password_hash(password)
+            
+            # Actualizar rol (no puede crear administradores)
+            if rol == 'supervisor':
+                usuario.es_supervisor = True
+                usuario.es_admin = False
+            else:
+                usuario.es_supervisor = False
+                usuario.es_admin = False
+            
+            db.session.commit()
+            flash('Usuario actualizado exitosamente.', 'success')
+            return redirect(url_for('supervisor_usuarios'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al actualizar el usuario.', 'error')
+    
+    return render_template('supervisor_editar_usuario.html', usuario=usuario)
+
+@app.route('/supervisor/usuarios/<int:user_id>/toggle', methods=['POST'])
+@login_required
+def supervisor_toggle_usuario(user_id):
+    if not current_user.es_supervisor:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    usuario = Usuario.query.get_or_404(user_id)
+    
+    # Verificar que el usuario pertenece a la misma sucursal
+    if usuario.sucursal_id != current_user.sucursal_id:
+        return jsonify({'success': False, 'message': 'No puedes modificar usuarios de otras sucursales'})
+    
+    # No permitir desactivar su propia cuenta
+    if usuario.id == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes desactivar tu propia cuenta'})
+    
+    try:
+        usuario.activo = not usuario.activo
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Usuario actualizado exitosamente'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al actualizar el usuario'})
+
+@app.route('/supervisor/usuarios/<int:user_id>/eliminar', methods=['POST'])
+@login_required
+def supervisor_eliminar_usuario(user_id):
+    if not current_user.es_supervisor:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    usuario = Usuario.query.get_or_404(user_id)
+    
+    # Verificar que el usuario pertenece a la misma sucursal
+    if usuario.sucursal_id != current_user.sucursal_id:
+        return jsonify({'success': False, 'message': 'No puedes eliminar usuarios de otras sucursales'})
+    
+    # No permitir eliminar su propia cuenta
+    if usuario.id == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes eliminar tu propia cuenta'})
+    
+    try:
+        db.session.delete(usuario)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Usuario eliminado exitosamente'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al eliminar el usuario'})
 
 
 if __name__ == '__main__':
