@@ -120,7 +120,7 @@
                                 {% for operacion in operaciones %}
                                 <tr id="fila-{{ operacion.id }}">
                                     <td>{{ operacion.id }}</td>
-                                    <td>{{ operacion.hora.strftime('%H:%M:%S') }}</td>
+                                    <td>{{ format_peru_time(operacion.hora) }}</td>
                                     <td class="font-weight-bold" id="monto-{{ operacion.id }}">
                                         S/ {{ "%.2f"|format(operacion.monto) }}
                                     </td>
@@ -137,7 +137,7 @@
                                     {% endif %}
                                     <td>
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit({{ operacion.id }}, '{{ operacion.hora.strftime('%H:%M:%S') }}', {{ operacion.monto }}, {{ operacion.comision }}, '{{ operacion.medio }}', '{{ operacion.usuario.nombre_completo }}')">
+                                            <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit({{ operacion.id }}, '{{ format_peru_time(operacion.hora) }}', {{ operacion.monto }}, {{ operacion.comision }}, '{{ operacion.medio }}', '{{ operacion.usuario.nombre_completo }}')">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             <form method="POST" action="{{ url_for('eliminar_operacion', operacion_id=operacion.id) }}" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que quieres eliminar esta operación?')">

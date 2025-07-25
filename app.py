@@ -20,6 +20,17 @@ def get_peru_time():
     """Obtiene la hora actual en zona horaria de Perú"""
     return datetime.now(peru_tz)
 
+def format_peru_time(dt):
+    """Formatea una fecha/hora para mostrar en zona horaria de Perú"""
+    if dt is None:
+        return ""
+    # Si la fecha ya tiene zona horaria, convertirla a Perú
+    if dt.tzinfo is not None:
+        return dt.astimezone(peru_tz).strftime('%H:%M:%S')
+    # Si no tiene zona horaria, asumir que es UTC y convertir
+    else:
+        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%H:%M:%S')
+
 print("🚀 SISAGENT Flask arrancando...")
 print("🔄 Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
 print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
@@ -30,6 +41,7 @@ print("🕐 FIX: Corregir zona horaria - usar hora de Perú (UTC-5) en lugar de 
 print("🔧 FIX: Corregir error de orden - función get_peru_time definida antes de usar")
 print("🔧 FIX: Usar lambda functions para zona horaria en modelos - evitar errores de función")
 print("🔧 FIX: Corregir descuadre en edición de operaciones - mostrar columnas solo para admin")
+print("🕐 FIX: Corregir visualización de hora - usar función format_peru_time en templates")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -66,6 +78,9 @@ login_manager.login_view = 'login'
 print("✅ SQLAlchemy y LoginManager configurados")
 
 print("✅ Configuración de zona horaria completada")
+
+# Agregar función de formato de hora al contexto de Jinja2
+app.jinja_env.globals['format_peru_time'] = format_peru_time
 
 # Medios de pago se obtienen dinámicamente de la base de datos
 
