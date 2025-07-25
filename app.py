@@ -28,6 +28,7 @@ print("✏️ FIX: Permitir editar nombre de usuario en gestión de usuarios")
 print("🔧 FIX: Corregir edición de operaciones - problema con columnas de usuario")
 print("🕐 FIX: Corregir zona horaria - usar hora de Perú (UTC-5) en lugar de UTC")
 print("🔧 FIX: Corregir error de orden - función get_peru_time definida antes de usar")
+print("🔧 FIX: Usar lambda functions para zona horaria en modelos - evitar errores de función")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -73,7 +74,7 @@ class Sucursal(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     direccion = db.Column(db.String(200))
     activa = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=get_peru_time)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
     usuarios = db.relationship('Usuario', backref='sucursal', lazy=True)
     operaciones = db.relationship('Operacion', backref='sucursal', lazy=True)
 
@@ -86,7 +87,7 @@ class Usuario(UserMixin, db.Model):
     es_admin = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=True)
     activo = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=get_peru_time)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
     operaciones = db.relationship('Operacion', backref='usuario', lazy=True)
     
     
@@ -98,14 +99,14 @@ class Operacion(db.Model):
     hora = db.Column(db.DateTime, nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=get_peru_time)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
 
 class ComisionDiaria(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fecha = db.Column(db.Date, nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
     total_comision = db.Column(db.Numeric(10, 2), default=0)
-    created_at = db.Column(db.DateTime, default=get_peru_time)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
 
 class ComisionMensual(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -113,7 +114,7 @@ class ComisionMensual(db.Model):
     mes = db.Column(db.Integer, nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
     total_comision = db.Column(db.Numeric(10, 2), default=0)
-    created_at = db.Column(db.DateTime, default=get_peru_time)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
 
 class MedioPago(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -121,7 +122,7 @@ class MedioPago(db.Model):
     nombre_completo = db.Column(db.String(100), nullable=False)
     activo = db.Column(db.Boolean, default=True)
     orden = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=get_peru_time)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
 
 class MedioSucursal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
