@@ -16,6 +16,8 @@ import pytz
 print("🚀 SISAGENT Flask arrancando...")
 print("🔄 Actualización Railway - " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
+print("🗑️ REMOVED: Botón de convertir en administrador eliminado de acciones rápidas")
+print("✏️ FIX: Permitir editar nombre de usuario en gestión de usuarios")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -400,6 +402,18 @@ def editar_usuario(usuario_id):
     usuario = Usuario.query.get_or_404(usuario_id)
     
     if request.method == 'POST':
+        # Obtener el nuevo username
+        nuevo_username = request.form['username']
+        
+        # Verificar si el nuevo username ya existe (excluyendo el usuario actual)
+        if nuevo_username != usuario.username:
+            usuario_existente = Usuario.query.filter_by(username=nuevo_username).first()
+            if usuario_existente and usuario_existente.id != usuario.id:
+                flash('El nombre de usuario ya existe', 'error')
+                return render_template('editar_usuario.html', usuario=usuario, sucursales=Sucursal.query.all())
+        
+        # Actualizar los campos del usuario
+        usuario.username = nuevo_username
         usuario.email = request.form['email']
         usuario.nombre_completo = request.form['nombre_completo']
         usuario.sucursal_id = request.form['sucursal_id'] if request.form['sucursal_id'] else None

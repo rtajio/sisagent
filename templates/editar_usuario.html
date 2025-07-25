@@ -35,10 +35,12 @@
                             </label>
                             <input type="text" 
                                    class="form-control" 
+                                   id="username"
+                                   name="username"
                                    value="{{ usuario.username }}" 
-                                   readonly 
-                                   style="background-color: #f8f9fa;">
-                            <div class="form-text">El nombre de usuario no se puede modificar</div>
+                                   required
+                                   placeholder="nombre_usuario">
+                            <div class="form-text">El nombre de usuario debe ser único</div>
                         </div>
                         
                         <div class="col-md-6 mb-3">
