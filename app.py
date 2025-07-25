@@ -76,6 +76,7 @@ print("🔧 FIX: Usar lambda functions para zona horaria en modelos - evitar err
 print("🔧 FIX: Corregir descuadre en edición de operaciones - mostrar columnas solo para admin")
 print("🕐 FIX: Corregir visualización de hora - usar función format_peru_time en templates")
 print("🕐 FIX: Corregir TODAS las horas en reportes PDF/XLSX/CSV y templates de usuarios/sucursales")
+print("🔑 FIX: Asegurar que usuario admin esté disponible en Railway - credenciales: admin/61442159")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
