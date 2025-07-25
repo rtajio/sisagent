@@ -98,14 +98,7 @@
                     </form>
 
                     <!-- Tabla de Operaciones -->
-                    <!-- Debug: Mostrar información de operaciones -->
-                    <div class="alert alert-info">
-                        <strong>Debug:</strong> 
-                        Total de operaciones: {{ operaciones|length }}<br>
-                        Usuario actual: {{ current_user.nombre_completo }}<br>
-                        Es admin: {{ current_user.es_admin }}<br>
-                        Sucursal ID: {{ current_user.sucursal_id if current_user.sucursal_id else 'No asignada' }}
-                    </div>
+
                     
                     <div class="table-responsive">
                         <table class="table table-striped table-hover">
@@ -118,6 +111,7 @@
                                     <th>Medio</th>
                                     {% if current_user.es_admin %}
                                     <th>Usuario</th>
+                                    <th>Sucursal</th>
                                     {% endif %}
                                     <th>Acciones</th>
                                 </tr>
@@ -139,6 +133,7 @@
                                     </td>
                                     {% if current_user.es_admin %}
                                     <td>{{ operacion.usuario.nombre_completo }}</td>
+                                    <td>{{ operacion.sucursal.nombre if operacion.sucursal else 'Sin sucursal' }}</td>
                                     {% endif %}
                                     <td>
                                         <div class="btn-group btn-group-sm" role="group">
