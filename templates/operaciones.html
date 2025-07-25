@@ -242,6 +242,8 @@ function toggleEdit(id, hora, monto, comision, medio, usuarioOriginal) {
                 ${mediosPago.map(m => `<option value='${m.valor}' ${medio===m.valor?'selected':''}>${m.nombre}</option>`).join('')}
             </select>
         </td>
+        <td>${usuarioOriginal}</td>
+        <td>Sin sucursal</td>
         <td>
             <div class='btn-group btn-group-sm' role='group'>
                 <button type='button' class='btn btn-success' onclick='guardarCambios(${id}, "${usuarioOriginal}")'><i class='fas fa-save'></i></button>
@@ -289,14 +291,17 @@ function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
         <td class="text-success font-weight-bold" id="comision-${id}">S/ ${parseFloat(comision).toFixed(2)}</td>
         <td><span class="badge bg-primary">${medioNombre}</span></td>
         <td>${usuarioOriginal}</td>
+        <td>Sin sucursal</td>
         <td>
             <div class="btn-group btn-group-sm" role="group">
-                <button type="button" class="btn btn-warning" onclick="toggleEdit(${id}, '${hora}', ${monto}, ${comision}, '${medio}')">
+                <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit(${id}, '${hora}', ${monto}, ${comision}, '${medio}', '${usuarioOriginal}')">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button type="button" class="btn btn-danger" onclick="eliminarOperacion(${id})">
-                    <i class="fas fa-trash"></i>
-                </button>
+                <form method="POST" action="/operaciones/${id}/eliminar" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que quieres eliminar esta operación?')">
+                    <button type="submit" class="btn btn-outline-danger" title="Eliminar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
             </div>
         </td>
     `;

@@ -18,6 +18,7 @@ print("🔄 Actualización Railway - " + datetime.now().strftime("%Y-%m-%d %H:%M
 print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
 print("🗑️ REMOVED: Botón de convertir en administrador eliminado de acciones rápidas")
 print("✏️ FIX: Permitir editar nombre de usuario en gestión de usuarios")
+print("🔧 FIX: Corregir edición de operaciones - problema con columnas de usuario")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
