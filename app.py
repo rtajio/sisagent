@@ -316,7 +316,7 @@ def eliminar_sucursal(sucursal_id):
     
     db.session.delete(sucursal)
     db.session.commit()
-    flash('Sucursal eliminada exitosamente', 'error')
+    flash('Sucursal eliminada exitosamente', 'success')
     return redirect(url_for('admin_sucursales'))
 
 # Gestión de usuarios (solo admin)

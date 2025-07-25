@@ -83,7 +83,7 @@
                                 </a>
                                 {% if usuario.username != 'admin' and usuario.id != current_user.id %}
                                 <!-- Botón para cambiar rol -->
-                                {% if usuario.es_ %}
+                                {% if usuario.es_admin %}
                                 <button type="button" class="btn btn-outline-info" 
                                         onclick="cambiarRol({{ usuario.id }}, 'usuario')" 
                                         title="Convertir a Usuario">
@@ -91,8 +91,8 @@
                                 </button>
                                 {% elif not usuario.es_admin %}
                                 <button type="button" class="btn btn-outline-warning" 
-                                        onclick="cambiarRol({{ usuario.id }}, '')" 
-                                        title="Convertir a ">
+                                        onclick="cambiarRol({{ usuario.id }}, 'admin')" 
+                                        title="Convertir a Administrador">
                                     <i class="fas fa-user-shield"></i>
                                 </button>
                                 {% endif %}
@@ -140,7 +140,7 @@ function confirmarEliminar(usuarioId, username) {
 }
 
 function cambiarRol(userId, nuevoRol) {
-    const accion = nuevoRol === '' ? 'convertir en ' : 'convertir en usuario';
+    const accion = nuevoRol === 'admin' ? 'convertir en administrador' : 'convertir en usuario';
     const confirmacion = `¿Estás seguro de que quieres ${accion} a este usuario?`;
     
     if (confirm(confirmacion)) {
