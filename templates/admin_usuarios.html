@@ -60,8 +60,8 @@
                         <td>
                             {% if usuario.es_admin %}
                             <span class="badge bg-danger">Administrador</span>
-                            {% elif usuario.es_supervisor %}
-                            <span class="badge bg-warning">Supervisor</span>
+                            {% elif usuario.es_ %}
+                            <span class="badge bg-warning"></span>
                             {% else %}
                             <span class="badge bg-primary">Usuario</span>
                             {% endif %}
@@ -83,7 +83,7 @@
                                 </a>
                                 {% if usuario.username != 'admin' and usuario.id != current_user.id %}
                                 <!-- Botón para cambiar rol -->
-                                {% if usuario.es_supervisor %}
+                                {% if usuario.es_ %}
                                 <button type="button" class="btn btn-outline-info" 
                                         onclick="cambiarRol({{ usuario.id }}, 'usuario')" 
                                         title="Convertir a Usuario">
@@ -91,8 +91,8 @@
                                 </button>
                                 {% elif not usuario.es_admin %}
                                 <button type="button" class="btn btn-outline-warning" 
-                                        onclick="cambiarRol({{ usuario.id }}, 'supervisor')" 
-                                        title="Convertir a Supervisor">
+                                        onclick="cambiarRol({{ usuario.id }}, '')" 
+                                        title="Convertir a ">
                                     <i class="fas fa-user-shield"></i>
                                 </button>
                                 {% endif %}
@@ -140,7 +140,7 @@ function confirmarEliminar(usuarioId, username) {
 }
 
 function cambiarRol(userId, nuevoRol) {
-    const accion = nuevoRol === 'supervisor' ? 'convertir en supervisor' : 'convertir en usuario';
+    const accion = nuevoRol === '' ? 'convertir en ' : 'convertir en usuario';
     const confirmacion = `¿Estás seguro de que quieres ${accion} a este usuario?`;
     
     if (confirm(confirmacion)) {

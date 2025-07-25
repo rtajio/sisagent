@@ -73,17 +73,12 @@ class Usuario(UserMixin, db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     nombre_completo = db.Column(db.String(100), nullable=False)
     es_admin = db.Column(db.Boolean, default=False)
-    es_supervisor = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=True)
     activo = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     operaciones = db.relationship('Operacion', backref='usuario', lazy=True)
     
-    @property
-    def es_supervisor_o_admin(self):
-        """Verifica si el usuario es supervisor o administrador"""
-        return self.es_admin or self.es_supervisor
-
+    
 class Operacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     monto = db.Column(db.Numeric(10, 2), nullable=False)
@@ -162,8 +157,7 @@ def logout():
 def dashboard():
     if current_user.es_admin:
         return redirect(url_for('admin_dashboard'))
-    elif current_user.es_supervisor:
-        return redirect(url_for('supervisor_dashboard'))
+    elif False:  # Supervisor eliminado
     else:
         return redirect(url_for('user_dashboard'))
 
@@ -218,14 +212,7 @@ def admin_dashboard():
         comisiones_mes=comisiones_mes
     )
 
-@app.route('/supervisor')
-@login_required
-def supervisor_dashboard():
-    if not current_user.es_supervisor:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('dashboard'))
-
-    # Obtener datos solo de la sucursal del supervisor
+    
     sucursal = Sucursal.query.get(current_user.sucursal_id)
     if not sucursal:
         flash('Sucursal no encontrada', 'error')
@@ -235,14 +222,14 @@ def supervisor_dashboard():
     mes_actual = hoy.month
     año_actual = hoy.year
 
-    # Comisión del día para la sucursal del supervisor
+    
     comision_hoy = ComisionDiaria.query.filter_by(
         sucursal_id=current_user.sucursal_id,
         fecha=hoy
     ).first()
     total_hoy = float(comision_hoy.total_comision) if comision_hoy else 0
 
-    # Comisión del mes para la sucursal del supervisor
+    
     comision_mes = db.session.query(
         db.func.sum(Operacion.comision).label('total')
     ).filter(
@@ -263,7 +250,6 @@ def supervisor_dashboard():
         sucursal_id=current_user.sucursal_id
     ).order_by(Operacion.hora.desc()).limit(10).all()
 
-    return render_template('supervisor_dashboard.html',
                          sucursal=sucursal,
                          total_hoy=total_hoy,
                          total_mes=total_mes,
@@ -389,21 +375,6 @@ def admin_usuarios():
     usuarios = Usuario.query.all()
     return render_template('admin_usuarios.html', usuarios=usuarios)
 
-@app.route('/supervisor/usuarios')
-@login_required
-def supervisor_usuarios():
-    if not current_user.es_supervisor:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('dashboard'))
-    
-    # Solo usuarios de la sucursal del supervisor
-    usuarios = Usuario.query.filter_by(
-        sucursal_id=current_user.sucursal_id,
-        activo=True
-    ).filter(Usuario.es_admin == False).all()
-    
-    return render_template('supervisor_usuarios.html', usuarios=usuarios)
-
 @app.route('/admin/usuarios/crear', methods=['GET', 'POST'])
 @login_required
 def crear_usuario():
@@ -440,44 +411,6 @@ def crear_usuario():
         return redirect(url_for('admin_usuarios'))
     
     return render_template('crear_usuario.html', sucursales=Sucursal.query.all())
-
-@app.route('/supervisor/usuarios/crear', methods=['GET', 'POST'])
-@login_required
-def supervisor_crear_usuario():
-    if not current_user.es_supervisor:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('dashboard'))
-    
-    if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        nombre_completo = request.form['nombre_completo']
-        es_supervisor = 'es_supervisor' in request.form
-        
-        if Usuario.query.filter_by(username=username).first():
-            flash('El nombre de usuario ya existe', 'error')
-            return render_template('supervisor_crear_usuario.html')
-        
-        if Usuario.query.filter_by(email=email).first():
-            flash('El email ya existe', 'error')
-            return render_template('supervisor_crear_usuario.html')
-        
-        usuario = Usuario(
-            username=username,
-            email=email,
-            password_hash=generate_password_hash(password),
-            nombre_completo=nombre_completo,
-            sucursal_id=current_user.sucursal_id,  # Solo puede asignar a su sucursal
-            es_supervisor=es_supervisor,
-            es_admin=False  # No puede crear administradores
-        )
-        db.session.add(usuario)
-        db.session.commit()
-        flash('Usuario creado exitosamente', 'success')
-        return redirect(url_for('supervisor_usuarios'))
-    
-    return render_template('supervisor_crear_usuario.html')
 
 @app.route('/admin/usuarios/<int:usuario_id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -558,16 +491,11 @@ def admin_cambiar_rol_usuario(usuario_id):
     data = request.get_json()
     nuevo_rol = data.get('rol')
     
-    if nuevo_rol not in ['usuario', 'supervisor']:
+    if nuevo_rol not in ['usuario']:
         return jsonify({'success': False, 'message': 'Rol no válido'})
     
     try:
-        if nuevo_rol == 'supervisor':
-            usuario.es_supervisor = True
-            usuario.es_admin = False
-        else:
-            usuario.es_supervisor = False
-            usuario.es_admin = False
+        usuario.es_admin = False
         
         db.session.commit()
         return jsonify({'success': True, 'message': f'Usuario convertido a {nuevo_rol} exitosamente'})
@@ -611,8 +539,8 @@ def operaciones():
             query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
             # Si se accede desde dashboard admin con sucursal_id, mostrar todas las operaciones sin filtrar por fecha
             fecha = None
-    elif current_user.es_supervisor:
-        # Supervisor solo ve operaciones de su sucursal
+    elif False:  # Supervisor eliminado
+        
         query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
     else:
         query = Operacion.query.filter(Operacion.usuario_id == current_user.id)
@@ -971,8 +899,7 @@ def api_comisiones():
 @app.route('/reportes')
 @login_required
 def reportes():
-    if not current_user.es_supervisor_o_admin:
-        flash('Acceso denegado. Solo los administradores y supervisores pueden generar reportes.', 'error')
+        flash('Acceso denegado. Solo los administradores pueden generar reportes.', 'error')
         return redirect(url_for('dashboard'))
     
     # Obtener medios de pago y sucursales
@@ -981,7 +908,7 @@ def reportes():
     if current_user.es_admin:
         sucursales = Sucursal.query.all()
     else:
-        # Supervisor solo ve su sucursal
+        
         sucursales = [current_user.sucursal] if current_user.sucursal else []
     
     return render_template('reportes.html', sucursales=sucursales, medios_pago=medios_pago)
@@ -1035,8 +962,7 @@ def api_reportes_operaciones():
 @login_required
 def exportar_reporte(formato):
     try:
-        if not current_user.es_supervisor_o_admin:
-            return 'Acceso denegado: solo administradores y supervisores pueden exportar reportes.', 403
+            return 'Acceso denegado: solo administradores pueden exportar reportes.', 403
         
         # Obtener parámetros de filtro
         fecha_inicio = request.args.get('fecha_inicio')
@@ -1475,396 +1401,7 @@ def toggle_medio_sucursal(sucursal_id):
     db.session.commit()
     return jsonify({'success': True, 'activo': ms.activo})
 
-# Rutas para el supervisor - Editar usuarios
-@app.route('/supervisor/usuarios/<int:user_id>/editar', methods=['GET', 'POST'])
-@login_required
-def supervisor_editar_usuario(user_id):
-    if not current_user.es_supervisor:
-        flash('Acceso denegado. Solo los supervisores pueden editar usuarios.', 'error')
-        return redirect(url_for('supervisor_usuarios'))
-    
-    usuario = Usuario.query.get_or_404(user_id)
-    
-    # Verificar que el usuario pertenece a la misma sucursal
-    if usuario.sucursal_id != current_user.sucursal_id:
-        flash('No puedes editar usuarios de otras sucursales.', 'error')
-        return redirect(url_for('supervisor_usuarios'))
-    
-    if request.method == 'POST':
-        # Validar datos
-        nombre = request.form.get('nombre', '').strip()
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password', '').strip()
-        confirm_password = request.form.get('confirm_password', '').strip()
-        rol = request.form.get('rol', '')
-        activo = 'activo' in request.form
-        
-        # Validaciones
-        if not nombre or not email or not rol:
-            flash('Todos los campos obligatorios deben estar completos.', 'error')
-            return render_template('supervisor_editar_usuario.html', usuario=usuario)
-        
-        if password and password != confirm_password:
-            flash('Las contraseñas no coinciden.', 'error')
-            return render_template('supervisor_editar_usuario.html', usuario=usuario)
-        
-        if password and len(password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'error')
-            return render_template('supervisor_editar_usuario.html', usuario=usuario)
-        
-        # Verificar email único
-        if email != usuario.email:
-            existing_user = Usuario.query.filter_by(email=email).first()
-            if existing_user:
-                flash('El email ya está en uso por otro usuario.', 'error')
-                return render_template('supervisor_editar_usuario.html', usuario=usuario)
-        
-        try:
-            # Actualizar datos
-            usuario.nombre_completo = nombre
-            usuario.email = email
-            usuario.activo = activo
-            
-            # Actualizar contraseña si se proporcionó
-            if password:
-                usuario.password_hash = generate_password_hash(password)
-            
-            # Actualizar rol (no puede crear administradores)
-            if rol == 'supervisor':
-                usuario.es_supervisor = True
-                usuario.es_admin = False
-            else:
-                usuario.es_supervisor = False
-                usuario.es_admin = False
-            
-            db.session.commit()
-            flash('Usuario actualizado exitosamente.', 'success')
-            return redirect(url_for('supervisor_usuarios'))
-            
-        except Exception as e:
-            db.session.rollback()
-            flash('Error al actualizar el usuario.', 'error')
-    
-    return render_template('supervisor_editar_usuario.html', usuario=usuario)
 
-@app.route('/supervisor/usuarios/<int:user_id>/toggle', methods=['POST'])
-@login_required
-def supervisor_toggle_usuario(user_id):
-    if not current_user.es_supervisor:
-        return jsonify({'success': False, 'message': 'Acceso denegado'})
-    
-    usuario = Usuario.query.get_or_404(user_id)
-    
-    # Verificar que el usuario pertenece a la misma sucursal
-    if usuario.sucursal_id != current_user.sucursal_id:
-        return jsonify({'success': False, 'message': 'No puedes modificar usuarios de otras sucursales'})
-    
-    # No permitir desactivar su propia cuenta
-    if usuario.id == current_user.id:
-        return jsonify({'success': False, 'message': 'No puedes desactivar tu propia cuenta'})
-    
-    try:
-        usuario.activo = not usuario.activo
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Usuario actualizado exitosamente'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'message': 'Error al actualizar el usuario'})
-
-@app.route('/supervisor/usuarios/<int:user_id>/eliminar', methods=['POST'])
-@login_required
-def supervisor_eliminar_usuario(user_id):
-    if not current_user.es_supervisor:
-        return jsonify({'success': False, 'message': 'Acceso denegado'})
-    
-    usuario = Usuario.query.get_or_404(user_id)
-    
-    # Verificar que el usuario pertenece a la misma sucursal
-    if usuario.sucursal_id != current_user.sucursal_id:
-        return jsonify({'success': False, 'message': 'No puedes eliminar usuarios de otras sucursales'})
-    
-    # No permitir eliminar su propia cuenta
-    if usuario.id == current_user.id:
-        return jsonify({'success': False, 'message': 'No puedes eliminar tu propia cuenta'})
-    
-    try:
-        db.session.delete(usuario)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Usuario eliminado exitosamente'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'message': 'Error al eliminar el usuario'})
-
-@app.route('/supervisor/usuarios/<int:user_id>/cambiar-rol', methods=['POST'])
-@login_required
-def supervisor_cambiar_rol_usuario(user_id):
-    if not current_user.es_supervisor:
-        return jsonify({'success': False, 'message': 'Acceso denegado. Solo los supervisores pueden cambiar roles.'})
-    
-    usuario = Usuario.query.get_or_404(user_id)
-    
-    # Verificar que el usuario pertenece a la misma sucursal
-    if usuario.sucursal_id != current_user.sucursal_id:
-        return jsonify({'success': False, 'message': 'Solo puedes gestionar usuarios de tu sucursal.'})
-    
-    # No permitir cambiar su propio rol
-    if usuario.id == current_user.id:
-        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol.'})
-    
-    data = request.get_json()
-    nuevo_rol = data.get('rol')
-    
-    if nuevo_rol not in ['usuario', 'supervisor']:
-        return jsonify({'success': False, 'message': 'Rol no válido'})
-    
-    try:
-        if nuevo_rol == 'supervisor':
-            usuario.es_supervisor = True
-            usuario.es_admin = False
-        else:
-            usuario.es_supervisor = False
-            usuario.es_admin = False
-        
-        db.session.commit()
-        return jsonify({'success': True, 'message': f'Usuario convertido a {nuevo_rol} exitosamente'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'message': 'Error al cambiar el rol del usuario'})
-
-# NUEVAS RUTAS PARA SUPERVISOR
-
-@app.route('/supervisor/medios')
-@login_required
-def supervisor_medios():
-    """Vista para que el supervisor gestione los medios de pago de su sucursal"""
-    if not current_user.es_supervisor:
-        flash('Acceso denegado. Solo los supervisores pueden acceder a esta página.', 'danger')
-        return redirect(url_for('dashboard'))
-    
-    # Obtener todos los medios de pago
-    medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden).all()
-    
-    # Obtener los medios activos para la sucursal del supervisor
-    medios_sucursal = MedioSucursal.query.filter_by(
-        sucursal_id=current_user.sucursal_id
-    ).all()
-    
-    # Crear un diccionario para facilitar la búsqueda
-    medios_activos = {ms.medio_pago_id: ms.activo for ms in medios_sucursal}
-    
-    return render_template('supervisor_medios.html', 
-                         medios=medios, 
-                         medios_activos=medios_activos,
-                         sucursal=current_user.sucursal)
-
-@app.route('/supervisor/medios/<int:medio_id>/toggle', methods=['POST'])
-@login_required
-def supervisor_toggle_medio(medio_id):
-    """Activar/desactivar medio de pago para la sucursal del supervisor"""
-    if not current_user.es_supervisor:
-        return jsonify({'success': False, 'message': 'Acceso denegado'})
-    
-    medio = MedioPago.query.get_or_404(medio_id)
-    
-    # Buscar si ya existe la relación
-    medio_sucursal = MedioSucursal.query.filter_by(
-        sucursal_id=current_user.sucursal_id,
-        medio_pago_id=medio_id
-    ).first()
-    
-    try:
-        if medio_sucursal:
-            # Cambiar estado
-            medio_sucursal.activo = not medio_sucursal.activo
-        else:
-            # Crear nueva relación
-            medio_sucursal = MedioSucursal(
-                sucursal_id=current_user.sucursal_id,
-                medio_pago_id=medio_id,
-                activo=True
-            )
-            db.session.add(medio_sucursal)
-        
-        db.session.commit()
-        
-        estado = "activado" if medio_sucursal.activo else "desactivado"
-        return jsonify({
-            'success': True, 
-            'message': f'Medio {medio.nombre_completo} {estado} para tu sucursal',
-            'activo': medio_sucursal.activo
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'message': 'Error al actualizar el medio de pago'})
-
-@app.route('/supervisor/comisiones')
-@login_required
-def supervisor_comisiones():
-    """Vista para que el supervisor vea las comisiones de su sucursal"""
-    if not current_user.es_supervisor:
-        flash('Acceso denegado. Solo los supervisores pueden acceder a esta página.', 'danger')
-        return redirect(url_for('dashboard'))
-    
-    # Obtener comisiones del día actual
-    hoy = datetime.now().date()
-    comision_diaria = ComisionDiaria.query.filter_by(
-        fecha=hoy,
-        sucursal_id=current_user.sucursal_id
-    ).first()
-    
-    # Obtener comisiones del mes actual
-    año_actual = datetime.now().year
-    mes_actual = datetime.now().month
-    comision_mensual = ComisionMensual.query.filter_by(
-        año=año_actual,
-        mes=mes_actual,
-        sucursal_id=current_user.sucursal_id
-    ).first()
-    
-    # Obtener operaciones del día
-    operaciones_hoy = Operacion.query.filter(
-        Operacion.sucursal_id == current_user.sucursal_id,
-        db.func.date(Operacion.hora) == hoy
-    ).order_by(Operacion.hora.desc()).limit(10).all()
-    
-    return render_template('supervisor_comisiones.html',
-                         comision_diaria=comision_diaria,
-                         comision_mensual=comision_mensual,
-                         operaciones_hoy=operaciones_hoy,
-                         sucursal=current_user.sucursal)
-
-@app.route('/api/supervisor/estadisticas')
-@login_required
-def api_supervisor_estadisticas():
-    """API para obtener estadísticas del supervisor"""
-    if not current_user.es_supervisor:
-        return jsonify({'error': 'Acceso denegado'}), 403
-    
-    try:
-        # Estadísticas del día
-        hoy = datetime.now().date()
-        operaciones_hoy = Operacion.query.filter(
-            Operacion.sucursal_id == current_user.sucursal_id,
-            db.func.date(Operacion.hora) == hoy
-        ).count()
-        
-        comision_diaria = ComisionDiaria.query.filter_by(
-            fecha=hoy,
-            sucursal_id=current_user.sucursal_id
-        ).first()
-        
-        # Estadísticas del mes
-        año_actual = datetime.now().year
-        mes_actual = datetime.now().month
-        comision_mensual = ComisionMensual.query.filter_by(
-            año=año_actual,
-            mes=mes_actual,
-            sucursal_id=current_user.sucursal_id
-        ).first()
-        
-        # Usuarios activos en la sucursal
-        usuarios_activos = Usuario.query.filter_by(
-            sucursal_id=current_user.sucursal_id,
-            activo=True
-        ).count()
-        
-        # Operaciones recientes (últimas 5)
-        operaciones_recientes = Operacion.query.filter_by(
-            sucursal_id=current_user.sucursal_id
-        ).order_by(Operacion.hora.desc()).limit(5).all()
-        
-        operaciones_data = []
-        for op in operaciones_recientes:
-            operaciones_data.append({
-                'id': op.id,
-                'fecha': op.hora.strftime('%d/%m/%Y %H:%M'),
-                'usuario': op.usuario.nombre_completo,
-                'monto': float(op.monto),
-                'comision': float(op.comision),
-                'medio': op.medio
-            })
-        
-        return jsonify({
-            'operaciones_hoy': operaciones_hoy,
-            'comision_dia': float(comision_diaria.total_comision) if comision_diaria else 0,
-            'comision_mes': float(comision_mensual.total_comision) if comision_mensual else 0,
-            'usuarios_activos': usuarios_activos,
-            'operaciones_recientes': operaciones_data
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/supervisor/reportes')
-@login_required
-def supervisor_reportes():
-    """Vista de reportes específicos para el supervisor"""
-    if not current_user.es_supervisor:
-        flash('Acceso denegado. Solo los supervisores pueden acceder a esta página.', 'danger')
-        return redirect(url_for('dashboard'))
-    
-    # Obtener medios de pago disponibles para la sucursal
-    medios_sucursal = MedioSucursal.query.filter_by(
-        sucursal_id=current_user.sucursal_id,
-        activo=True
-    ).join(MedioPago).all()
-    
-    medios = [ms.medio_pago for ms in medios_sucursal]
-    
-    return render_template('supervisor_reportes.html',
-                         medios=medios,
-                         sucursal=current_user.sucursal)
-
-@app.route('/api/supervisor/reportes/operaciones')
-@login_required
-def api_supervisor_reportes_operaciones():
-    """API para reportes de operaciones del supervisor"""
-    if not current_user.es_supervisor:
-        return jsonify({'error': 'Acceso denegado'}), 403
-    
-    fecha_inicio = request.args.get('fecha_inicio')
-    fecha_fin = request.args.get('fecha_fin')
-    medio = request.args.get('medio')
-    
-    try:
-        # Construir consulta base
-        query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
-        
-        # Aplicar filtros
-        if fecha_inicio:
-            query = query.filter(Operacion.hora >= datetime.strptime(fecha_inicio, '%Y-%m-%d'))
-        if fecha_fin:
-            query = query.filter(Operacion.hora <= datetime.strptime(fecha_fin + ' 23:59:59', '%Y-%m-%d %H:%M:%S'))
-        if medio:
-            query = query.filter(Operacion.medio == medio)
-        
-        operaciones = query.order_by(Operacion.hora.desc()).all()
-        
-        # Calcular totales
-        total_monto = sum(float(op.monto) for op in operaciones)
-        total_comision = sum(float(op.comision) for op in operaciones)
-        
-        # Preparar datos para la tabla
-        operaciones_data = []
-        for op in operaciones:
-            operaciones_data.append({
-                'id': op.id,
-                'fecha': op.hora.strftime('%d/%m/%Y %H:%M'),
-                'usuario': op.usuario.nombre_completo,
-                'monto': float(op.monto),
-                'comision': float(op.comision),
-                'medio': op.medio
-            })
-        
-        return jsonify({
-            'operaciones': operaciones_data,
-            'total_monto': total_monto,
-            'total_comision': total_comision,
-            'cantidad': len(operaciones)
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
