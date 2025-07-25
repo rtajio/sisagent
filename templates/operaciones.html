@@ -333,5 +333,69 @@ function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
 function cancelarEdicion(id, monto, comision, medio, usuarioOriginal) {
     location.reload();
 }
+
+// Función para enfocar automáticamente el campo de monto
+function enfocarCampoMonto() {
+    const campoMonto = document.getElementById('monto');
+    if (campoMonto) {
+        // Enfocar el campo
+        campoMonto.focus();
+        // Seleccionar todo el texto si hay alguno
+        campoMonto.select();
+        // Hacer que el campo parpadee (efecto visual)
+        campoMonto.style.borderColor = '#007bff';
+        campoMonto.style.boxShadow = '0 0 0 0.2rem rgba(0, 123, 255, 0.25)';
+        
+        // Remover el efecto después de 2 segundos
+        setTimeout(function() {
+            campoMonto.style.borderColor = '';
+            campoMonto.style.boxShadow = '';
+        }, 2000);
+    }
+}
+
+// Ejecutar cuando se carga la página
+document.addEventListener('DOMContentLoaded', function() {
+    // Enfocar el campo de monto al cargar la página
+    enfocarCampoMonto();
+    
+    // También enfocar después de cualquier operación exitosa
+    const mensajesFlash = document.querySelectorAll('.alert-success');
+    if (mensajesFlash.length > 0) {
+        setTimeout(function() {
+            enfocarCampoMonto();
+        }, 500);
+    }
+});
+
+// Función para limpiar formulario y enfocar monto
+function limpiarFormularioYEnfocarMonto() {
+    const monto = document.getElementById('monto');
+    const comision = document.getElementById('comision');
+    const medio = document.getElementById('medio');
+    const sucursal = document.getElementById('sucursal_id');
+    
+    // Limpiar campos
+    if (monto) monto.value = '';
+    if (comision) comision.value = '';
+    if (medio) medio.value = '';
+    if (sucursal) sucursal.value = '';
+    
+    // Enfocar en el campo de monto con efecto visual
+    enfocarCampoMonto();
+}
+
+// Interceptar envío del formulario para limpiar después
+document.addEventListener('DOMContentLoaded', function() {
+    const formulario = document.querySelector('form[action*="registrar_operacion"]');
+    if (formulario) {
+        formulario.addEventListener('submit', function() {
+            // Limpiar formulario después de un envío exitoso
+            setTimeout(function() {
+                limpiarFormularioYEnfocarMonto();
+            }, 1000);
+        });
+    }
+});
 </script>
 {% endblock %} 
