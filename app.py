@@ -14,11 +14,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pytz
 
 print("🚀 SISAGENT Flask arrancando...")
-print("🔄 Actualización Railway - " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+print("🔄 Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
 print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
 print("🗑️ REMOVED: Botón de convertir en administrador eliminado de acciones rápidas")
 print("✏️ FIX: Permitir editar nombre de usuario en gestión de usuarios")
 print("🔧 FIX: Corregir edición de operaciones - problema con columnas de usuario")
+print("🕐 FIX: Corregir zona horaria - usar hora de Perú (UTC-5) en lugar de UTC")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -57,6 +58,10 @@ print("✅ SQLAlchemy y LoginManager configurados")
 # Configuración de zona horaria (UTC-5 para Perú)
 peru_tz = pytz.timezone('America/Lima')
 
+def get_peru_time():
+    """Obtiene la hora actual en zona horaria de Perú"""
+    return datetime.now(peru_tz)
+
 print("✅ Configuración de zona horaria completada")
 
 # Medios de pago se obtienen dinámicamente de la base de datos
@@ -67,7 +72,7 @@ class Sucursal(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     direccion = db.Column(db.String(200))
     activa = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_peru_time)
     usuarios = db.relationship('Usuario', backref='sucursal', lazy=True)
     operaciones = db.relationship('Operacion', backref='sucursal', lazy=True)
 
@@ -80,7 +85,7 @@ class Usuario(UserMixin, db.Model):
     es_admin = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=True)
     activo = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_peru_time)
     operaciones = db.relationship('Operacion', backref='usuario', lazy=True)
     
     
@@ -92,14 +97,14 @@ class Operacion(db.Model):
     hora = db.Column(db.DateTime, nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_peru_time)
 
 class ComisionDiaria(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fecha = db.Column(db.Date, nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
     total_comision = db.Column(db.Numeric(10, 2), default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_peru_time)
 
 class ComisionMensual(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -107,7 +112,7 @@ class ComisionMensual(db.Model):
     mes = db.Column(db.Integer, nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
     total_comision = db.Column(db.Numeric(10, 2), default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_peru_time)
 
 class MedioPago(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -115,7 +120,7 @@ class MedioPago(db.Model):
     nombre_completo = db.Column(db.String(100), nullable=False)
     activo = db.Column(db.Boolean, default=True)
     orden = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_peru_time)
 
 class MedioSucursal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
