@@ -71,7 +71,7 @@
                             <span class="badge bg-danger">Inactivo</span>
                             {% endif %}
                         </td>
-                        <td>{{ usuario.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                                                            <td>{{ format_peru_datetime_short(usuario.created_at) }}</td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}" 

@@ -61,7 +61,7 @@
                         <td>
                             <span class="badge bg-primary">{{ sucursal.operaciones|length }}</span>
                         </td>
-                        <td>{{ sucursal.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                                                            <td>{{ format_peru_datetime_short(sucursal.created_at) }}</td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="{{ url_for('editar_sucursal', sucursal_id=sucursal.id) }}" 

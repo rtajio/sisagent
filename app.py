@@ -31,6 +31,39 @@ def format_peru_time(dt):
     else:
         return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%H:%M:%S')
 
+def format_peru_date(dt):
+    """Formatea una fecha para mostrar en zona horaria de Perú"""
+    if dt is None:
+        return ""
+    # Si la fecha ya tiene zona horaria, convertirla a Perú
+    if dt.tzinfo is not None:
+        return dt.astimezone(peru_tz).strftime('%d/%m/%Y')
+    # Si no tiene zona horaria, asumir que es UTC y convertir
+    else:
+        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%d/%m/%Y')
+
+def format_peru_datetime(dt):
+    """Formatea una fecha/hora completa para mostrar en zona horaria de Perú"""
+    if dt is None:
+        return ""
+    # Si la fecha ya tiene zona horaria, convertirla a Perú
+    if dt.tzinfo is not None:
+        return dt.astimezone(peru_tz).strftime('%d/%m/%Y %H:%M:%S')
+    # Si no tiene zona horaria, asumir que es UTC y convertir
+    else:
+        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%d/%m/%Y %H:%M:%S')
+
+def format_peru_datetime_short(dt):
+    """Formatea una fecha/hora corta para mostrar en zona horaria de Perú"""
+    if dt is None:
+        return ""
+    # Si la fecha ya tiene zona horaria, convertirla a Perú
+    if dt.tzinfo is not None:
+        return dt.astimezone(peru_tz).strftime('%d/%m/%Y %H:%M')
+    # Si no tiene zona horaria, asumir que es UTC y convertir
+    else:
+        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%d/%m/%Y %H:%M')
+
 print("🚀 SISAGENT Flask arrancando...")
 print("🔄 Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
 print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
@@ -42,6 +75,7 @@ print("🔧 FIX: Corregir error de orden - función get_peru_time definida antes
 print("🔧 FIX: Usar lambda functions para zona horaria en modelos - evitar errores de función")
 print("🔧 FIX: Corregir descuadre en edición de operaciones - mostrar columnas solo para admin")
 print("🕐 FIX: Corregir visualización de hora - usar función format_peru_time en templates")
+print("🕐 FIX: Corregir TODAS las horas en reportes PDF/XLSX/CSV y templates de usuarios/sucursales")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -79,8 +113,11 @@ print("✅ SQLAlchemy y LoginManager configurados")
 
 print("✅ Configuración de zona horaria completada")
 
-# Agregar función de formato de hora al contexto de Jinja2
+# Agregar funciones de formato de hora al contexto de Jinja2
 app.jinja_env.globals['format_peru_time'] = format_peru_time
+app.jinja_env.globals['format_peru_date'] = format_peru_date
+app.jinja_env.globals['format_peru_datetime'] = format_peru_datetime
+app.jinja_env.globals['format_peru_datetime_short'] = format_peru_datetime_short
 
 # Medios de pago se obtienen dinámicamente de la base de datos
 
@@ -957,8 +994,8 @@ def api_reportes_operaciones():
         
         datos.append({
             'id': op.id,
-            'fecha': op.hora.strftime('%d/%m/%Y'),
-            'hora': op.hora.strftime('%H:%M:%S'),
+            'fecha': format_peru_date(op.hora),
+            'hora': format_peru_time(op.hora),
             'monto': float(op.monto),
             'comision': float(op.comision),
             'medio': medio_nombre,
@@ -1015,8 +1052,8 @@ def exportar_reporte(formato):
             for idx, op in enumerate(operaciones, 1):
                 writer.writerow([
                     idx,
-                    op.hora.strftime('%d/%m/%Y'),
-                    op.hora.strftime('%H:%M:%S'),
+                    format_peru_date(op.hora),
+                    format_peru_time(op.hora),
                     float(op.monto),
                     float(op.comision),
                     get_medio_nombre(op.medio),
@@ -1042,8 +1079,8 @@ def exportar_reporte(formato):
             for idx, op in enumerate(operaciones, 1):
                 row = idx + 1
                 ws.cell(row=row, column=1, value=idx)
-                ws.cell(row=row, column=2, value=op.hora.strftime('%d/%m/%Y'))
-                ws.cell(row=row, column=3, value=op.hora.strftime('%H:%M:%S'))
+                ws.cell(row=row, column=2, value=format_peru_date(op.hora))
+                ws.cell(row=row, column=3, value=format_peru_time(op.hora))
                 ws.cell(row=row, column=4, value=float(op.monto))
                 ws.cell(row=row, column=5, value=float(op.comision))
                 ws.cell(row=row, column=6, value=get_medio_nombre(op.medio))
@@ -1075,8 +1112,8 @@ def exportar_reporte(formato):
             for idx, op in enumerate(operaciones, 1):
                 data.append([
                     str(idx),
-                    op.hora.strftime('%d/%m/%Y'),
-                    op.hora.strftime('%H:%M:%S'),
+                    format_peru_date(op.hora),
+                    format_peru_time(op.hora),
                     f'S/. {float(op.monto):.2f}',
                     f'S/. {float(op.comision):.2f}',
                     get_medio_nombre(op.medio),

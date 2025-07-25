@@ -112,7 +112,7 @@
                             {% for operacion in operaciones_hoy %}
                             <tr>
                                 <td>{{ loop.index }}</td>
-                                <td>{{ operacion.hora.strftime('%H:%M:%S') }}</td>
+                                                                    <td>{{ format_peru_time(operacion.hora) }}</td>
                                 <td class="font-weight-bold">S/ {{ "%.2f"|format(operacion.monto) }}</td>
                                 <td class="text-success font-weight-bold">S/ {{ "%.2f"|format(operacion.comision) }}</td>
                                 <td><span class="badge bg-primary">{{ operacion.medio }}</span></td>

@@ -96,7 +96,7 @@
                             </label>
                             <input type="text" 
                                    class="form-control" 
-                                   value="{{ operacion.hora.strftime('%d/%m/%Y %H:%M:%S') }}" 
+                                   value="{{ format_peru_datetime(operacion.hora) }}" 
                                    readonly 
                                    style="background-color: #f8f9fa;">
                             <div class="form-text">La hora original no se puede modificar</div>
