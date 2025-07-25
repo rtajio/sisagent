@@ -80,6 +80,7 @@ print("🔑 FIX: Asegurar que usuario admin esté disponible en Railway - creden
 print("🔧 FIX: Mejorar inicialización de admin con mejor logging y verificación de contraseña")
 print("💰 FIX: Corregir cálculo de comisiones - usar tabla Operacion para día y mes (evitar inconsistencias)")
 print("🎨 FIX: Corregir contraste de colores - texto blanco sobre fondo azul en card-headers")
+print("📄 ADD: Footer profesional con créditos de INC Technology y derechos reservados")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
