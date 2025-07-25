@@ -64,28 +64,8 @@ def format_peru_datetime_short(dt):
     else:
         return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%d/%m/%Y %H:%M')
 
-print("🚀 SISAGENT Flask arrancando...")
-print("🔄 Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
-print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
-print("🗑️ REMOVED: Botón de convertir en administrador eliminado de acciones rápidas")
-print("✏️ FIX: Permitir editar nombre de usuario en gestión de usuarios")
-print("🔧 FIX: Corregir edición de operaciones - problema con columnas de usuario")
-print("🕐 FIX: Corregir zona horaria - usar hora de Perú (UTC-5) en lugar de UTC")
-print("🔧 FIX: Corregir error de orden - función get_peru_time definida antes de usar")
-print("🔧 FIX: Usar lambda functions para zona horaria en modelos - evitar errores de función")
-print("🔧 FIX: Corregir descuadre en edición de operaciones - mostrar columnas solo para admin")
-print("🕐 FIX: Corregir visualización de hora - usar función format_peru_time en templates")
-print("🕐 FIX: Corregir TODAS las horas en reportes PDF/XLSX/CSV y templates de usuarios/sucursales")
-print("🔑 FIX: Asegurar que usuario admin esté disponible en Railway - credenciales: admin/61442159")
-print("🔧 FIX: Mejorar inicialización de admin con mejor logging y verificación de contraseña")
-print("💰 FIX: Corregir cálculo de comisiones - usar tabla Operacion para día y mes (evitar inconsistencias)")
-print("🎨 FIX: Corregir contraste de colores - texto blanco sobre fondo azul en card-headers")
-print("📄 ADD: Footer profesional con créditos de INC Technology y derechos reservados")
-
 # Configuración de la aplicación Flask
 app = Flask(__name__)
-
-print("✅ Flask app creada")
 
 # Configuración para Railway
 if os.environ.get('DATABASE_URL'):
@@ -94,31 +74,23 @@ if os.environ.get('DATABASE_URL'):
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    print(f"✅ Usando PostgreSQL en Railway: {database_url[:20]}...")
 else:
     # Para desarrollo local y Railway sin DATABASE_URL
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
-    print("✅ Usando SQLite para desarrollo local")
 
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
+# Configuración adicional
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-print("✅ Configuración de base de datos completada")
-
-# Configurar CORS para permitir peticiones desde cualquier origen en producción
-from flask_cors import CORS
-CORS(app, origins=['*'])
-
+# Inicializar extensiones
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
+login_manager.login_message_category = 'info'
 
-print("✅ SQLAlchemy y LoginManager configurados")
-
-print("✅ Configuración de zona horaria completada")
-
-# Agregar funciones de formato de hora al contexto de Jinja2
+# Agregar funciones de formato a Jinja2
 app.jinja_env.globals['format_peru_time'] = format_peru_time
 app.jinja_env.globals['format_peru_date'] = format_peru_date
 app.jinja_env.globals['format_peru_datetime'] = format_peru_datetime
@@ -751,114 +723,70 @@ def editar_operacion(operacion_id):
         return redirect(url_for('operaciones'))
     
     if request.method == 'POST':
-        monto_anterior = float(operacion.comision)
-        sucursal_anterior = operacion.sucursal_id
-        monto = float(request.form['monto'])
-        comision = float(request.form['comision'])
-        medio = request.form['medio']
-        
-        # Determinar la nueva sucursal
-        if current_user.es_admin:
-            nueva_sucursal_id = int(request.form.get('sucursal_id'))
-        else:
-            nueva_sucursal_id = operacion.sucursal_id
-        
-        # Actualizar operación
-        operacion.monto = monto
-        operacion.comision = comision
-        operacion.medio = medio
-        operacion.sucursal_id = nueva_sucursal_id
-        
-        # Actualizar comisiones diarias y mensuales
-        fecha_operacion = operacion.hora.date()
-        año_operacion = operacion.hora.year
-        mes_operacion = operacion.hora.month
-        
-        # Si cambió la sucursal, actualizar ambas sucursales
-        if current_user.es_admin and nueva_sucursal_id != sucursal_anterior:
-            # Restar de la sucursal anterior
-            comision_diaria_anterior = ComisionDiaria.query.filter_by(
-                fecha=fecha_operacion,
-                sucursal_id=sucursal_anterior
-            ).first()
+        try:
+            monto = float(request.form['monto'])
+            comision = float(request.form['comision'])
+            medio = request.form['medio']
             
-            if comision_diaria_anterior:
-                comision_diaria_anterior.total_comision = float(comision_diaria_anterior.total_comision) - float(monto_anterior)
+            # Validaciones
+            if monto <= 0:
+                flash('El monto debe ser mayor a 0', 'error')
+                return render_template('editar_operacion.html', operacion=operacion)
             
-            comision_mensual_anterior = ComisionMensual.query.filter_by(
-                año=año_operacion,
-                mes=mes_operacion,
-                sucursal_id=sucursal_anterior
-            ).first()
+            if comision < 0:
+                flash('La comisión no puede ser negativa', 'error')
+                return render_template('editar_operacion.html', operacion=operacion)
             
-            if comision_mensual_anterior:
-                comision_mensual_anterior.total_comision = float(comision_mensual_anterior.total_comision) - float(monto_anterior)
+            if comision > monto:
+                flash('La comisión no puede ser mayor al monto', 'error')
+                return render_template('editar_operacion.html', operacion=operacion)
             
-            # Sumar a la nueva sucursal
-            comision_diaria_nueva = ComisionDiaria.query.filter_by(
-                fecha=fecha_operacion,
-                sucursal_id=nueva_sucursal_id
-            ).first()
+            # Guardar valores originales para actualizar comisiones
+            monto_original = float(operacion.monto)
+            comision_original = float(operacion.comision)
             
-            if comision_diaria_nueva:
-                comision_diaria_nueva.total_comision = float(comision_diaria_nueva.total_comision) + float(comision)
-            else:
-                comision_diaria_nueva = ComisionDiaria(
-                    fecha=fecha_operacion,
-                    sucursal_id=nueva_sucursal_id,
-                    total_comision=comision
-                )
-                db.session.add(comision_diaria_nueva)
+            # Actualizar operación
+            operacion.monto = monto
+            operacion.comision = comision
+            operacion.medio = medio
             
-            comision_mensual_nueva = ComisionMensual.query.filter_by(
-                año=año_operacion,
-                mes=mes_operacion,
-                sucursal_id=nueva_sucursal_id
-            ).first()
+            # Actualizar comisiones diarias y mensuales
+            fecha_operacion = operacion.hora.date()
+            año_operacion = operacion.hora.year
+            mes_operacion = operacion.hora.month
+            sucursal_id = operacion.sucursal_id
             
-            if comision_mensual_nueva:
-                comision_mensual_nueva.total_comision = float(comision_mensual_nueva.total_comision) + float(comision)
-            else:
-                comision_mensual_nueva = ComisionMensual(
-                    año=año_operacion,
-                    mes=mes_operacion,
-                    sucursal_id=nueva_sucursal_id,
-                    total_comision=comision
-                )
-                db.session.add(comision_mensual_nueva)
-        else:
-            # Solo actualizar la sucursal actual
+            # Actualizar comisión diaria
             comision_diaria = ComisionDiaria.query.filter_by(
                 fecha=fecha_operacion,
-                sucursal_id=operacion.sucursal_id
+                sucursal_id=sucursal_id
             ).first()
             
             if comision_diaria:
-                comision_diaria.total_comision = float(comision_diaria.total_comision) - float(monto_anterior) + float(comision)
+                comision_diaria.total_comision = float(comision_diaria.total_comision) - comision_original + comision
             
+            # Actualizar comisión mensual
             comision_mensual = ComisionMensual.query.filter_by(
                 año=año_operacion,
                 mes=mes_operacion,
-                sucursal_id=operacion.sucursal_id
+                sucursal_id=sucursal_id
             ).first()
             
             if comision_mensual:
-                comision_mensual.total_comision = float(comision_mensual.total_comision) - float(monto_anterior) + float(comision)
-        
-        db.session.commit()
-        flash('Operación bancaria modificada exitosamente', 'warning')
-        return redirect(url_for('operaciones'))
+                comision_mensual.total_comision = float(comision_mensual.total_comision) - comision_original + comision
+            
+            db.session.commit()
+            flash('Operación bancaria actualizada exitosamente', 'success')
+            return redirect(url_for('operaciones'))
+            
+        except ValueError:
+            flash('Por favor ingresa valores numéricos válidos', 'error')
+        except Exception as e:
+            flash(f'Error al actualizar la operación: {str(e)}', 'error')
     
-    # Pasar sucursales solo si es administrador
-    sucursales = Sucursal.query.filter_by(activa=True).all() if current_user.es_admin else None
-    # Obtener medios de pago activos
-    medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
-    
-    # DEBUG TEMPORAL
-    print(f"🔍 DEBUG - Función editar_operacion()")
-    print(f"🔍 DEBUG - Medios obtenidos: {len(medios_pago)}")
-    for medio in medios_pago:
-        print(f"🔍 DEBUG - Medio: {medio.nombre_abreviado} (orden: {medio.orden})")
+    # Obtener datos para el formulario
+    sucursales = Sucursal.query.filter_by(activa=True).all()
+    medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden).all()
     
     return render_template('editar_operacion.html', operacion=operacion, medios_pago=medios_pago, sucursales=sucursales, version="v4")
 
@@ -1238,11 +1166,9 @@ def api_actualizar_operacion(operacion_id):
             'medio': medio
         }
         
-        print(f"✅ Respuesta: {response_data}")
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ Error: {e}")
         db.session.rollback()
         return jsonify({'success': False, 'message': f'Error al actualizar la operación: {str(e)}'}), 500
 
@@ -1464,38 +1390,28 @@ def toggle_medio_sucursal(sucursal_id):
 if __name__ == '__main__':
     try:
         with app.app_context():
-            print("🔧 Inicializando base de datos...")
             db.create_all()
-            print("✅ Base de datos inicializada")
             
             # Crear usuario admin por defecto si no existe
             admin = Usuario.query.filter_by(username='admin').first()
             if not admin:
-                print("👤 Creando usuario admin...")
                 admin = Usuario(
                     username='admin',
                     email='admin@sisagent.com',
                     password_hash=generate_password_hash('61442159'),
                     nombre_completo='Administrador SISAGENT',
                     es_admin=True,
-                    sucursal_id=None  # El admin no tiene sucursal asignada inicialmente
+                    sucursal_id=None
                 )
                 db.session.add(admin)
                 db.session.commit()
-                print("✅ Usuario admin creado exitosamente")
-                print("   - Username: admin")
-                print("   - Contraseña: 61442159")
             else:
-                print("✅ Usuario admin ya existe")
                 # Verificar y actualizar contraseña si es necesario
                 from werkzeug.security import check_password_hash
                 if not check_password_hash(admin.password_hash, '61442159'):
-                    print("🔑 Actualizando contraseña de admin...")
                     admin.password_hash = generate_password_hash('61442159')
                     db.session.commit()
-                    print("✅ Contraseña actualizada a: 61442159")
     except Exception as e:
-        print(f"❌ Error durante la inicialización: {e}")
         import traceback
         traceback.print_exc()
     
@@ -1503,6 +1419,4 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     # En producción, no usar debug mode
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    app.run(host='0.0.0.0', debug=debug_mode, use_reloader=False, port=port)
-
-print("🎉 SISAGENT Flask cargado completamente - Listo para producción!") 
+    app.run(host='0.0.0.0', debug=debug_mode, use_reloader=False, port=port) 
