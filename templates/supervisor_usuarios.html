@@ -113,6 +113,20 @@
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                             {% if usuario.id != current_user.id %}
+                                            <!-- Botón para cambiar rol -->
+                                            {% if usuario.es_supervisor %}
+                                            <button type="button" class="btn btn-sm btn-info" 
+                                                    onclick="cambiarRol({{ usuario.id }}, 'usuario')" 
+                                                    title="Convertir a Usuario">
+                                                <i class="fas fa-user"></i>
+                                            </button>
+                                            {% else %}
+                                            <button type="button" class="btn btn-sm btn-warning" 
+                                                    onclick="cambiarRol({{ usuario.id }}, 'supervisor')" 
+                                                    title="Convertir a Supervisor">
+                                                <i class="fas fa-user-shield"></i>
+                                            </button>
+                                            {% endif %}
                                             <button type="button" class="btn btn-sm btn-{% if usuario.activo %}warning{% else %}success{% endif %}" 
                                                     onclick="toggleUsuario({{ usuario.id }}, {{ usuario.activo|lower }})" 
                                                     title="{% if usuario.activo %}Desactivar{% else %}Activar{% endif %}">
@@ -184,6 +198,33 @@ function eliminarUsuario(userId) {
             headers: {
                 'Content-Type': 'application/json',
             }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al procesar la solicitud');
+        });
+    }
+}
+
+function cambiarRol(userId, nuevoRol) {
+    const accion = nuevoRol === 'supervisor' ? 'convertir en supervisor' : 'convertir en usuario';
+    const confirmacion = `¿Estás seguro de que quieres ${accion} a este usuario?`;
+    
+    if (confirm(confirmacion)) {
+        fetch(`/supervisor/usuarios/${userId}/cambiar-rol`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ rol: nuevoRol })
         })
         .then(response => response.json())
         .then(data => {

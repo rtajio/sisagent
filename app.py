@@ -1559,6 +1559,42 @@ def supervisor_eliminar_usuario(user_id):
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al eliminar el usuario'})
 
+@app.route('/supervisor/usuarios/<int:user_id>/cambiar-rol', methods=['POST'])
+@login_required
+def supervisor_cambiar_rol_usuario(user_id):
+    if not current_user.es_supervisor:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    usuario = Usuario.query.get_or_404(user_id)
+    
+    # Verificar que el usuario pertenece a la misma sucursal
+    if usuario.sucursal_id != current_user.sucursal_id:
+        return jsonify({'success': False, 'message': 'No puedes modificar usuarios de otras sucursales'})
+    
+    # No permitir cambiar el rol de su propia cuenta
+    if usuario.id == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol'})
+    
+    data = request.get_json()
+    nuevo_rol = data.get('rol')
+    
+    if nuevo_rol not in ['usuario', 'supervisor']:
+        return jsonify({'success': False, 'message': 'Rol no válido'})
+    
+    try:
+        if nuevo_rol == 'supervisor':
+            usuario.es_supervisor = True
+            usuario.es_admin = False
+        else:
+            usuario.es_supervisor = False
+            usuario.es_admin = False
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Usuario convertido a {nuevo_rol} exitosamente'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al cambiar el rol del usuario'})
+
 
 if __name__ == '__main__':
     try:
