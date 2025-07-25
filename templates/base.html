@@ -580,8 +580,10 @@
             </main>
         </div>
     </div>
-
-    <!-- Scripts de Bootstrap y otros -->
+    {% else %}
+        {% block auth_content %}{% endblock %}
+    {% endif %}
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <!-- Audio para notificaciones con sonidos reales mejorados -->
@@ -1195,6 +1197,5 @@
     });
 </script>
 {% endif %}
-
 </body>
 </html> 
