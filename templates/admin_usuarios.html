@@ -60,8 +60,6 @@
                         <td>
                             {% if usuario.es_admin %}
                             <span class="badge bg-danger">Administrador</span>
-                            {% elif usuario.es_ %}
-                            <span class="badge bg-warning"></span>
                             {% else %}
                             <span class="badge bg-primary">Usuario</span>
                             {% endif %}
@@ -82,20 +80,6 @@
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 {% if usuario.username != 'admin' and usuario.id != current_user.id %}
-                                <!-- Botón para cambiar rol -->
-                                {% if usuario.es_admin %}
-                                <button type="button" class="btn btn-outline-info" 
-                                        onclick="cambiarRol({{ usuario.id }}, 'usuario')" 
-                                        title="Convertir a Usuario">
-                                    <i class="fas fa-user"></i>
-                                </button>
-                                {% elif not usuario.es_admin %}
-                                <button type="button" class="btn btn-outline-warning" 
-                                        onclick="cambiarRol({{ usuario.id }}, 'admin')" 
-                                        title="Convertir a Administrador">
-                                    <i class="fas fa-user-shield"></i>
-                                </button>
-                                {% endif %}
                                 <form method="POST" action="{{ url_for('eliminar_usuario', usuario_id=usuario.id) }}" 
                                       style="display: inline;">
                                     <button type="submit" 
@@ -139,31 +123,6 @@ function confirmarEliminar(usuarioId, username) {
     }
 }
 
-function cambiarRol(userId, nuevoRol) {
-    const accion = nuevoRol === 'admin' ? 'convertir en administrador' : 'convertir en usuario';
-    const confirmacion = `¿Estás seguro de que quieres ${accion} a este usuario?`;
-    
-    if (confirm(confirmacion)) {
-        fetch(`/admin/usuarios/${userId}/cambiar-rol`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ rol: nuevoRol })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error al procesar la solicitud');
-        });
-    }
-}
+
 </script>
 {% endblock %} 
