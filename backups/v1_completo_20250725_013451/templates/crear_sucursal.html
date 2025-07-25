@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Sucursal - SISAGENT{% endblock %}
+
+{% block content %}
+<!-- Mostrar mensajes flash -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-plus me-2"></i>
+        Crear Sucursal
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('admin_sucursales') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>
+            Volver
+        </a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow">
+            <div class="card-header py-3" style="background: linear-gradient(135deg, var(--primary-color), var(--accent-color));">
+                <h6 class="m-0 font-weight-bold text-white">
+                    <i class="fas fa-building me-2"></i>
+                    Nueva Sucursal
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="sucursalForm">
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label">
+                            <i class="fas fa-building me-1"></i>
+                            Nombre de la Sucursal
+                        </label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="nombre" 
+                               name="nombre" 
+                               required
+                               placeholder="Ej: Sucursal Centro">
+                        <div class="form-text">Ingrese el nombre de la sucursal</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="direccion" class="form-label">
+                            <i class="fas fa-map-marker-alt me-1"></i>
+                            Dirección
+                        </label>
+                        <textarea class="form-control" 
+                                  id="direccion" 
+                                  name="direccion" 
+                                  rows="3"
+                                  placeholder="Ej: Av. Principal 123, Distrito, Ciudad"></textarea>
+                        <div class="form-text">Ingrese la dirección de la sucursal (opcional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Medios de Pago Activos</label>
+                        <div class="row">
+                            {% for medio in medios %}
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="medios" id="medio{{ medio.id }}" value="{{ medio.id }}">
+                                    <label class="form-check-label" for="medio{{ medio.id }}">
+                                        {{ medio.nombre_abreviado }} ({{ medio.nombre_completo }})
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Información:</strong> Una vez creada la sucursal, podrá asignar usuarios a ella 
+                        desde la gestión de usuarios.
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin_sucursales') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-times me-1"></i>
+                            Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>
+                            Crear Sucursal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Validación del formulario
+document.getElementById('sucursalForm').addEventListener('submit', function(e) {
+    const nombre = document.getElementById('nombre').value.trim();
+    
+    if (!nombre) {
+        e.preventDefault();
+        alert('Por favor ingrese el nombre de la sucursal');
+        return false;
+    }
+    
+    // Confirmar antes de enviar
+    if (!confirm('¿Está seguro de crear esta sucursal?')) {
+        e.preventDefault();
+        return false;
+    }
+});
+</script>
+{% endblock %} 

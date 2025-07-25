@@ -76,10 +76,6 @@ print("🔧 FIX: Usar lambda functions para zona horaria en modelos - evitar err
 print("🔧 FIX: Corregir descuadre en edición de operaciones - mostrar columnas solo para admin")
 print("🕐 FIX: Corregir visualización de hora - usar función format_peru_time en templates")
 print("🕐 FIX: Corregir TODAS las horas en reportes PDF/XLSX/CSV y templates de usuarios/sucursales")
-print("🔑 FIX: Asegurar que usuario admin esté disponible en Railway - credenciales: admin/61442159")
-print("🔧 FIX: Mejorar inicialización de admin con mejor logging y verificación de contraseña")
-print("💰 FIX: Corregir cálculo de comisiones - usar tabla Operacion para día y mes (evitar inconsistencias)")
-print("🎨 FIX: Corregir contraste de colores - texto blanco sobre fondo azul en card-headers")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -245,15 +241,15 @@ def admin_dashboard():
     comisiones_hoy = []
     comisiones_mes = {}
     
-    # Obtener todas las comisiones diarias desde Operacion (más confiable)
+    # Obtener todas las comisiones diarias en una sola consulta
     comisiones_diarias = db.session.query(
-        Operacion.sucursal_id,
-        db.func.sum(Operacion.comision).label('total')
+        ComisionDiaria.sucursal_id,
+        db.func.sum(ComisionDiaria.total_comision).label('total')
     ).filter(
-        db.func.date(Operacion.hora) == hoy
-    ).group_by(Operacion.sucursal_id).all()
+        ComisionDiaria.fecha == hoy
+    ).group_by(ComisionDiaria.sucursal_id).all()
     
-    # Obtener todas las comisiones mensuales desde Operacion
+    # Obtener todas las comisiones mensuales en una sola consulta
     comisiones_mensuales = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
@@ -1463,14 +1459,10 @@ def toggle_medio_sucursal(sucursal_id):
 if __name__ == '__main__':
     try:
         with app.app_context():
-            print("🔧 Inicializando base de datos...")
             db.create_all()
-            print("✅ Base de datos inicializada")
-            
             # Crear usuario admin por defecto si no existe
             admin = Usuario.query.filter_by(username='admin').first()
             if not admin:
-                print("👤 Creando usuario admin...")
                 admin = Usuario(
                     username='admin',
                     email='admin@sisagent.com',
@@ -1481,22 +1473,8 @@ if __name__ == '__main__':
                 )
                 db.session.add(admin)
                 db.session.commit()
-                print("✅ Usuario admin creado exitosamente")
-                print("   - Username: admin")
-                print("   - Contraseña: 61442159")
-            else:
-                print("✅ Usuario admin ya existe")
-                # Verificar y actualizar contraseña si es necesario
-                from werkzeug.security import check_password_hash
-                if not check_password_hash(admin.password_hash, '61442159'):
-                    print("🔑 Actualizando contraseña de admin...")
-                    admin.password_hash = generate_password_hash('61442159')
-                    db.session.commit()
-                    print("✅ Contraseña actualizada a: 61442159")
     except Exception as e:
-        print(f"❌ Error durante la inicialización: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error durante la inicialización: {e}")
     
     import os
     port = int(os.environ.get("PORT", 5000))

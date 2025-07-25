@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Operación - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-edit me-2"></i>
+        Editar Operación
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('operaciones') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>
+            Volver
+        </a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-warning">
+                    <i class="fas fa-edit me-2"></i>
+                    Editar Operación Bancaria
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="operacionForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="monto" class="form-label">
+                                <i class="fas fa-money-bill me-1"></i>
+                                Monto (S/)
+                            </label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="monto" 
+                                   name="monto" 
+                                   step="0.01" 
+                                   min="0.01" 
+                                   required
+                                   value="{{ "%.2f"|format(operacion.monto) }}"
+                                   placeholder="0.00">
+                            <div class="form-text">Ingrese el monto en soles peruanos</div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="comision" class="form-label">
+                                <i class="fas fa-percentage me-1"></i>
+                                Comisión (S/)
+                            </label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="comision" 
+                                   name="comision" 
+                                   step="0.01" 
+                                   min="0" 
+                                   required
+                                   value="{{ "%.2f"|format(operacion.comision) }}"
+                                   placeholder="0.00">
+                            <div class="form-text">Ingrese la comisión en soles peruanos</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="medio" class="form-label">
+                            <i class="fas fa-credit-card me-1"></i>
+                            Medio de Pago
+                        </label>
+                        <select class="form-select" id="medio" name="medio" required>
+                            <option value="">Seleccione un medio de pago</option>
+                            {% for medio in medios_pago %}
+                            <option value="{{ medio.nombre_abreviado }}" {% if operacion.medio == medio.nombre_abreviado %}selected{% endif %}>
+                                {{ medio.nombre_abreviado }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <!-- DEBUG TEMPORAL -->
+                        <small class="text-muted">
+                            {% if medios_pago %}
+                                ✅ {{ medios_pago|length }} medios disponibles
+                                <br><strong>Medios: {% for medio in medios_pago %}{{ medio.nombre_abreviado }}{% if not loop.last %}, {% endif %}{% endfor %}</strong>
+                            {% else %}
+                                ❌ No hay medios
+                            {% endif %}
+                        </small>
+                    </div>
+                    
+                    <!-- Información de solo lectura -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-clock me-1"></i>
+                                Hora de Registro
+                            </label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   value="{{ format_peru_datetime(operacion.hora) }}" 
+                                   readonly 
+                                   style="background-color: #f8f9fa;">
+                            <div class="form-text">La hora original no se puede modificar</div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-building me-1"></i>
+                                Sucursal
+                            </label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   value="{{ operacion.sucursal.nombre }}" 
+                                   readonly 
+                                   style="background-color: #f8f9fa;">
+                            <input type="hidden" name="sucursal_id" value="{{ operacion.sucursal_id }}">
+                            <div class="form-text">La sucursal no se puede modificar</div>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Advertencia:</strong> Al editar esta operación, las comisiones diarias y mensuales 
+                        se actualizarán automáticamente para reflejar los cambios.
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('operaciones') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-times me-1"></i>
+                            Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-save me-1"></i>
+                            Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Validación del formulario
+document.getElementById('operacionForm').addEventListener('submit', function(e) {
+    const monto = parseFloat(document.getElementById('monto').value);
+    const comision = parseFloat(document.getElementById('comision').value);
+    const medio = document.getElementById('medio').value;
+    
+    if (!monto || monto <= 0) {
+        e.preventDefault();
+        alert('Por favor ingrese un monto válido mayor a 0');
+        return false;
+    }
+    
+    if (!comision || comision < 0) {
+        e.preventDefault();
+        alert('Por favor ingrese una comisión válida');
+        return false;
+    }
+    
+    if (!medio) {
+        e.preventDefault();
+        alert('Por favor seleccione un medio de pago');
+        return false;
+    }
+    
+    // Confirmar antes de enviar
+    if (!confirm('¿Está seguro de guardar los cambios en esta operación?')) {
+        e.preventDefault();
+        return false;
+    }
+});
+</script>
+{% endblock %} 

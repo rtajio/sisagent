@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Operaciones - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Mostrar comisión del día si se accede desde dashboard admin -->
+    {% if request.args.get('sucursal_id') and current_user.es_admin %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Comisión del Día - {{ sucursal_nombre if sucursal_nombre else 'Sucursal' }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                S/ {{ "%.2f"|format(comision_dia) if comision_dia is defined else 0.00 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exchange-alt me-2"></i>
+                        Registro de Operaciones
+                        {% if request.args.get('sucursal_id') and current_user.es_admin %}
+                        - {{ sucursal_nombre if sucursal_nombre else 'Sucursal' }}
+                        {% endif %}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Formulario de Nueva Operación -->
+                    <form method="POST" action="{{ url_for('registrar_operacion') }}" class="mb-4">
+                        <div class="row">
+                            <div class="col-md-2">
+                                <label for="monto" class="form-label">Monto (S/)</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="monto" 
+                                       name="monto" 
+                                       step="0.01" 
+                                       min="0" 
+                                       required>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="comision" class="form-label">Comisión (S/)</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="comision" 
+                                       name="comision" 
+                                       step="0.01" 
+                                       min="0" 
+                                       required>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="medio" class="form-label">Medio de Pago</label>
+                                <select class="form-select" id="medio" name="medio" required>
+                                    <option value="">Seleccionar...</option>
+                                    {% for medio in medios_pago %}
+                                        <option value="{{ medio.nombre_abreviado }}">{{ medio.nombre_abreviado }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                {% if current_user.es_admin %}
+                                <label for="sucursal_id" class="form-label">Sucursal</label>
+                                <select class="form-select" id="sucursal_id" name="sucursal_id" required>
+                                    <option value="">Seleccionar...</option>
+                                    {% for sucursal in sucursales %}
+                                        <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% endif %}
+                            </div>
+
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-success" id="btnRegistrar">
+                                    <i class="fas fa-plus me-2"></i>
+                                    Registrar Operación
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Tabla de Operaciones -->
+
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Hora</th>
+                                    <th>Monto</th>
+                                    <th>Comisión</th>
+                                    <th>Medio</th>
+                                    {% if current_user.es_admin %}
+                                    <th>Usuario</th>
+                                    <th>Sucursal</th>
+                                    {% endif %}
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for operacion in operaciones %}
+                                <tr id="fila-{{ operacion.id }}">
+                                    <td>{{ operacion.id }}</td>
+                                    <td>{{ format_peru_time(operacion.hora) }}</td>
+                                    <td class="font-weight-bold" id="monto-{{ operacion.id }}">
+                                        S/ {{ "%.2f"|format(operacion.monto) }}
+                                    </td>
+                                    <td class="text-success font-weight-bold" id="comision-{{ operacion.id }}">
+                                        S/ {{ "%.2f"|format(operacion.comision) }}
+                                    </td>
+                                    <td>
+                                        {% set medio_obj = medios_pago|selectattr('nombre_abreviado', 'equalto', operacion.medio)|first %}
+                                        <span class="badge bg-primary">{{ medio_obj.nombre_completo if medio_obj else operacion.medio }}</span>
+                                    </td>
+                                    {% if current_user.es_admin %}
+                                    <td>{{ operacion.usuario.nombre_completo }}</td>
+                                    <td>{{ operacion.sucursal.nombre if operacion.sucursal else 'Sin sucursal' }}</td>
+                                    {% endif %}
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit({{ operacion.id }}, '{{ format_peru_time(operacion.hora) }}', {{ operacion.monto }}, {{ operacion.comision }}, '{{ operacion.medio }}', '{{ operacion.usuario.nombre_completo }}')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <form method="POST" action="{{ url_for('eliminar_operacion', operacion_id=operacion.id) }}" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que quieres eliminar esta operación?')">
+                                                <button type="submit" class="btn btn-outline-danger" title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Edición de Operación -->
+<div class="modal fade" id="modalEdicion" tabindex="-1" aria-labelledby="modalEdicionLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalEdicionLabel">
+                    <i class="fas fa-edit me-2"></i>
+                    Editar Operación
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" id="formEdicion">
+                    <input type="hidden" id="operacionIdModal" name="operacion_id">
+                    
+                    <div class="mb-3">
+                        <label for="montoModal" class="form-label">Monto (S/)</label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="montoModal" 
+                               name="monto" 
+                               step="0.01" 
+                               min="0" 
+                               required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="comisionModal" class="form-label">Comisión (S/)</label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="comisionModal" 
+                               name="comision" 
+                               step="0.01" 
+                               min="0" 
+                               required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="medioModal" class="form-label">Medio de Pago</label>
+                        <select class="form-select" id="medioModal" name="medio" required>
+                            <option value="">Seleccionar...</option>
+                            {% for medio in medios_pago %}
+                                <option value="{{ medio.nombre_abreviado }}">{{ medio.nombre_abreviado }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>
+                    Cancelar
+                </button>
+                <button type="submit" form="formEdicion" class="btn btn-primary">
+                    <i class="fas fa-save me-2"></i>
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Array con los medios de pago de la base de datos
+const mediosPago = [
+    {% for medio in medios_pago %}
+        { valor: '{{ medio.nombre_abreviado }}', nombre: '{{ medio.nombre_abreviado }}' },
+    {% endfor %}
+];
+
+function toggleEdit(id, hora, monto, comision, medio, usuarioOriginal) {
+    const fila = document.getElementById(`fila-${id}`);
+    const isAdmin = {{ 'true' if current_user.es_admin else 'false' }};
+    
+    let filaHTML = `
+        <td>${id}</td>
+        <td>${hora}</td>
+        <td><input type='number' id='edit-monto-${id}' value='${monto}' step='0.01' min='0' class='form-control form-control-sm'></td>
+        <td><input type='number' id='edit-comision-${id}' value='${comision}' step='0.01' min='0' class='form-control form-control-sm'></td>
+        <td>
+            <select id='edit-medio-${id}' class='form-select form-select-sm'>
+                ${mediosPago.map(m => `<option value='${m.valor}' ${medio===m.valor?'selected':''}>${m.nombre}</option>`).join('')}
+            </select>
+        </td>
+    `;
+    
+    if (isAdmin) {
+        filaHTML += `
+            <td>${usuarioOriginal}</td>
+            <td>Sin sucursal</td>
+        `;
+    }
+    
+    filaHTML += `
+        <td>
+            <div class='btn-group btn-group-sm' role='group'>
+                <button type='button' class='btn btn-success' onclick='guardarCambios(${id}, "${usuarioOriginal}")'><i class='fas fa-save'></i></button>
+                <button type='button' class='btn btn-secondary' onclick='cancelarEdicion(${id}, ${monto}, ${comision}, "${medio}", "${usuarioOriginal}")'><i class='fas fa-times'></i></button>
+            </div>
+        </td>
+    `;
+    
+    fila.innerHTML = filaHTML;
+}
+
+function guardarCambios(id, usuarioOriginal) {
+    const monto = document.getElementById(`edit-monto-${id}`).value;
+    const comision = document.getElementById(`edit-comision-${id}`).value;
+    const medio = document.getElementById(`edit-medio-${id}`).value;
+    
+    fetch(`/api/operaciones/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monto, comision, medio })
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Operación actualizada exitosamente', 'success');
+            // Actualizar la fila inmediatamente sin recargar
+            actualizarFila(id, data.monto, data.comision, data.medio, usuarioOriginal);
+        } else {
+            showNotification('Error al actualizar la operación', 'error');
+        }
+    })
+    .catch(() => showNotification('Error de red al actualizar la operación', 'error'));
+}
+
+function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
+    const fila = document.getElementById(`fila-${id}`);
+    const hora = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const isAdmin = {{ 'true' if current_user.es_admin else 'false' }};
+    
+    // Obtener el nombre completo del medio
+    const medioObj = mediosPago.find(m => m.valor === medio);
+    const medioNombre = medioObj ? medioObj.nombre : medio;
+    
+    let filaHTML = `
+        <td>${id}</td>
+        <td>${hora}</td>
+        <td class="font-weight-bold" id="monto-${id}">S/ ${parseFloat(monto).toFixed(2)}</td>
+        <td class="text-success font-weight-bold" id="comision-${id}">S/ ${parseFloat(comision).toFixed(2)}</td>
+        <td><span class="badge bg-primary">${medioNombre}</span></td>
+    `;
+    
+    if (isAdmin) {
+        filaHTML += `
+            <td>${usuarioOriginal}</td>
+            <td>Sin sucursal</td>
+        `;
+    }
+    
+    filaHTML += `
+        <td>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit(${id}, '${hora}', ${monto}, ${comision}, '${medio}', '${usuarioOriginal}')">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <form method="POST" action="/operaciones/${id}/eliminar" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que quieres eliminar esta operación?')">
+                    <button type="submit" class="btn btn-outline-danger" title="Eliminar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </td>
+    `;
+    
+    fila.innerHTML = filaHTML;
+}
+
+function cancelarEdicion(id, monto, comision, medio, usuarioOriginal) {
+    location.reload();
+}
+</script>
+{% endblock %} 

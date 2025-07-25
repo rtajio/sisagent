@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Gestionar Usuarios - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-users me-2"></i>
+        Gestionar Usuarios
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('crear_usuario') }}" class="btn btn-primary" style="background: linear-gradient(45deg, var(--primary-color), var(--accent-color)); border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+            <i class="fas fa-user-plus me-1"></i>
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <span>NUEVO</span>
+                <span>USUARIO</span>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="card shadow mb-4">
+    <div class="card-header py-3" style="background: linear-gradient(135deg, var(--primary-color), var(--accent-color));">
+        <h6 class="m-0 font-weight-bold text-white">
+            <i class="fas fa-list me-2"></i>
+            Lista de Usuarios
+        </h6>
+    </div>
+    <div class="card-body">
+        {% if usuarios %}
+        <div class="table-responsive">
+            <table class="table table-bordered" width="100%" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Usuario</th>
+                        <th>Nombre Completo</th>
+                        <th>Email</th>
+                        <th>Sucursal</th>
+                        <th>Rol</th>
+                        <th>Estado</th>
+                        <th>Fecha Creación</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for usuario in usuarios %}
+                    <tr>
+                        <td>{{ usuario.id }}</td>
+                        <td class="font-weight-bold">{{ usuario.username }}</td>
+                        <td>{{ usuario.nombre_completo }}</td>
+                        <td>{{ usuario.email }}</td>
+                        <td>
+                            {% if usuario.sucursal %}
+                            <span class="badge bg-info">{{ usuario.sucursal.nombre }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Sin sucursal</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if usuario.es_admin %}
+                            <span class="badge bg-danger">Administrador</span>
+                            {% else %}
+                            <span class="badge bg-primary">Usuario</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if usuario.activo %}
+                            <span class="badge bg-success">Activo</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactivo</span>
+                            {% endif %}
+                        </td>
+                                                            <td>{{ format_peru_datetime_short(usuario.created_at) }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}" 
+                                   class="btn btn-outline-warning" 
+                                   title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% if usuario.username != 'admin' and usuario.id != current_user.id %}
+                                <form method="POST" action="{{ url_for('eliminar_usuario', usuario_id=usuario.id) }}" 
+                                      style="display: inline;">
+                                    <button type="submit" 
+                                            class="btn btn-outline-danger" 
+                                            title="Eliminar"
+                                            onclick="return confirm('¿Está seguro de que desea eliminar el usuario \"{{ usuario.username }}\"? Esta acción no se puede deshacer.')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+            <p class="text-muted">No hay usuarios registrados</p>
+            <a href="{{ url_for('crear_usuario') }}" class="btn btn-primary">
+                <i class="fas fa-user-plus me-2"></i>
+                Crear Primer Usuario
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmarEliminar(usuarioId, username) {
+    if (confirm(`¿Está seguro de que desea eliminar al usuario "${username}"? Esta acción no se puede deshacer.`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/admin/usuarios/${usuarioId}/eliminar`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+
+</script>
+{% endblock %} 
