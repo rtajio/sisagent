@@ -1,16 +1,24 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
-import pytz
+#!/usr/bin/env python3
+"""
+SISAGENT - Sistema de Gestión de Operaciones Bancarias
+"""
+
 import os
-from dotenv import load_dotenv
-from sqlalchemy import extract
+import sys
+from datetime import datetime, timedelta
+from decimal import Decimal
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+import pytz
 
-load_dotenv()
+print("🚀 SISAGENT Flask arrancando...")
 
+# Configuración de la aplicación Flask
 app = Flask(__name__)
+
+print("✅ Flask app creada")
 
 # Configuración para Railway
 if os.environ.get('DATABASE_URL'):
@@ -28,6 +36,8 @@ else:
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+print("✅ Configuración de base de datos completada")
+
 # Configurar CORS para permitir peticiones desde cualquier origen en producción
 from flask_cors import CORS
 CORS(app, origins=['*'])
@@ -37,8 +47,12 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+print("✅ SQLAlchemy y LoginManager configurados")
+
 # Configuración de zona horaria (UTC-5 para Perú)
 peru_tz = pytz.timezone('America/Lima')
+
+print("✅ Configuración de zona horaria completada")
 
 # Medios de pago se obtienen dinámicamente de la base de datos
 
@@ -1327,4 +1341,6 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     # En producción, no usar debug mode
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    app.run(host='0.0.0.0', debug=debug_mode, use_reloader=False, port=port) 
+    app.run(host='0.0.0.0', debug=debug_mode, use_reloader=False, port=port)
+
+print("🎉 SISAGENT Flask cargado completamente - Listo para producción!") 

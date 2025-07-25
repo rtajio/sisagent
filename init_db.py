@@ -5,7 +5,6 @@ Script de inicialización de base de datos para Railway
 import os
 import sys
 import time
-from sqlalchemy import text
 
 def debug_database_config():
     """Diagnóstico de configuración de base de datos"""
