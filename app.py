@@ -13,6 +13,13 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import generate_password_hash, check_password_hash
 import pytz
 
+# Configuración de zona horaria (UTC-5 para Perú)
+peru_tz = pytz.timezone('America/Lima')
+
+def get_peru_time():
+    """Obtiene la hora actual en zona horaria de Perú"""
+    return datetime.now(peru_tz)
+
 print("🚀 SISAGENT Flask arrancando...")
 print("🔄 Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
 print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
@@ -20,6 +27,7 @@ print("🗑️ REMOVED: Botón de convertir en administrador eliminado de accion
 print("✏️ FIX: Permitir editar nombre de usuario en gestión de usuarios")
 print("🔧 FIX: Corregir edición de operaciones - problema con columnas de usuario")
 print("🕐 FIX: Corregir zona horaria - usar hora de Perú (UTC-5) en lugar de UTC")
+print("🔧 FIX: Corregir error de orden - función get_peru_time definida antes de usar")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -54,13 +62,6 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 print("✅ SQLAlchemy y LoginManager configurados")
-
-# Configuración de zona horaria (UTC-5 para Perú)
-peru_tz = pytz.timezone('America/Lima')
-
-def get_peru_time():
-    """Obtiene la hora actual en zona horaria de Perú"""
-    return datetime.now(peru_tz)
 
 print("✅ Configuración de zona horaria completada")
 
