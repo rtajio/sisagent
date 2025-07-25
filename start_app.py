@@ -39,25 +39,15 @@ def main():
     """Función principal"""
     print("🚀 Iniciando SISAGENT...")
     
-    # Verificar si la base de datos existe
-    if not check_database_exists():
-        print("📊 Base de datos no encontrada, inicializando...")
-        os.system("python init_db.py")
-    else:
-        print("📊 Base de datos encontrada")
-        
-        # Hacer respaldo automático antes de cualquier operación
-        print("🛡️ Creando respaldo automático de la base de datos...")
-        backup_path = backup_database()
-        if backup_path:
-            print(f"✅ Respaldo creado: {backup_path}")
-        
-        # Verificar si ya está inicializada
-        if not check_database_initialized():
-            print("🔧 Base de datos no inicializada, ejecutando inicialización...")
-            os.system("python init_db.py")
-        else:
-            print("✅ Base de datos ya inicializada, saltando inicialización")
+    # Hacer respaldo automático antes de cualquier operación
+    print("🛡️ Creando respaldo automático de la base de datos...")
+    backup_path = backup_database()
+    if backup_path:
+        print(f"✅ Respaldo creado: {backup_path}")
+    
+    # Usar inicialización SEGURA que preserva datos existentes
+    print("🔧 Ejecutando inicialización SEGURA (preserva datos existentes)...")
+    os.system("python init_db_safe.py")
     
     print("🎯 Iniciando aplicación con Gunicorn...")
     
