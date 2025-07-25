@@ -14,6 +14,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pytz
 
 print("🚀 SISAGENT Flask arrancando...")
+print("🔄 Actualización Railway - " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
