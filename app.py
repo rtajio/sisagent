@@ -241,15 +241,15 @@ def admin_dashboard():
     comisiones_hoy = []
     comisiones_mes = {}
     
-    # Obtener todas las comisiones diarias en una sola consulta
+    # Obtener todas las comisiones diarias desde Operacion (más confiable)
     comisiones_diarias = db.session.query(
-        ComisionDiaria.sucursal_id,
-        db.func.sum(ComisionDiaria.total_comision).label('total')
+        Operacion.sucursal_id,
+        db.func.sum(Operacion.comision).label('total')
     ).filter(
-        ComisionDiaria.fecha == hoy
-    ).group_by(ComisionDiaria.sucursal_id).all()
+        db.func.date(Operacion.hora) == hoy
+    ).group_by(Operacion.sucursal_id).all()
     
-    # Obtener todas las comisiones mensuales en una sola consulta
+    # Obtener todas las comisiones mensuales desde Operacion
     comisiones_mensuales = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
