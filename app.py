@@ -485,7 +485,14 @@ def operaciones():
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
 
-    operaciones = query.join(Usuario).join(Sucursal).order_by(Operacion.hora.desc()).all()
+    # Usar left join para incluir operaciones sin sucursal asignada
+    operaciones = query.outerjoin(Usuario).outerjoin(Sucursal).order_by(Operacion.hora.desc()).all()
+    
+    # Debug: imprimir información de las operaciones
+    print(f"🔍 Operaciones encontradas: {len(operaciones)}")
+    for op in operaciones:
+        print(f"  - ID: {op.id}, Monto: {op.monto}, Medio: {op.medio}, Usuario: {op.usuario_id}, Sucursal: {op.sucursal_id}")
+    
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
     # Calcular comisión del día si se accede desde dashboard admin
