@@ -582,7 +582,7 @@
     </div>
     
     <!-- Footer -->
-    <footer class="footer mt-auto py-3" style="background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); color: white; margin-top: 3rem;">
+    <footer class="footer mt-auto py-3" style="background: linear-gradient(135deg, #2196f3, #1976d2); color: white; margin-top: 3rem;">
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-md-6 text-center text-md-start">
@@ -596,7 +596,7 @@
                         <i class="fas fa-copyright me-1"></i>
                         <strong>Todos los derechos reservados</strong>
                         <span class="ms-2">|</span>
-                        <span class="ms-2" id="current-year">2025</span>
+                        <span class="ms-2">2025</span>
                     </p>
                 </div>
             </div>
@@ -1217,17 +1217,6 @@
     });
 </script>
 {% endif %}
-
-<!-- Script para actualizar el año en el footer -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Actualizar el año en el footer
-    const yearElement = document.getElementById('current-year');
-    if (yearElement) {
-        yearElement.textContent = new Date().getFullYear();
-    }
-});
-</script>
 
 </body>
 </html> 
