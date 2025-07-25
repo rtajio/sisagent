@@ -915,9 +915,10 @@ def api_reportes_operaciones():
 @app.route('/api/reportes/exportar/<formato>')
 @login_required
 def exportar_reporte(formato):
+    if not current_user.es_admin:
+        return 'Acceso denegado: solo administradores pueden exportar reportes.', 403
+    
     try:
-            return 'Acceso denegado: solo administradores pueden exportar reportes.', 403
-        
         # Obtener parámetros de filtro
         fecha_inicio = request.args.get('fecha_inicio')
         fecha_fin = request.args.get('fecha_fin')
@@ -1015,8 +1016,8 @@ def exportar_reporte(formato):
                     str(idx),
                     op.hora.strftime('%d/%m/%Y'),
                     op.hora.strftime('%H:%M:%S'),
-                    f"S/ {float(op.monto):.2f}",
-                    f"S/ {float(op.comision):.2f}",
+                    f'S/. {float(op.monto):.2f}',
+                    f'S/. {float(op.comision):.2f}',
                     get_medio_nombre(op.medio),
                     op.usuario.nombre_completo,
                     op.sucursal.nombre if op.sucursal else 'Sin sucursal'
@@ -1045,10 +1046,9 @@ def exportar_reporte(formato):
                 headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
             )
         else:
-            return f'Formato no válido: {formato}', 400
+            return 'Formato no soportado', 400
     except Exception as e:
-        import traceback
-        return f'<pre>{traceback.format_exc()}</pre>', 500
+        return f'Error al generar reporte: {str(e)}', 500
 
 
 # API para actualizar operaciones (edición inline)
