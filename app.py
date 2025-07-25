@@ -29,6 +29,7 @@ print("🔧 FIX: Corregir edición de operaciones - problema con columnas de usu
 print("🕐 FIX: Corregir zona horaria - usar hora de Perú (UTC-5) en lugar de UTC")
 print("🔧 FIX: Corregir error de orden - función get_peru_time definida antes de usar")
 print("🔧 FIX: Usar lambda functions para zona horaria en modelos - evitar errores de función")
+print("🔧 FIX: Corregir descuadre en edición de operaciones - mostrar columnas solo para admin")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)

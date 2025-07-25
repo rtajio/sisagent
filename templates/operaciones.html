@@ -232,7 +232,9 @@ const mediosPago = [
 
 function toggleEdit(id, hora, monto, comision, medio, usuarioOriginal) {
     const fila = document.getElementById(`fila-${id}`);
-    fila.innerHTML = `
+    const isAdmin = {{ 'true' if current_user.es_admin else 'false' }};
+    
+    let filaHTML = `
         <td>${id}</td>
         <td>${hora}</td>
         <td><input type='number' id='edit-monto-${id}' value='${monto}' step='0.01' min='0' class='form-control form-control-sm'></td>
@@ -242,8 +244,16 @@ function toggleEdit(id, hora, monto, comision, medio, usuarioOriginal) {
                 ${mediosPago.map(m => `<option value='${m.valor}' ${medio===m.valor?'selected':''}>${m.nombre}</option>`).join('')}
             </select>
         </td>
-        <td>${usuarioOriginal}</td>
-        <td>Sin sucursal</td>
+    `;
+    
+    if (isAdmin) {
+        filaHTML += `
+            <td>${usuarioOriginal}</td>
+            <td>Sin sucursal</td>
+        `;
+    }
+    
+    filaHTML += `
         <td>
             <div class='btn-group btn-group-sm' role='group'>
                 <button type='button' class='btn btn-success' onclick='guardarCambios(${id}, "${usuarioOriginal}")'><i class='fas fa-save'></i></button>
@@ -251,6 +261,8 @@ function toggleEdit(id, hora, monto, comision, medio, usuarioOriginal) {
             </div>
         </td>
     `;
+    
+    fila.innerHTML = filaHTML;
 }
 
 function guardarCambios(id, usuarioOriginal) {
@@ -279,19 +291,28 @@ function guardarCambios(id, usuarioOriginal) {
 function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
     const fila = document.getElementById(`fila-${id}`);
     const hora = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const isAdmin = {{ 'true' if current_user.es_admin else 'false' }};
     
     // Obtener el nombre completo del medio
     const medioObj = mediosPago.find(m => m.valor === medio);
     const medioNombre = medioObj ? medioObj.nombre : medio;
     
-    fila.innerHTML = `
+    let filaHTML = `
         <td>${id}</td>
         <td>${hora}</td>
         <td class="font-weight-bold" id="monto-${id}">S/ ${parseFloat(monto).toFixed(2)}</td>
         <td class="text-success font-weight-bold" id="comision-${id}">S/ ${parseFloat(comision).toFixed(2)}</td>
         <td><span class="badge bg-primary">${medioNombre}</span></td>
-        <td>${usuarioOriginal}</td>
-        <td>Sin sucursal</td>
+    `;
+    
+    if (isAdmin) {
+        filaHTML += `
+            <td>${usuarioOriginal}</td>
+            <td>Sin sucursal</td>
+        `;
+    }
+    
+    filaHTML += `
         <td>
             <div class="btn-group btn-group-sm" role="group">
                 <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit(${id}, '${hora}', ${monto}, ${comision}, '${medio}', '${usuarioOriginal}')">
@@ -305,6 +326,8 @@ function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
             </div>
         </td>
     `;
+    
+    fila.innerHTML = filaHTML;
 }
 
 function cancelarEdicion(id, monto, comision, medio, usuarioOriginal) {
