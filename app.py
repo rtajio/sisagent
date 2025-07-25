@@ -539,6 +539,42 @@ def eliminar_usuario(usuario_id):
     
     return redirect(url_for('admin_usuarios'))
 
+@app.route('/admin/usuarios/<int:usuario_id>/cambiar-rol', methods=['POST'])
+@login_required
+def admin_cambiar_rol_usuario(usuario_id):
+    if not current_user.es_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado. Solo los administradores pueden cambiar roles.'})
+    
+    usuario = Usuario.query.get_or_404(usuario_id)
+    
+    # No permitir cambiar el rol del usuario admin principal
+    if usuario.username == 'admin':
+        return jsonify({'success': False, 'message': 'No se puede cambiar el rol del usuario administrador principal.'})
+    
+    # No permitir cambiar su propio rol
+    if usuario.id == current_user.id:
+        return jsonify({'success': False, 'message': 'No puedes cambiar tu propio rol.'})
+    
+    data = request.get_json()
+    nuevo_rol = data.get('rol')
+    
+    if nuevo_rol not in ['usuario', 'supervisor']:
+        return jsonify({'success': False, 'message': 'Rol no válido'})
+    
+    try:
+        if nuevo_rol == 'supervisor':
+            usuario.es_supervisor = True
+            usuario.es_admin = False
+        else:
+            usuario.es_supervisor = False
+            usuario.es_admin = False
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Usuario convertido a {nuevo_rol} exitosamente'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Error al cambiar el rol del usuario'})
+
 @app.route('/admin/perfil', methods=['GET', 'POST'])
 @login_required
 def editar_perfil_admin():
