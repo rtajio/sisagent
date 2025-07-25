@@ -15,6 +15,7 @@ import pytz
 
 print("🚀 SISAGENT Flask arrancando...")
 print("🔄 Actualización Railway - " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+print("🔧 FIX: Eliminación de sucursales mejorada con mejor manejo de errores")
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
@@ -299,26 +300,47 @@ def editar_sucursal(sucursal_id):
 @app.route('/admin/sucursales/<int:sucursal_id>/eliminar', methods=['POST'])
 @login_required
 def eliminar_sucursal(sucursal_id):
-    if not current_user.es_admin:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('dashboard'))
-    
-    sucursal = Sucursal.query.get_or_404(sucursal_id)
-    
-    # Verificar si hay usuarios asignados a esta sucursal
-    if Usuario.query.filter_by(sucursal_id=sucursal_id).first():
-        flash('No se puede eliminar una sucursal que tiene usuarios asignados', 'error')
+    try:
+        if not current_user.es_admin:
+            flash('Acceso denegado', 'error')
+            return redirect(url_for('dashboard'))
+        
+        sucursal = Sucursal.query.get_or_404(sucursal_id)
+        
+        # Verificar si hay usuarios asignados a esta sucursal
+        usuarios_asignados = Usuario.query.filter_by(sucursal_id=sucursal_id).count()
+        if usuarios_asignados > 0:
+            flash(f'No se puede eliminar la sucursal "{sucursal.nombre}" porque tiene {usuarios_asignados} usuario(s) asignado(s)', 'error')
+            return redirect(url_for('admin_sucursales'))
+        
+        # Verificar si hay operaciones en esta sucursal
+        operaciones_count = Operacion.query.filter_by(sucursal_id=sucursal_id).count()
+        if operaciones_count > 0:
+            flash(f'No se puede eliminar la sucursal "{sucursal.nombre}" porque tiene {operaciones_count} operación(es) registrada(s)', 'error')
+            return redirect(url_for('admin_sucursales'))
+        
+        # Verificar si hay comisiones asociadas
+        comisiones_diarias = ComisionDiaria.query.filter_by(sucursal_id=sucursal_id).count()
+        comisiones_mensuales = ComisionMensual.query.filter_by(sucursal_id=sucursal_id).count()
+        
+        if comisiones_diarias > 0 or comisiones_mensuales > 0:
+            flash(f'No se puede eliminar la sucursal "{sucursal.nombre}" porque tiene comisiones registradas', 'error')
+            return redirect(url_for('admin_sucursales'))
+        
+        # Eliminar medios de pago asociados a la sucursal
+        MedioSucursal.query.filter_by(sucursal_id=sucursal_id).delete()
+        
+        # Eliminar la sucursal
+        db.session.delete(sucursal)
+        db.session.commit()
+        
+        flash(f'Sucursal "{sucursal.nombre}" eliminada exitosamente', 'success')
         return redirect(url_for('admin_sucursales'))
-    
-    # Verificar si hay operaciones en esta sucursal
-    if Operacion.query.filter_by(sucursal_id=sucursal_id).first():
-        flash('No se puede eliminar una sucursal que tiene operaciones registradas', 'error')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar la sucursal: {str(e)}', 'error')
         return redirect(url_for('admin_sucursales'))
-    
-    db.session.delete(sucursal)
-    db.session.commit()
-    flash('Sucursal eliminada exitosamente', 'success')
-    return redirect(url_for('admin_sucursales'))
 
 # Gestión de usuarios (solo admin)
 @app.route('/admin/usuarios')
