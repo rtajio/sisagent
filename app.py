@@ -301,14 +301,19 @@ def user_dashboard():
     if current_user.es_admin:
         return redirect(url_for('admin_dashboard'))
     
+    # Usar la misma lógica de timezone que el registro de operaciones
+    peru_tz = pytz.timezone('America/Lima')
     hoy = datetime.now(peru_tz).date()
+    
     # Calcular la comisión diaria SOLO de las operaciones del usuario actual
+    # Usar la misma lógica de filtro que en registrar_operacion
     total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
         Operacion.usuario_id == current_user.id,
         db.func.date(Operacion.hora) == hoy
     ).scalar() or 0
     
     # Operaciones de hoy para el resumen
+    # Usar la misma lógica de filtro que en registrar_operacion
     operaciones_hoy = Operacion.query.filter_by(
         usuario_id=current_user.id
     ).filter(
@@ -617,6 +622,8 @@ def operaciones():
     else:
         query = Operacion.query.filter(Operacion.usuario_id == current_user.id)
 
+    # Usar la misma lógica de timezone que el registro de operaciones
+    peru_tz = pytz.timezone('America/Lima')
     hoy = datetime.now(peru_tz).date()
 
     if fecha:
@@ -628,6 +635,7 @@ def operaciones():
             query = query.filter(db.func.date(Operacion.hora) == fecha)
     
     # Solo aplicar filtro de fecha si no es admin accediendo desde dashboard con sucursal_id
+    # Usar la misma lógica de timezone que el registro de operaciones
     if (not fecha and not current_user.es_admin) or (fecha and not (current_user.es_admin and request.args.get('sucursal_id'))):
         query = query.filter(db.func.date(Operacion.hora) == hoy)
     if medio:
