@@ -1619,8 +1619,102 @@ def toggle_medio_sucursal(sucursal_id):
     db.session.commit()
     return jsonify({'success': True, 'activo': ms.activo})
 
-
-
+# Debug temporal para diagnosticar problema de filtro de fecha
+@app.route('/debug/filtro-fecha')
+@login_required
+def debug_filtro_fecha():
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    # Simular el filtro exacto que está fallando
+    fecha_inicio = "2025-07-26"
+    fecha_fin = "2025-07-26"
+    sucursal_id = "2"  # TECKNOVATION
+    
+    print(f"DEBUG TEMPORAL: Parámetros recibidos:")
+    print(f"DEBUG TEMPORAL: - fecha_inicio: '{fecha_inicio}'")
+    print(f"DEBUG TEMPORAL: - fecha_fin: '{fecha_fin}'")
+    print(f"DEBUG TEMPORAL: - sucursal_id: '{sucursal_id}'")
+    
+    query = Operacion.query
+    
+    # Procesar fechas como en la función de reportes
+    if fecha_inicio:
+        fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+        inicio_dia_peru = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
+        inicio_dia_utc_naive = inicio_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+        query = query.filter(Operacion.hora >= inicio_dia_utc_naive)
+        
+        print(f"DEBUG TEMPORAL: Fecha inicio procesada:")
+        print(f"DEBUG TEMPORAL: - fecha_inicio_obj: {fecha_inicio_obj}")
+        print(f"DEBUG TEMPORAL: - inicio_dia_peru: {inicio_dia_peru}")
+        print(f"DEBUG TEMPORAL: - inicio_dia_utc_naive: {inicio_dia_utc_naive}")
+    
+    if fecha_fin:
+        fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+        fin_dia_peru = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
+        fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+        query = query.filter(Operacion.hora <= fin_dia_utc_naive)
+        
+        print(f"DEBUG TEMPORAL: Fecha fin procesada:")
+        print(f"DEBUG TEMPORAL: - fecha_fin_obj: {fecha_fin_obj}")
+        print(f"DEBUG TEMPORAL: - fin_dia_peru: {fin_dia_peru}")
+        print(f"DEBUG TEMPORAL: - fin_dia_utc_naive: {fin_dia_utc_naive}")
+    
+    if sucursal_id and sucursal_id.strip():
+        try:
+            sucursal_id_int = int(sucursal_id)
+            query = query.filter(Operacion.sucursal_id == sucursal_id_int)
+            print(f"DEBUG TEMPORAL: Filtro sucursal aplicado: {sucursal_id_int}")
+        except ValueError:
+            print(f"DEBUG TEMPORAL: Error al convertir sucursal_id '{sucursal_id}' a integer")
+    
+    # Ejecutar query
+    operaciones = query.order_by(Operacion.hora.desc()).all()
+    
+    print(f"DEBUG TEMPORAL: Operaciones encontradas: {len(operaciones)}")
+    
+    # Agrupar por fecha
+    operaciones_por_fecha = {}
+    for op in operaciones:
+        fecha = op.hora.date()
+        if fecha not in operaciones_por_fecha:
+            operaciones_por_fecha[fecha] = []
+        operaciones_por_fecha[fecha].append(op)
+    
+    # Preparar datos para respuesta
+    resultado = {
+        'parametros': {
+            'fecha_inicio': fecha_inicio,
+            'fecha_fin': fecha_fin,
+            'sucursal_id': sucursal_id
+        },
+        'rangos_tiempo': {
+            'inicio_dia_utc_naive': str(inicio_dia_utc_naive) if fecha_inicio else None,
+            'fin_dia_utc_naive': str(fin_dia_utc_naive) if fecha_fin else None
+        },
+        'total_operaciones': len(operaciones),
+        'operaciones_por_fecha': {}
+    }
+    
+    for fecha in sorted(operaciones_por_fecha.keys(), reverse=True):
+        ops = operaciones_por_fecha[fecha]
+        total_fecha = sum(float(op.comision) for op in ops)
+        resultado['operaciones_por_fecha'][str(fecha)] = {
+            'cantidad': len(ops),
+            'total_comision': total_fecha,
+            'operaciones': [
+                {
+                    'id': op.id,
+                    'hora': str(op.hora),
+                    'fecha': str(op.hora.date()),
+                    'comision': float(op.comision)
+                }
+                for op in ops[:5]  # Solo las primeras 5
+            ]
+        }
+    
+    return jsonify(resultado)
 
 if __name__ == '__main__':
     try:
