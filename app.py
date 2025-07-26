@@ -1085,8 +1085,15 @@ def api_reportes_operaciones():
         fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
         query = query.filter(Operacion.hora <= fin_dia_utc_naive)
     
-    if sucursal_id:
-        query = query.filter(Operacion.sucursal_id == sucursal_id)
+    if sucursal_id and sucursal_id.strip():
+        # Convertir sucursal_id de string a integer
+        try:
+            sucursal_id_int = int(sucursal_id)
+            query = query.filter(Operacion.sucursal_id == sucursal_id_int)
+        except ValueError:
+            # Si no se puede convertir a integer, ignorar el filtro
+            print(f"DEBUG REPORTE: Error al convertir sucursal_id '{sucursal_id}' a integer")
+    
     if medio:
         query = query.filter(Operacion.medio == medio)
     
@@ -1165,8 +1172,14 @@ def exportar_reporte(formato):
             fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
             query = query.filter(Operacion.hora <= fin_dia_utc_naive)
         
-        if sucursal_id:
-            query = query.filter(Operacion.sucursal_id == sucursal_id)
+        if sucursal_id and sucursal_id.strip():
+            # Convertir sucursal_id de string a integer
+            try:
+                sucursal_id_int = int(sucursal_id)
+                query = query.filter(Operacion.sucursal_id == sucursal_id_int)
+            except ValueError:
+                # Si no se puede convertir a integer, ignorar el filtro
+                print(f"DEBUG EXPORT: Error al convertir sucursal_id '{sucursal_id}' a integer")
         if medio:
             query = query.filter(Operacion.medio == medio)
         
