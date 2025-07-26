@@ -88,7 +88,7 @@
             <div class="card-header py-3 d-flex justify-content-between align-items-center">
                 <h6 class="m-0 font-weight-bold text-primary">
                     <i class="fas fa-clock me-2"></i>
-                    Operaciones Recientes - Hoy
+                    Mis Operaciones Recientes
                 </h6>
                 <a href="{{ url_for('operaciones') }}" class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-eye me-1"></i>
@@ -96,7 +96,7 @@
                 </a>
             </div>
             <div class="card-body">
-                {% if operaciones_hoy %}
+                {% if operaciones_usuario %}
                 <div class="table-responsive">
                     <table class="table table-bordered" width="100%" cellspacing="0">
                         <thead>
@@ -109,10 +109,10 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for operacion in operaciones_hoy %}
+                            {% for operacion in operaciones_usuario %}
                             <tr>
                                 <td>{{ loop.index }}</td>
-                                                                    <td>{{ format_peru_time(operacion.hora) }}</td>
+                                <td>{{ format_peru_time(operacion.hora) }}</td>
                                 <td class="font-weight-bold">S/ {{ "%.2f"|format(operacion.monto) }}</td>
                                 <td class="text-success font-weight-bold">S/ {{ "%.2f"|format(operacion.comision) }}</td>
                                 <td><span class="badge bg-primary">{{ operacion.medio }}</span></td>
@@ -124,7 +124,7 @@
                 {% else %}
                 <div class="text-center py-4">
                     <i class="fas fa-clock fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">No hay operaciones registradas hoy</p>
+                    <p class="text-muted">No hay operaciones registradas</p>
                 </div>
                 {% endif %}
             </div>
