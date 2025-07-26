@@ -303,7 +303,8 @@ def user_dashboard():
     
     # Usar la misma lógica de timezone que el registro de operaciones
     peru_tz = pytz.timezone('America/Lima')
-    hoy = datetime.now(peru_tz).date()
+    ahora = datetime.now(peru_tz)
+    hoy = ahora.date()
     
     # Calcular la comisión diaria SOLO de las operaciones del usuario actual
     # Usar la misma lógica de filtro que en registrar_operacion
@@ -319,6 +320,13 @@ def user_dashboard():
     ).filter(
         db.func.date(Operacion.hora) == hoy
     ).order_by(Operacion.hora.desc()).all()
+    
+    # Debug: Mostrar información de timezone
+    print(f"DEBUG: Hora actual en Perú: {ahora}")
+    print(f"DEBUG: Fecha actual en Perú: {hoy}")
+    print(f"DEBUG: Operaciones encontradas: {len(operaciones_hoy)}")
+    for op in operaciones_hoy:
+        print(f"DEBUG: Operación {op.id} - Hora: {op.hora}, Fecha: {op.hora.date()}")
     
     return render_template('user_dashboard.html',
                          total_comision_hoy=total_comision_hoy,
@@ -624,7 +632,8 @@ def operaciones():
 
     # Usar la misma lógica de timezone que el registro de operaciones
     peru_tz = pytz.timezone('America/Lima')
-    hoy = datetime.now(peru_tz).date()
+    ahora = datetime.now(peru_tz)
+    hoy = ahora.date()
 
     if fecha:
         fecha_objeto = datetime.strptime(fecha, '%Y-%m-%d').date()
@@ -647,6 +656,11 @@ def operaciones():
 
     # Usar left join para incluir operaciones sin sucursal asignada
     operaciones = query.outerjoin(Usuario).outerjoin(Sucursal).order_by(Operacion.hora.desc()).all()
+    
+    # Debug: Mostrar información de timezone
+    print(f"DEBUG OPERACIONES: Hora actual en Perú: {ahora}")
+    print(f"DEBUG OPERACIONES: Fecha actual en Perú: {hoy}")
+    print(f"DEBUG OPERACIONES: Operaciones encontradas: {len(operaciones)}")
     
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
