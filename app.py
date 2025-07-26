@@ -192,7 +192,24 @@ def load_user(user_id):
 # Health check endpoint para Railway
 @app.route('/health')
 def health_check():
-    return jsonify({'status': 'healthy', 'message': 'SISAGENT is running'}), 200
+    try:
+        # Verificar que la aplicación esté funcionando
+        return jsonify({
+            'status': 'healthy', 
+            'message': 'SISAGENT is running',
+            'timestamp': datetime.now(peru_tz).isoformat(),
+            'version': 'v1.0'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'message': str(e)
+        }), 500
+
+# Health check simple para Railway
+@app.route('/api/health')
+def root_health_check():
+    return jsonify({'status': 'ok', 'message': 'SISAGENT API'}), 200
 
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
