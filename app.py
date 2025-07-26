@@ -251,41 +251,75 @@ def admin_dashboard():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
 
-    hoy = datetime.now(peru_tz).date()
-    mes_actual = hoy.month
-    año_actual = hoy.year
+    # Obtener la hora actual en Perú y convertirla a UTC naive para el filtro
+    ahora_peru = datetime.now(peru_tz)
+    hoy_peru = ahora_peru.date()
+    mes_actual = hoy_peru.month
+    año_actual = hoy_peru.year
+
+    # Calcular el inicio y fin del día en Perú, y luego convertirlos a UTC naive
+    inicio_dia_peru = datetime.combine(hoy_peru, datetime.min.time()).replace(tzinfo=peru_tz)
+    fin_dia_peru = datetime.combine(hoy_peru, datetime.max.time()).replace(tzinfo=peru_tz)
+    
+    inicio_dia_utc_naive = inicio_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+    fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+
+    # Calcular el inicio y fin del mes en Perú, y luego convertirlos a UTC naive
+    inicio_mes_peru = datetime.combine(hoy_peru.replace(day=1), datetime.min.time()).replace(tzinfo=peru_tz)
+    if mes_actual == 12:
+        fin_mes_peru = datetime.combine(hoy_peru.replace(year=año_actual + 1, month=1, day=1) - timedelta(days=1), datetime.max.time()).replace(tzinfo=peru_tz)
+    else:
+        fin_mes_peru = datetime.combine(hoy_peru.replace(month=mes_actual + 1, day=1) - timedelta(days=1), datetime.max.time()).replace(tzinfo=peru_tz)
+    
+    inicio_mes_utc_naive = inicio_mes_peru.astimezone(pytz.utc).replace(tzinfo=None)
+    fin_mes_utc_naive = fin_mes_peru.astimezone(pytz.utc).replace(tzinfo=None)
 
     # Optimizar consultas con una sola query por sucursal
     sucursales = Sucursal.query.filter_by(activa=True).all()
     comisiones_hoy = []
     comisiones_mes = {}
     
-    # Obtener todas las comisiones diarias desde Operacion (más confiable)
+    # Obtener todas las comisiones diarias desde Operacion usando rango de tiempo UTC naive
     comisiones_diarias = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
     ).filter(
-        db.func.date(Operacion.hora) == hoy
+        Operacion.hora >= inicio_dia_utc_naive,
+        Operacion.hora <= fin_dia_utc_naive
     ).group_by(Operacion.sucursal_id).all()
     
-    # Obtener todas las comisiones mensuales desde Operacion
+    # Obtener todas las comisiones mensuales desde Operacion usando rango de tiempo UTC naive
     comisiones_mensuales = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
     ).filter(
-        db.extract('month', Operacion.hora) == mes_actual,
-        db.extract('year', Operacion.hora) == año_actual
+        Operacion.hora >= inicio_mes_utc_naive,
+        Operacion.hora <= fin_mes_utc_naive
     ).group_by(Operacion.sucursal_id).all()
     
     # Crear diccionarios para acceso rápido
     comisiones_diarias_dict = {cd.sucursal_id: float(cd.total) for cd in comisiones_diarias}
     comisiones_mensuales_dict = {cm.sucursal_id: float(cm.total) for cm in comisiones_mensuales}
     
+    # Debug: Mostrar información de timezone
+    print(f"DEBUG ADMIN: Hora actual en Perú: {ahora_peru}")
+    print(f"DEBUG ADMIN: Fecha actual en Perú: {hoy_peru}")
+    print(f"DEBUG ADMIN: Inicio del día (Peru): {inicio_dia_peru}")
+    print(f"DEBUG ADMIN: Fin del día (Peru): {fin_dia_peru}")
+    print(f"DEBUG ADMIN: Inicio del día (UTC Naive): {inicio_dia_utc_naive}")
+    print(f"DEBUG ADMIN: Fin del día (UTC Naive): {fin_dia_utc_naive}")
+    print(f"DEBUG ADMIN: Inicio del mes (UTC Naive): {inicio_mes_utc_naive}")
+    print(f"DEBUG ADMIN: Fin del mes (UTC Naive): {fin_mes_utc_naive}")
+    
     for suc in sucursales:
         total_hoy = comisiones_diarias_dict.get(suc.id, 0.0)
         total_mes = comisiones_mensuales_dict.get(suc.id, 0.0)
         comisiones_hoy.append((suc.id, suc.nombre, total_hoy))
         comisiones_mes[suc.id] = total_mes
+        
+        # Debug: Mostrar comisiones por sucursal
+        print(f"DEBUG ADMIN: Sucursal {suc.nombre} - Comisión día: {total_hoy}, Comisión mes: {total_mes}")
+    
     total_sucursales = len(sucursales)
     total_usuarios = Usuario.query.filter_by(activo=True).count()
     return render_template('admin_dashboard.html',
