@@ -1077,30 +1077,14 @@ def api_reportes_operaciones():
     print(f"DEBUG REPORTE: - sucursal_id: '{sucursal_id}'")
     print(f"DEBUG REPORTE: - medio: '{medio}'")
     
-    # Aplicar filtros con la misma lógica de timezone que admin_dashboard
+    # Aplicar filtros de fecha usando CAST para extraer solo la fecha
     if fecha_inicio:
-        # Convertir fecha_inicio a rango de tiempo UTC naive
-        fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
-        inicio_dia_peru = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
-        inicio_dia_utc_naive = inicio_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
-        query = query.filter(Operacion.hora >= inicio_dia_utc_naive)
-        
-        print(f"DEBUG REPORTE: Fecha inicio procesada:")
-        print(f"DEBUG REPORTE: - fecha_inicio_obj: {fecha_inicio_obj}")
-        print(f"DEBUG REPORTE: - inicio_dia_peru: {inicio_dia_peru}")
-        print(f"DEBUG REPORTE: - inicio_dia_utc_naive: {inicio_dia_utc_naive}")
+        query = query.filter(db.func.date(Operacion.hora) >= fecha_inicio)
+        print(f"DEBUG REPORTE: Filtro fecha_inicio aplicado: >= {fecha_inicio}")
     
     if fecha_fin:
-        # Convertir fecha_fin a rango de tiempo UTC naive
-        fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
-        fin_dia_peru = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
-        fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
-        query = query.filter(Operacion.hora <= fin_dia_utc_naive)
-        
-        print(f"DEBUG REPORTE: Fecha fin procesada:")
-        print(f"DEBUG REPORTE: - fecha_fin_obj: {fecha_fin_obj}")
-        print(f"DEBUG REPORTE: - fin_dia_peru: {fin_dia_peru}")
-        print(f"DEBUG REPORTE: - fin_dia_utc_naive: {fin_dia_utc_naive}")
+        query = query.filter(db.func.date(Operacion.hora) <= fecha_fin)
+        print(f"DEBUG REPORTE: Filtro fecha_fin aplicado: <= {fecha_fin}")
     
     if sucursal_id and sucursal_id.strip():
         # Convertir sucursal_id de string a integer
@@ -1176,20 +1160,12 @@ def exportar_reporte(formato):
         # Query base
         query = Operacion.query
         
-        # Aplicar filtros con la misma lógica de timezone que api_reportes_operaciones
+        # Aplicar filtros de fecha usando CAST para extraer solo la fecha
         if fecha_inicio:
-            # Convertir fecha_inicio a rango de tiempo UTC naive
-            fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
-            inicio_dia_peru = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
-            inicio_dia_utc_naive = inicio_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
-            query = query.filter(Operacion.hora >= inicio_dia_utc_naive)
+            query = query.filter(db.func.date(Operacion.hora) >= fecha_inicio)
         
         if fecha_fin:
-            # Convertir fecha_fin a rango de tiempo UTC naive
-            fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
-            fin_dia_peru = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
-            fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
-            query = query.filter(Operacion.hora <= fin_dia_utc_naive)
+            query = query.filter(db.func.date(Operacion.hora) <= fecha_fin)
         
         if sucursal_id and sucursal_id.strip():
             # Convertir sucursal_id de string a integer
