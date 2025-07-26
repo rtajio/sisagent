@@ -1067,16 +1067,37 @@ def api_reportes_operaciones():
     fecha_fin = request.args.get('fecha_fin')
     sucursal_id = request.args.get('sucursal_id')
     medio = request.args.get('medio')
+    
     query = Operacion.query
+    
+    # Aplicar filtros con la misma lógica de timezone que admin_dashboard
     if fecha_inicio:
-        query = query.filter(Operacion.hora >= fecha_inicio)
+        # Convertir fecha_inicio a rango de tiempo UTC naive
+        fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+        inicio_dia_peru = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
+        inicio_dia_utc_naive = inicio_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+        query = query.filter(Operacion.hora >= inicio_dia_utc_naive)
+    
     if fecha_fin:
-        query = query.filter(Operacion.hora <= fecha_fin + ' 23:59:59')
+        # Convertir fecha_fin a rango de tiempo UTC naive
+        fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+        fin_dia_peru = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
+        fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+        query = query.filter(Operacion.hora <= fin_dia_utc_naive)
+    
     if sucursal_id:
         query = query.filter(Operacion.sucursal_id == sucursal_id)
     if medio:
         query = query.filter(Operacion.medio == medio)
+    
     operaciones = query.order_by(Operacion.hora.desc()).all()
+    
+    # Debug: Mostrar información de filtros aplicados
+    print(f"DEBUG REPORTE: Fecha inicio: {fecha_inicio}")
+    print(f"DEBUG REPORTE: Fecha fin: {fecha_fin}")
+    print(f"DEBUG REPORTE: Sucursal ID: {sucursal_id}")
+    print(f"DEBUG REPORTE: Medio: {medio}")
+    print(f"DEBUG REPORTE: Operaciones encontradas: {len(operaciones)}")
     
     # Preparar datos para el reporte
     datos = []
@@ -1096,11 +1117,21 @@ def api_reportes_operaciones():
             'sucursal': op.sucursal.nombre if op.sucursal else 'Sin sucursal'
         })
     
+    # Calcular totales
+    total_operaciones = len(datos)
+    total_monto = sum(op['monto'] for op in datos)
+    total_comision = sum(op['comision'] for op in datos)
+    
+    # Debug: Mostrar totales calculados
+    print(f"DEBUG REPORTE: Total operaciones: {total_operaciones}")
+    print(f"DEBUG REPORTE: Total monto: {total_monto}")
+    print(f"DEBUG REPORTE: Total comisión: {total_comision}")
+    
     return jsonify({
         'operaciones': datos,
-        'total_operaciones': len(datos),
-        'total_monto': sum(op['monto'] for op in datos),
-        'total_comision': sum(op['comision'] for op in datos)
+        'total_operaciones': total_operaciones,
+        'total_monto': total_monto,
+        'total_comision': total_comision
     })
 
 @app.route('/api/reportes/exportar/<formato>')
@@ -1119,11 +1150,21 @@ def exportar_reporte(formato):
         # Query base
         query = Operacion.query
         
-        # Aplicar filtros
+        # Aplicar filtros con la misma lógica de timezone que api_reportes_operaciones
         if fecha_inicio:
-            query = query.filter(Operacion.hora >= fecha_inicio)
+            # Convertir fecha_inicio a rango de tiempo UTC naive
+            fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            inicio_dia_peru = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
+            inicio_dia_utc_naive = inicio_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+            query = query.filter(Operacion.hora >= inicio_dia_utc_naive)
+        
         if fecha_fin:
-            query = query.filter(Operacion.hora <= fecha_fin + ' 23:59:59')
+            # Convertir fecha_fin a rango de tiempo UTC naive
+            fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+            fin_dia_peru = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
+            fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
+            query = query.filter(Operacion.hora <= fin_dia_utc_naive)
+        
         if sucursal_id:
             query = query.filter(Operacion.sucursal_id == sucursal_id)
         if medio:
