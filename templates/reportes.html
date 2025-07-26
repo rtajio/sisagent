@@ -353,14 +353,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const fechaFin = document.getElementById('fecha_fin').value;
     
     if (!fechaInicio) {
+        // Usar zona horaria de Perú (UTC-5)
         const hoy = new Date();
-        const hace30Dias = new Date(hoy.getTime() - (30 * 24 * 60 * 60 * 1000));
-        document.getElementById('fecha_inicio').value = hace30Dias.toISOString().split('T')[0];
+        const offsetPeru = -5 * 60; // UTC-5 en minutos
+        const fechaPeru = new Date(hoy.getTime() + (offsetPeru * 60 * 1000));
+        const hace30Dias = new Date(fechaPeru.getTime() - (30 * 24 * 60 * 60 * 1000));
+        
+        // Formatear fecha en formato YYYY-MM-DD
+        const fechaInicioStr = hace30Dias.toISOString().split('T')[0];
+        document.getElementById('fecha_inicio').value = fechaInicioStr;
     }
     
     if (!fechaFin) {
-        const hoy = new Date().toISOString().split('T')[0];
-        document.getElementById('fecha_fin').value = hoy;
+        // Usar zona horaria de Perú (UTC-5)
+        const hoy = new Date();
+        const offsetPeru = -5 * 60; // UTC-5 en minutos
+        const fechaPeru = new Date(hoy.getTime() + (offsetPeru * 60 * 1000));
+        
+        // Formatear fecha en formato YYYY-MM-DD
+        const fechaFinStr = fechaPeru.toISOString().split('T')[0];
+        document.getElementById('fecha_fin').value = fechaFinStr;
     }
 
     // Ocultar grupo de descargas al cargar la página
