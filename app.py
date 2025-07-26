@@ -196,9 +196,7 @@ def health_check():
         # Verificar que la aplicación esté funcionando
         return jsonify({
             'status': 'healthy', 
-            'message': 'SISAGENT is running',
-            'timestamp': datetime.now(peru_tz).isoformat(),
-            'version': 'v1.0'
+            'message': 'SISAGENT is running'
         }), 200
     except Exception as e:
         return jsonify({
@@ -211,8 +209,7 @@ def health_check():
 def root_health_check():
     return jsonify({
         'status': 'ok', 
-        'message': 'SISAGENT API is running',
-        'timestamp': datetime.now(peru_tz).isoformat()
+        'message': 'SISAGENT API is running'
     }), 200
 
 # Health check simple para Railway
