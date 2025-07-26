@@ -189,33 +189,29 @@ class MedioSucursal(db.Model):
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
 
-# Health check endpoint para Railway (sin autenticación)
-@app.route('/health')
-def health_check():
-    try:
-        # Verificar que la aplicación esté funcionando
-        return jsonify({
-            'status': 'healthy', 
-            'message': 'SISAGENT is running'
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'status': 'unhealthy',
-            'message': str(e)
-        }), 500
-
-# Health check simple para Railway (ruta raíz sin autenticación)
+# Health check extremadamente simple para Railway
 @app.route('/')
 def root_health_check():
-    return jsonify({
-        'status': 'ok', 
-        'message': 'SISAGENT API is running'
-    }), 200
+    # Si el usuario está autenticado, redirigir a la app
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    # Si no está autenticado, mostrar página de login
+    return redirect(url_for('login'))
+
+# Health check específico para Railway (sin autenticación)
+@app.route('/railway-health')
+def railway_health():
+    return "OK", 200
+
+# Health check simple para Railway (ruta raíz sin autenticación)
+@app.route('/health')
+def health_check():
+    return "OK", 200
 
 # Health check simple para Railway
 @app.route('/api/health')
 def api_health_check():
-    return jsonify({'status': 'ok', 'message': 'SISAGENT API'}), 200
+    return "OK", 200
 
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
@@ -240,7 +236,7 @@ def logout():
     return redirect(url_for('login'))
 
 # Rutas principales
-@app.route('/dashboard')
+@app.route('/app')
 @login_required
 def dashboard():
     if current_user.es_admin:
