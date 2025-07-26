@@ -189,7 +189,7 @@ class MedioSucursal(db.Model):
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
 
-# Health check endpoint para Railway
+# Health check endpoint para Railway (sin autenticación)
 @app.route('/health')
 def health_check():
     try:
@@ -206,9 +206,18 @@ def health_check():
             'message': str(e)
         }), 500
 
+# Health check simple para Railway (ruta raíz sin autenticación)
+@app.route('/')
+def root_health_check():
+    return jsonify({
+        'status': 'ok', 
+        'message': 'SISAGENT API is running',
+        'timestamp': datetime.now(peru_tz).isoformat()
+    }), 200
+
 # Health check simple para Railway
 @app.route('/api/health')
-def root_health_check():
+def api_health_check():
     return jsonify({'status': 'ok', 'message': 'SISAGENT API'}), 200
 
 # Rutas de autenticación
@@ -234,7 +243,7 @@ def logout():
     return redirect(url_for('login'))
 
 # Rutas principales
-@app.route('/')
+@app.route('/dashboard')
 @login_required
 def dashboard():
     if current_user.es_admin:
