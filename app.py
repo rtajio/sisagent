@@ -308,11 +308,6 @@ def user_dashboard():
         db.func.date(Operacion.hora) == hoy
     ).scalar() or 0
     
-    # Mostrar TODAS las operaciones del usuario, no solo las de hoy
-    operaciones_usuario = Operacion.query.filter_by(
-        usuario_id=current_user.id
-    ).order_by(Operacion.hora.desc()).limit(20).all()  # Mostrar las últimas 20 operaciones
-    
     # Operaciones de hoy para el resumen
     operaciones_hoy = Operacion.query.filter_by(
         usuario_id=current_user.id
@@ -322,8 +317,7 @@ def user_dashboard():
     
     return render_template('user_dashboard.html',
                          total_comision_hoy=total_comision_hoy,
-                         operaciones_hoy=operaciones_hoy,
-                         operaciones_usuario=operaciones_usuario)
+                         operaciones_hoy=operaciones_hoy)
 
 # Gestión de sucursales (solo admin)
 @app.route('/admin/sucursales')
@@ -633,11 +627,9 @@ def operaciones():
         if fecha:
             query = query.filter(db.func.date(Operacion.hora) == fecha)
     
-    # Solo aplicar filtro de fecha si se especifica una fecha específica
-    # Los usuarios no-admin pueden ver todas sus operaciones, no solo las de hoy
-    if fecha:
-        query = query.filter(db.func.date(Operacion.hora) == fecha)
-    
+    # Solo aplicar filtro de fecha si no es admin accediendo desde dashboard con sucursal_id
+    if (not fecha and not current_user.es_admin) or (fecha and not (current_user.es_admin and request.args.get('sucursal_id'))):
+        query = query.filter(db.func.date(Operacion.hora) == hoy)
     if medio:
         query = query.filter(Operacion.medio == medio)
     if hora_inicio:
