@@ -1070,6 +1070,13 @@ def api_reportes_operaciones():
     
     query = Operacion.query
     
+    # Debug: Mostrar parámetros recibidos
+    print(f"DEBUG REPORTE: Parámetros recibidos:")
+    print(f"DEBUG REPORTE: - fecha_inicio: '{fecha_inicio}'")
+    print(f"DEBUG REPORTE: - fecha_fin: '{fecha_fin}'")
+    print(f"DEBUG REPORTE: - sucursal_id: '{sucursal_id}'")
+    print(f"DEBUG REPORTE: - medio: '{medio}'")
+    
     # Aplicar filtros con la misma lógica de timezone que admin_dashboard
     if fecha_inicio:
         # Convertir fecha_inicio a rango de tiempo UTC naive
@@ -1077,6 +1084,11 @@ def api_reportes_operaciones():
         inicio_dia_peru = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
         inicio_dia_utc_naive = inicio_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
         query = query.filter(Operacion.hora >= inicio_dia_utc_naive)
+        
+        print(f"DEBUG REPORTE: Fecha inicio procesada:")
+        print(f"DEBUG REPORTE: - fecha_inicio_obj: {fecha_inicio_obj}")
+        print(f"DEBUG REPORTE: - inicio_dia_peru: {inicio_dia_peru}")
+        print(f"DEBUG REPORTE: - inicio_dia_utc_naive: {inicio_dia_utc_naive}")
     
     if fecha_fin:
         # Convertir fecha_fin a rango de tiempo UTC naive
@@ -1084,27 +1096,34 @@ def api_reportes_operaciones():
         fin_dia_peru = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
         fin_dia_utc_naive = fin_dia_peru.astimezone(pytz.utc).replace(tzinfo=None)
         query = query.filter(Operacion.hora <= fin_dia_utc_naive)
+        
+        print(f"DEBUG REPORTE: Fecha fin procesada:")
+        print(f"DEBUG REPORTE: - fecha_fin_obj: {fecha_fin_obj}")
+        print(f"DEBUG REPORTE: - fin_dia_peru: {fin_dia_peru}")
+        print(f"DEBUG REPORTE: - fin_dia_utc_naive: {fin_dia_utc_naive}")
     
     if sucursal_id and sucursal_id.strip():
         # Convertir sucursal_id de string a integer
         try:
             sucursal_id_int = int(sucursal_id)
             query = query.filter(Operacion.sucursal_id == sucursal_id_int)
+            print(f"DEBUG REPORTE: Filtro sucursal aplicado: {sucursal_id_int}")
         except ValueError:
             # Si no se puede convertir a integer, ignorar el filtro
             print(f"DEBUG REPORTE: Error al convertir sucursal_id '{sucursal_id}' a integer")
     
     if medio:
         query = query.filter(Operacion.medio == medio)
+        print(f"DEBUG REPORTE: Filtro medio aplicado: {medio}")
     
     operaciones = query.order_by(Operacion.hora.desc()).all()
     
     # Debug: Mostrar información de filtros aplicados
-    print(f"DEBUG REPORTE: Fecha inicio: {fecha_inicio}")
-    print(f"DEBUG REPORTE: Fecha fin: {fecha_fin}")
-    print(f"DEBUG REPORTE: Sucursal ID: {sucursal_id}")
-    print(f"DEBUG REPORTE: Medio: {medio}")
     print(f"DEBUG REPORTE: Operaciones encontradas: {len(operaciones)}")
+    
+    # Debug: Mostrar las primeras 5 operaciones para verificar fechas
+    for i, op in enumerate(operaciones[:5]):
+        print(f"DEBUG REPORTE: Operación {i+1}: ID={op.id}, Hora={op.hora}, Fecha={op.hora.date()}, Comisión={op.comision}")
     
     # Preparar datos para el reporte
     datos = []
