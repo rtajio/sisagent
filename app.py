@@ -306,24 +306,30 @@ def user_dashboard():
     ahora = datetime.now(peru_tz)
     hoy = ahora.date()
     
-    # Calcular la comisión diaria SOLO de las operaciones del usuario actual
-    # Usar la misma lógica de filtro que en registrar_operacion
+    # Calcular inicio y fin del día en Perú
+    inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+    fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+    
+    # Calcular la comisión diaria usando rango de tiempo
     total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
         Operacion.usuario_id == current_user.id,
-        db.func.date(Operacion.hora) == hoy
+        Operacion.hora >= inicio_dia,
+        Operacion.hora <= fin_dia
     ).scalar() or 0
     
-    # Operaciones de hoy para el resumen
-    # Usar la misma lógica de filtro que en registrar_operacion
+    # Operaciones de hoy usando rango de tiempo
     operaciones_hoy = Operacion.query.filter_by(
         usuario_id=current_user.id
     ).filter(
-        db.func.date(Operacion.hora) == hoy
+        Operacion.hora >= inicio_dia,
+        Operacion.hora <= fin_dia
     ).order_by(Operacion.hora.desc()).all()
     
     # Debug: Mostrar información de timezone
     print(f"DEBUG: Hora actual en Perú: {ahora}")
     print(f"DEBUG: Fecha actual en Perú: {hoy}")
+    print(f"DEBUG: Inicio del día: {inicio_dia}")
+    print(f"DEBUG: Fin del día: {fin_dia}")
     print(f"DEBUG: Operaciones encontradas: {len(operaciones_hoy)}")
     for op in operaciones_hoy:
         print(f"DEBUG: Operación {op.id} - Hora: {op.hora}, Fecha: {op.hora.date()}")
@@ -641,12 +647,23 @@ def operaciones():
             flash('Solo los administradores pueden consultar operaciones de otros días', 'warning')
             fecha = None
         if fecha:
-            query = query.filter(db.func.date(Operacion.hora) == fecha)
+            # Usar rango de tiempo para la fecha específica
+            inicio_fecha = datetime.combine(fecha_objeto, datetime.min.time()).replace(tzinfo=peru_tz)
+            fin_fecha = datetime.combine(fecha_objeto, datetime.max.time()).replace(tzinfo=peru_tz)
+            query = query.filter(
+                Operacion.hora >= inicio_fecha,
+                Operacion.hora <= fin_fecha
+            )
     
     # Solo aplicar filtro de fecha si no es admin accediendo desde dashboard con sucursal_id
-    # Usar la misma lógica de timezone que el registro de operaciones
+    # Usar rango de tiempo para el día actual
     if (not fecha and not current_user.es_admin) or (fecha and not (current_user.es_admin and request.args.get('sucursal_id'))):
-        query = query.filter(db.func.date(Operacion.hora) == hoy)
+        inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+        fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+        query = query.filter(
+            Operacion.hora >= inicio_dia,
+            Operacion.hora <= fin_dia
+        )
     if medio:
         query = query.filter(Operacion.medio == medio)
     if hora_inicio:
