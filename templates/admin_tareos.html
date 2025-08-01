@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Tareos - Administrador{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="fas fa-tasks me-2"></i>
+                    Gestión de Tareos
+                </h2>
+                <a href="{{ url_for('crear_tareo') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>
+                    Crear Nuevo Tareo
+                </a>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list me-2"></i>
+                        Lista de Tareos
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if tareos %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nombre</th>
+                                        <th>Usuario Asignado</th>
+                                        <th>Sucursal</th>
+                                        <th>Estado</th>
+                                        <th>Fecha Creación</th>
+                                        <th>Fecha Completado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for tareo in tareos %}
+                                    <tr>
+                                        <td>{{ tareo.id }}</td>
+                                        <td>
+                                            <strong>{{ tareo.nombre }}</strong>
+                                            {% if tareo.descripcion %}
+                                                <br><small class="text-muted">{{ tareo.descripcion[:50] }}{% if tareo.descripcion|length > 50 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ tareo.usuario_nombre }}</td>
+                                        <td>{{ tareo.sucursal_nombre }}</td>
+                                        <td>
+                                            {% if tareo.estado == 'pendiente' %}
+                                                <span class="badge bg-warning">Pendiente</span>
+                                            {% elif tareo.estado == 'en_progreso' %}
+                                                <span class="badge bg-info">En Progreso</span>
+                                            {% elif tareo.estado == 'completado' %}
+                                                <span class="badge bg-success">Completado</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ tareo.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</td>
+                                        <td>
+                                            {% if tareo.fecha_completado %}
+                                                {{ tareo.fecha_completado.strftime('%d/%m/%Y %H:%M') }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <a href="{{ url_for('ver_tareo', tareo_id=tareo.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary" 
+                                                   title="Ver detalles">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-outline-danger" 
+                                                        onclick="eliminarTareo({{ tareo.id }})"
+                                                        title="Eliminar tareo">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No hay tareos creados</h5>
+                            <p class="text-muted">Comienza creando el primer tareo para asignar operaciones a los usuarios.</p>
+                            <a href="{{ url_for('crear_tareo') }}" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>
+                                Crear Primer Tareo
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación para eliminar -->
+<div class="modal fade" id="eliminarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas eliminar este tareo?</p>
+                <p class="text-danger"><small>Esta acción no se puede deshacer.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmarEliminar">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let tareoIdAEliminar = null;
+
+function eliminarTareo(tareoId) {
+    tareoIdAEliminar = tareoId;
+    const modal = new bootstrap.Modal(document.getElementById('eliminarModal'));
+    modal.show();
+}
+
+document.getElementById('confirmarEliminar').addEventListener('click', function() {
+    if (tareoIdAEliminar) {
+        fetch(`/admin/tareos/${tareoIdAEliminar}/eliminar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error al eliminar el tareo: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al eliminar el tareo');
+        });
+    }
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('eliminarModal'));
+    modal.hide();
+});
+</script>
+{% endblock %} 

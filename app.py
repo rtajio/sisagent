@@ -185,6 +185,36 @@ class MedioSucursal(db.Model):
     sucursal = db.relationship('Sucursal', backref='medios_sucursal')
     medio_pago = db.relationship('MedioPago', backref='sucursales_medio')
 
+# Modelos para el módulo de TAREO
+class Tareo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.Text)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    estado = db.Column(db.String(20), default='pendiente')  # pendiente, en_progreso, completado
+    fecha_creacion = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
+    fecha_completado = db.Column(db.DateTime, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    
+    # Relaciones
+    usuario = db.relationship('Usuario', foreign_keys=[usuario_id], backref='tareos_asignados')
+    sucursal = db.relationship('Sucursal', backref='tareos')
+    creador = db.relationship('Usuario', foreign_keys=[created_by], backref='tareos_creados')
+    operaciones = db.relationship('OperacionTareo', backref='tareo', lazy=True, cascade='all, delete-orphan')
+
+class OperacionTareo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tareo_id = db.Column(db.Integer, db.ForeignKey('tareo.id'), nullable=False)
+    medio = db.Column(db.String(20), nullable=False)
+    destino = db.Column(db.String(100), nullable=False)
+    nombre = db.Column(db.String(100), nullable=False)
+    monto = db.Column(db.Numeric(10, 2), nullable=False)
+    completado = db.Column(db.Boolean, default=False)
+    fecha_completado = db.Column(db.DateTime, nullable=True)
+    orden = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(peru_tz))
+
 @login_manager.user_loader
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
@@ -1583,17 +1613,303 @@ def bajar_medio(medio_id):
 @login_required
 def toggle_medio_sucursal(sucursal_id):
     if not current_user.es_admin:
-        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
-    medio_id = int(request.form['medio_id'])
-    estado = request.form.get('activo') == 'true'
-    ms = MedioSucursal.query.filter_by(sucursal_id=sucursal_id, medio_pago_id=medio_id).first()
-    if ms:
-        ms.activo = estado
-    else:
-        ms = MedioSucursal(sucursal_id=sucursal_id, medio_pago_id=medio_id, activo=estado)
-        db.session.add(ms)
-    db.session.commit()
-    return jsonify({'success': True, 'activo': ms.activo})
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    try:
+        medio_id = request.form.get('medio_id')
+        if not medio_id:
+            return jsonify({'error': 'ID del medio requerido'}), 400
+        
+        # Buscar o crear la relación
+        ms = MedioSucursal.query.filter_by(
+            sucursal_id=sucursal_id, 
+            medio_pago_id=medio_id
+        ).first()
+        
+        if ms:
+            ms.activo = not ms.activo
+        else:
+            ms = MedioSucursal(
+                sucursal_id=sucursal_id,
+                medio_pago_id=medio_id,
+                activo=True
+            )
+            db.session.add(ms)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'activo': ms.activo})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# Rutas para el módulo de TAREO - ADMINISTRADOR
+@app.route('/admin/tareos')
+@login_required
+def admin_tareos():
+    if not current_user.es_admin:
+        flash('Acceso denegado: solo administradores pueden gestionar tareos.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener todos los tareos con información de usuario y sucursal
+    tareos = Tareo.query.join(Usuario, Tareo.usuario_id == Usuario.id)\
+                        .join(Sucursal, Tareo.sucursal_id == Sucursal.id)\
+                        .add_columns(
+                            Tareo.id,
+                            Tareo.nombre,
+                            Tareo.descripcion,
+                            Tareo.estado,
+                            Tareo.fecha_creacion,
+                            Tareo.fecha_completado,
+                            Usuario.nombre_completo.label('usuario_nombre'),
+                            Sucursal.nombre.label('sucursal_nombre')
+                        ).order_by(Tareo.fecha_creacion.desc()).all()
+    
+    # Obtener usuarios y sucursales para el formulario
+    usuarios = Usuario.query.filter_by(activo=True).order_by(Usuario.nombre_completo).all()
+    sucursales = Sucursal.query.filter_by(activa=True).order_by(Sucursal.nombre).all()
+    medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden).all()
+    
+    return render_template('admin_tareos.html', 
+                         tareos=tareos, 
+                         usuarios=usuarios, 
+                         sucursales=sucursales,
+                         medios=medios)
+
+@app.route('/admin/tareos/crear', methods=['GET', 'POST'])
+@login_required
+def crear_tareo():
+    if not current_user.es_admin:
+        flash('Acceso denegado: solo administradores pueden crear tareos.', 'error')
+        return redirect(url_for('admin_tareos'))
+    
+    if request.method == 'POST':
+        try:
+            # Datos del tareo
+            nombre = request.form.get('nombre')
+            descripcion = request.form.get('descripcion', '')
+            usuario_id = request.form.get('usuario_id')
+            sucursal_id = request.form.get('sucursal_id')
+            
+            if not all([nombre, usuario_id, sucursal_id]):
+                flash('Todos los campos obligatorios deben estar completos.', 'error')
+                return redirect(url_for('crear_tareo'))
+            
+            # Crear el tareo
+            tareo = Tareo(
+                nombre=nombre,
+                descripcion=descripcion,
+                usuario_id=int(usuario_id),
+                sucursal_id=int(sucursal_id),
+                created_by=current_user.id
+            )
+            db.session.add(tareo)
+            db.session.flush()  # Para obtener el ID del tareo
+            
+            # Procesar operaciones del tareo
+            operaciones_data = request.form.getlist('operaciones[]')
+            for i, operacion_str in enumerate(operaciones_data):
+                if operacion_str.strip():
+                    # Formato esperado: "medio|destino|nombre|monto"
+                    partes = operacion_str.split('|')
+                    if len(partes) == 4:
+                        medio, destino, nombre_op, monto = partes
+                        try:
+                            operacion = OperacionTareo(
+                                tareo_id=tareo.id,
+                                medio=medio.strip(),
+                                destino=destino.strip(),
+                                nombre=nombre_op.strip(),
+                                monto=float(monto.strip()),
+                                orden=i + 1
+                            )
+                            db.session.add(operacion)
+                        except ValueError:
+                            flash(f'Error en el monto de la operación {i+1}: {monto}', 'error')
+                            continue
+            
+            db.session.commit()
+            flash('Tareo creado exitosamente.', 'success')
+            return redirect(url_for('admin_tareos'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al crear el tareo: {str(e)}', 'error')
+            return redirect(url_for('crear_tareo'))
+    
+    # GET: mostrar formulario
+    usuarios = Usuario.query.filter_by(activo=True).order_by(Usuario.nombre_completo).all()
+    sucursales = Sucursal.query.filter_by(activa=True).order_by(Sucursal.nombre).all()
+    medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden).all()
+    
+    return render_template('crear_tareo.html', 
+                         usuarios=usuarios, 
+                         sucursales=sucursales,
+                         medios=medios)
+
+@app.route('/admin/tareos/<int:tareo_id>')
+@login_required
+def ver_tareo(tareo_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado: solo administradores pueden ver tareos.', 'error')
+        return redirect(url_for('admin_tareos'))
+    
+    tareo = Tareo.query.get_or_404(tareo_id)
+    operaciones = OperacionTareo.query.filter_by(tareo_id=tareo_id).order_by(OperacionTareo.orden).all()
+    
+    return render_template('ver_tareo.html', tareo=tareo, operaciones=operaciones)
+
+@app.route('/admin/tareos/<int:tareo_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_tareo(tareo_id):
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    try:
+        tareo = Tareo.query.get_or_404(tareo_id)
+        db.session.delete(tareo)
+        db.session.commit()
+        flash('Tareo eliminado exitosamente.', 'success')
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# API para agregar operación a un tareo existente
+@app.route('/api/tareos/<int:tareo_id>/operaciones', methods=['POST'])
+@login_required
+def agregar_operacion_tareo(tareo_id):
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    try:
+        tareo = Tareo.query.get_or_404(tareo_id)
+        
+        medio = request.json.get('medio')
+        destino = request.json.get('destino')
+        nombre = request.json.get('nombre')
+        monto = request.json.get('monto')
+        
+        if not all([medio, destino, nombre, monto]):
+            return jsonify({'error': 'Todos los campos son requeridos'}), 400
+        
+        # Obtener el siguiente orden
+        ultimo_orden = db.session.query(db.func.max(OperacionTareo.orden))\
+                                 .filter_by(tareo_id=tareo_id).scalar() or 0
+        
+        operacion = OperacionTareo(
+            tareo_id=tareo_id,
+            medio=medio,
+            destino=destino,
+            nombre=nombre,
+            monto=float(monto),
+            orden=ultimo_orden + 1
+        )
+        
+        db.session.add(operacion)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'operacion': {
+                'id': operacion.id,
+                'medio': operacion.medio,
+                'destino': operacion.destino,
+                'nombre': operacion.nombre,
+                'monto': float(operacion.monto),
+                'orden': operacion.orden,
+                'completado': operacion.completado,
+                'fecha_completado': operacion.fecha_completado.isoformat() if operacion.fecha_completado else None
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# Rutas para el módulo de TAREO - USUARIOS
+@app.route('/tareos')
+@login_required
+def tareos_usuario():
+    # Obtener tareos asignados al usuario actual
+    tareos = Tareo.query.filter_by(usuario_id=current_user.id)\
+                        .join(Sucursal, Tareo.sucursal_id == Sucursal.id)\
+                        .add_columns(
+                            Tareo.id,
+                            Tareo.nombre,
+                            Tareo.descripcion,
+                            Tareo.estado,
+                            Tareo.fecha_creacion,
+                            Tareo.fecha_completado,
+                            Sucursal.nombre.label('sucursal_nombre')
+                        ).order_by(Tareo.fecha_creacion.desc()).all()
+    
+    return render_template('tareos_usuario.html', tareos=tareos)
+
+@app.route('/tareos/<int:tareo_id>')
+@login_required
+def ver_tareo_usuario(tareo_id):
+    # Verificar que el tareo esté asignado al usuario actual
+    tareo = Tareo.query.filter_by(id=tareo_id, usuario_id=current_user.id).first_or_404()
+    operaciones = OperacionTareo.query.filter_by(tareo_id=tareo_id).order_by(OperacionTareo.orden).all()
+    
+    return render_template('ver_tareo_usuario.html', tareo=tareo, operaciones=operaciones)
+
+# API para marcar operación como completada
+@app.route('/api/tareos/operaciones/<int:operacion_id>/completar', methods=['POST'])
+@login_required
+def completar_operacion_tareo(operacion_id):
+    try:
+        # Verificar que la operación pertenezca a un tareo asignado al usuario
+        operacion = OperacionTareo.query.join(Tareo)\
+                                        .filter(
+                                            OperacionTareo.id == operacion_id,
+                                            Tareo.usuario_id == current_user.id
+                                        ).first_or_404()
+        
+        completado = request.json.get('completado', True)
+        
+        if completado:
+            operacion.completado = True
+            operacion.fecha_completado = datetime.now(peru_tz)
+        else:
+            operacion.completado = False
+            operacion.fecha_completado = None
+        
+        # Verificar si todas las operaciones del tareo están completadas
+        tareo = operacion.tareo
+        total_operaciones = OperacionTareo.query.filter_by(tareo_id=tareo.id).count()
+        operaciones_completadas = OperacionTareo.query.filter_by(
+            tareo_id=tareo.id, 
+            completado=True
+        ).count()
+        
+        if operaciones_completadas == total_operaciones and total_operaciones > 0:
+            tareo.estado = 'completado'
+            tareo.fecha_completado = datetime.now(peru_tz)
+        elif operaciones_completadas > 0:
+            tareo.estado = 'en_progreso'
+        else:
+            tareo.estado = 'pendiente'
+            tareo.fecha_completado = None
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'operacion': {
+                'id': operacion.id,
+                'completado': operacion.completado,
+                'fecha_completado': operacion.fecha_completado.isoformat() if operacion.fecha_completado else None
+            },
+            'tareo': {
+                'estado': tareo.estado,
+                'fecha_completado': tareo.fecha_completado.isoformat() if tareo.fecha_completado else None
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 # Debug temporal para diagnosticar problema de filtro de fecha
 @app.route('/debug/filtro-fecha')
