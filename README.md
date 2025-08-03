@@ -1,209 +1,272 @@
-# SISAGENT - Sistema Multisucursal de Operaciones Bancarias
+# 🚀 SISAGENT - Sistema de Gestión de Operaciones Bancarias
 
-## Descripción
+## 📋 **Descripción**
 
-SISAGENT es un sistema web completo para la gestión de operaciones bancarias en múltiples sucursales. Permite registrar operaciones con montos, comisiones y medios de pago, con control de acceso por roles y seguimiento automático de comisiones diarias y mensuales.
+SISAGENT es un sistema web completo para la gestión de operaciones bancarias, tareos y reportes. Desarrollado con Flask, incluye funcionalidades avanzadas para administradores y usuarios regulares.
 
-## Características Principales
+## ✨ **Características Principales**
 
-### 🔐 Gestión de Usuarios y Permisos
-- **Administradores**: Pueden crear sucursales, gestionar usuarios y ver todas las operaciones
-- **Usuarios**: Solo pueden registrar operaciones en su sucursal asignada
-- **Control de acceso**: Los usuarios normales solo pueden ver operaciones del día actual
+### 🔐 **Autenticación y Usuarios**
+- Sistema de login/logout seguro
+- Gestión de usuarios (admin y regulares)
+- Perfiles de usuario personalizables
+- Control de acceso basado en roles
 
-### 🏢 Gestión de Sucursales
-- Crear, editar y eliminar sucursales
-- Asignar usuarios a sucursales específicas
-- Control de estado activo/inactivo
+### 🏢 **Gestión de Sucursales**
+- CRUD completo de sucursales
+- Asignación de usuarios a sucursales
+- Gestión de medios de pago por sucursal
 
-### 💰 Operaciones Bancarias
-- Registro de operaciones con monto y comisión
-- Medios de pago: BCP, KS, IBK, BN, AQP, NIUBIZ, CONFIANZA, BBVA, ICA, IZIPAY, CULQI, BIM
-- Hora automática en zona horaria de Perú (UTC-5)
-- Moneda en Soles Peruanos (S/)
+### 💰 **Operaciones Bancarias**
+- Registro de operaciones con múltiples medios de pago
+- Cálculo automático de comisiones
+- Edición y eliminación de operaciones
+- Filtros avanzados por fecha, sucursal y medio
 
-### 📊 Comisiones Automáticas
-- **Comisión Diaria**: Se reinicia cada día a las 00:00
-- **Comisión Mensual**: Acumulativo por mes y sucursal
-- Solo administradores pueden ver comisiones mensuales
+### 📊 **Reportes y Analytics**
+- Reportes detallados de operaciones
+- Exportación a PDF, Excel y CSV
+- Gráficos de comisiones diarias y mensuales
+- Filtros por fecha y sucursal
 
-### 🔍 Consultas y Filtros
-- Filtros por fecha, medio de pago, hora y sucursal
-- Administradores pueden consultar operaciones de cualquier fecha
-- Usuarios solo pueden ver operaciones del día actual
+### 📋 **Sistema de Tareos**
+- Creación y gestión de tareos diarios
+- Operaciones asignadas automáticamente
+- Sistema de checklists con estado en tiempo real
+- Aleatorización automática de montos
+- Reset diario automático de estados
 
-### ✏️ Gestión de Operaciones
-- Editar operaciones existentes
-- Eliminar operaciones con confirmación
-- Actualización automática de comisiones al editar/eliminar
+### 🎯 **Funcionalidades Avanzadas**
+- Zona horaria de Perú (UTC-5) implementada
+- Optimización de base de datos con índices
+- Interfaz responsive con Bootstrap
+- API RESTful para operaciones AJAX
 
-### 🔔 Notificaciones
-- Notificaciones pop-up con sonido
-- Verde: Operación creada exitosamente
-- Naranja: Operación editada exitosamente  
-- Rojo: Operación eliminada exitosamente
+## 🛠️ **Tecnologías Utilizadas**
 
-## Instalación
+- **Backend**: Flask, SQLAlchemy, Flask-Login
+- **Base de Datos**: SQLite (desarrollo) / PostgreSQL (producción)
+- **Frontend**: HTML5, CSS3, JavaScript, Bootstrap 5
+- **Reportes**: ReportLab, OpenPyXL
+- **Despliegue**: Railway, Gunicorn
 
-### Prerrequisitos
-- Python 3.8 o superior
-- MySQL 5.7 o superior
-- pip (gestor de paquetes de Python)
+## 🚀 **Instalación y Configuración**
 
-### 1. Clonar el repositorio
-```bash
-git clone <url-del-repositorio>
-cd sisagent
-```
+### **Requisitos Previos**
+- Python 3.8+
+- pip
+- Git
 
-### 2. Crear entorno virtual
-```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-```
+### **Instalación Local**
 
-### 3. Instalar dependencias
-```bash
-pip install -r requirements.txt
-```
+1. **Clonar el repositorio**:
+   ```bash
+   git clone https://github.com/tu-usuario/sisagent.git
+   cd sisagent
+   ```
 
-### 4. Configurar base de datos MySQL
-```sql
-CREATE DATABASE sisagent CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'sisagent_user'@'localhost' IDENTIFIED BY 'tu_password';
-GRANT ALL PRIVILEGES ON sisagent.* TO 'sisagent_user'@'localhost';
-FLUSH PRIVILEGES;
-```
+2. **Instalar dependencias**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 5. Configurar variables de entorno
-Copiar `config.env` a `.env` y editar con tus credenciales:
-```bash
-cp config.env .env
-```
+3. **Configurar variables de entorno**:
+   ```bash
+   # Crear archivo config.env
+   SECRET_KEY=tu-clave-secreta-muy-segura
+   DATABASE_URL=sqlite:///sisagent_consolidada.db
+   ```
 
-Editar `.env`:
-```env
-SECRET_KEY=tu-clave-secreta-muy-segura-aqui
-DATABASE_URL=mysql+pymysql://sisagent_user:tu_password@localhost/sisagent
-```
+4. **Inicializar base de datos**:
+   ```bash
+   python init_db.py
+   ```
 
-### 6. Ejecutar la aplicación
-```bash
-python app.py
-```
+5. **Ejecutar la aplicación**:
+   ```bash
+   python app.py
+   ```
 
-La aplicación estará disponible en: http://localhost:5000
+### **Despliegue en Railway**
 
-## Credenciales por Defecto
+1. **Crear cuenta en Railway**: https://railway.app/
+2. **Conectar repositorio de GitHub**
+3. **Configurar variables de entorno**:
+   - `SECRET_KEY`: Clave secreta para sesiones
+   - `DATABASE_URL`: Se configura automáticamente
 
-- **Usuario**: admin
-- **Contraseña**: 61442159
-
-## Estructura del Proyecto
+## 📁 **Estructura del Proyecto**
 
 ```
 sisagent/
 ├── app.py                 # Aplicación principal Flask
-├── requirements.txt       # Dependencias de Python
-├── config.env            # Configuración de entorno
-├── README.md             # Documentación
-├── templates/            # Plantillas HTML
-│   ├── base.html         # Plantilla base
+├── wsgi.py               # Configuración WSGI para producción
+├── config.py             # Configuración de la aplicación
+├── init_db.py            # Inicialización de base de datos
+├── requirements.txt      # Dependencias de Python
+├── railway.toml          # Configuración Railway
+├── Procfile              # Configuración Procfile
+├── templates/            # Templates HTML
+│   ├── base.html         # Template base
 │   ├── login.html        # Página de login
 │   ├── admin_dashboard.html
 │   ├── user_dashboard.html
-│   ├── operaciones.html
-│   ├── registrar_operacion.html
-│   ├── editar_operacion.html
-│   ├── admin_sucursales.html
-│   ├── crear_sucursal.html
-│   ├── editar_sucursal.html
-│   ├── admin_usuarios.html
-│   ├── crear_usuario.html
-│   └── editar_usuario.html
-└── logs/                 # Archivos de log
+│   └── ...
+├── static/               # Archivos estáticos (CSS, JS, imágenes)
+└── backups/              # Backups del sistema
 ```
 
-## Modelos de Base de Datos
+## 🔧 **Configuración de Base de Datos**
 
-### Usuario
-- ID, username, email, password_hash
-- nombre_completo, es_admin, sucursal_id
-- activo, created_at
+### **Modelos Principales**
+- **Usuario**: Gestión de usuarios y autenticación
+- **Sucursal**: Información de sucursales
+- **Operacion**: Registro de operaciones bancarias
+- **Tareo**: Sistema de tareos diarios
+- **OperacionTareo**: Operaciones dentro de tareos
+- **MedioPago**: Medios de pago disponibles
 
-### Sucursal
-- ID, nombre, direccion
-- activa, created_at
+### **Índices Optimizados**
+- Índices en tablas principales para mejor rendimiento
+- Consultas optimizadas para operaciones frecuentes
 
-### Operacion
-- ID, monto, comision, medio
-- hora, usuario_id, sucursal_id, created_at
+## 🌐 **Rutas Principales**
 
-### ComisionDiaria
-- ID, fecha, sucursal_id, total_comision, created_at
+### **Autenticación**
+- `/login` - Página de login
+- `/logout` - Cerrar sesión
 
-### ComisionMensual
-- ID, año, mes, sucursal_id, total_comision, created_at
+### **Dashboard**
+- `/admin` - Dashboard de administrador
+- `/user` - Dashboard de usuario
+- `/app` - Dashboard principal
 
-## Funcionalidades por Rol
+### **Gestión**
+- `/admin/usuarios` - Gestión de usuarios
+- `/admin/sucursales` - Gestión de sucursales
+- `/admin/medios` - Gestión de medios de pago
+- `/admin/tareos` - Gestión de tareos
 
-### Administrador
-- ✅ Crear/editar/eliminar sucursales
-- ✅ Crear/editar/eliminar usuarios
-- ✅ Asignar privilegios de administrador
-- ✅ Ver todas las operaciones de todas las sucursales
-- ✅ Consultar operaciones de cualquier fecha
-- ✅ Ver comisiones diarias y mensuales
-- ✅ Editar/eliminar cualquier operación
-- ✅ Modificar su propio perfil
+### **Operaciones**
+- `/operaciones` - Lista de operaciones
+- `/operaciones/registrar` - Registrar nueva operación
+- `/operaciones/<id>/editar` - Editar operación
 
-### Usuario Normal
-- ✅ Registrar operaciones en su sucursal
-- ✅ Ver operaciones del día actual de su sucursal
-- ✅ Ver comisión diaria de su sucursal
-- ✅ Editar/eliminar sus propias operaciones
-- ❌ Ver comisiones mensuales
-- ❌ Consultar operaciones de otros días
-- ❌ Ver operaciones de otras sucursales
+### **Tareos**
+- `/tareos` - Lista de tareos del usuario
+- `/tareos/<id>` - Ver tareo específico
 
-## Medios de Pago Soportados
+### **Reportes**
+- `/reportes` - Generar reportes
+- `/api/reportes/exportar/<formato>` - Exportar reportes
 
-- BCP
-- KS
-- IBK
-- BN
-- AQP
-- NIUBIZ
-- CONFIANZA
-- BBVA
-- ICA
-- IZIPAY
-- CULQI
-- BIM
+### **API**
+- `/api/operaciones` - API de operaciones
+- `/api/tareos` - API de tareos
+- `/api/comisiones` - API de comisiones
 
-## Zona Horaria
+## 🔐 **Variables de Entorno**
 
-El sistema utiliza la zona horaria de Perú (UTC-5) para todas las operaciones.
+### **Requeridas**
+- `SECRET_KEY`: Clave secreta para sesiones Flask
+- `DATABASE_URL`: URL de conexión a base de datos
 
-## Notificaciones
+### **Opcionales**
+- `PORT`: Puerto de la aplicación (por defecto: 5000)
+- `FLASK_ENV`: Entorno de Flask (development/production)
 
-El sistema incluye notificaciones pop-up con sonido para:
-- ✅ Operaciones creadas (verde)
-- ⚠️ Operaciones editadas (naranja)
-- ❌ Operaciones eliminadas (rojo)
+## 📊 **Funcionalidades de Tareos**
 
-## Seguridad
+### **Para Usuarios**
+- Ver tareos asignados
+- Completar operaciones con checkboxes
+- Ver progreso en tiempo real
+- Interfaz deshabilitada para tareos de días anteriores
 
-- Contraseñas hasheadas con Werkzeug
-- Control de acceso por roles
-- Validación de formularios
-- Protección CSRF implícita
-- Sesiones seguras
+### **Para Administradores**
+- Crear y gestionar tareos
+- Editar operaciones de tareos
+- Aleatorización manual de montos
+- Aleatorización automática diaria
+- Reset completo de estados
 
-## Soporte
+### **Sistema Automático**
+- Detección de cambio de día
+- Deshabilitación automática de checklists
+- Aleatorización automática de montos
+- Reset de estado a pendiente
 
-Para soporte técnico o reportar problemas, contactar al administrador del sistema.
+## 🎯 **Reglas de Aleatorización**
 
-## Licencia
+- **BBVA**: 10-40 soles
+- **KS**: 100-150 soles  
+- **BN**: 10 soles (fijo)
+- **Otros medios**: Mantienen monto actual
 
-Este software es de uso interno y confidencial. 
+## 🔍 **Health Checks**
+
+- `/health` - Health check básico
+- `/railway-health` - Health check específico para Railway
+- `/api/health` - Health check de API
+
+## 🚀 **Despliegue**
+
+### **Railway (Recomendado)**
+1. Conectar repositorio de GitHub
+2. Configurar variables de entorno
+3. Despliegue automático
+
+### **Heroku**
+1. Crear aplicación Heroku
+2. Conectar repositorio
+3. Configurar variables de entorno
+
+### **VPS/Dedicado**
+1. Instalar dependencias del servidor
+2. Configurar Gunicorn
+3. Configurar Nginx (opcional)
+
+## 📝 **Logs y Monitoreo**
+
+- Logs de aplicación en tiempo real
+- Monitoreo de base de datos
+- Health checks automáticos
+- Alertas de errores
+
+## 🔒 **Seguridad**
+
+- Autenticación segura con Flask-Login
+- Protección CSRF
+- Validación de entrada
+- Escape de datos en templates
+- Control de acceso basado en roles
+
+## 🤝 **Contribución**
+
+1. Fork el proyecto
+2. Crear rama para nueva funcionalidad
+3. Commit los cambios
+4. Push a la rama
+5. Crear Pull Request
+
+## 📄 **Licencia**
+
+Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
+
+## 📞 **Soporte**
+
+Para soporte técnico o preguntas:
+- Crear un issue en GitHub
+- Contactar al equipo de desarrollo
+
+## 🎉 **Estado del Proyecto**
+
+✅ **Completamente funcional**
+✅ **Listo para producción**
+✅ **Optimizado para Railway**
+✅ **Todas las funcionalidades implementadas**
+
+---
+
+**SISAGENT** - Sistema de Gestión de Operaciones Bancarias
+*Desarrollado con ❤️ para optimizar la gestión bancaria* 
