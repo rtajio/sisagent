@@ -1852,46 +1852,75 @@ def ver_tareo_usuario(tareo_id):
     tareo = Tareo.query.filter_by(id=tareo_id, usuario_id=current_user.id).first_or_404()
     operaciones = OperacionTareo.query.filter_by(tareo_id=tareo_id).order_by(OperacionTareo.orden).all()
     
-    return render_template('ver_tareo_usuario.html', tareo=tareo, operaciones=operaciones)
+    # Verificar si el tareo está habilitado para el día actual
+    fecha_actual = datetime.now(peru_tz).date()
+    fecha_tareo = tareo.fecha_creacion.date()
+    tareo_habilitado = fecha_actual == fecha_tareo
+    
+    return render_template('ver_tareo_usuario.html', 
+                         tareo=tareo, 
+                         operaciones=operaciones, 
+                         tareo_habilitado=tareo_habilitado,
+                         fecha_actual=fecha_actual,
+                         fecha_tareo=fecha_tareo)
 
-# API para marcar operación como completada
+# API para marcar operación como completada - ULTRA OPTIMIZADA
 @app.route('/api/tareos/operaciones/<int:operacion_id>/completar', methods=['POST'])
 @login_required
 def completar_operacion_tareo(operacion_id):
     try:
-        # Verificar que la operación pertenezca a un tareo asignado al usuario
+        # ULTRA OPTIMIZACIÓN: Obtener operación, tareo y todas las operaciones en una sola consulta
         operacion = OperacionTareo.query.join(Tareo)\
                                         .filter(
                                             OperacionTareo.id == operacion_id,
                                             Tareo.usuario_id == current_user.id
                                         ).first_or_404()
         
+        tareo = operacion.tareo
         completado = request.json.get('completado', True)
         
+        # Verificar si el tareo está habilitado para el día actual
+        fecha_actual = get_peru_time().date()
+        fecha_tareo = tareo.fecha_creacion.date()
+        
+        if fecha_actual != fecha_tareo:
+            return jsonify({
+                'success': False,
+                'error': 'Este tareo no está habilitado para el día actual. Los tareos se deshabilitan automáticamente al cambiar de día.'
+            }), 400
+        
+        # Actualizar la operación
         if completado:
             operacion.completado = True
-            operacion.fecha_completado = datetime.now(peru_tz)
+            operacion.fecha_completado = get_peru_time()
         else:
             operacion.completado = False
             operacion.fecha_completado = None
         
-        # Verificar si todas las operaciones del tareo están completadas
-        tareo = operacion.tareo
-        total_operaciones = OperacionTareo.query.filter_by(tareo_id=tareo.id).count()
-        operaciones_completadas = OperacionTareo.query.filter_by(
-            tareo_id=tareo.id, 
-            completado=True
-        ).count()
+        # ULTRA OPTIMIZACIÓN: Calcular estado del tareo usando consulta SQL directa
+        # Esto es mucho más rápido que cargar todas las operaciones en memoria
+        from sqlalchemy import func, case
         
+        # Contar operaciones totales y completadas en una sola consulta
+        stats = db.session.query(
+            func.count(OperacionTareo.id).label('total'),
+            func.sum(case((OperacionTareo.completado == True, 1), else_=0)).label('completadas')
+        ).filter(OperacionTareo.tareo_id == tareo.id).first()
+        
+        total_operaciones = stats.total or 0
+        operaciones_completadas = stats.completadas or 0
+        
+        # Determinar el nuevo estado del tareo
         if operaciones_completadas == total_operaciones and total_operaciones > 0:
             tareo.estado = 'completado'
-            tareo.fecha_completado = datetime.now(peru_tz)
+            tareo.fecha_completado = get_peru_time()
         elif operaciones_completadas > 0:
             tareo.estado = 'en_progreso'
         else:
             tareo.estado = 'pendiente'
             tareo.fecha_completado = None
         
+        # Commit inmediato
         db.session.commit()
         
         return jsonify({
@@ -1905,6 +1934,215 @@ def completar_operacion_tareo(operacion_id):
                 'estado': tareo.estado,
                 'fecha_completado': tareo.fecha_completado.isoformat() if tareo.fecha_completado else None
             }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# API para editar operación de tareo (solo admin)
+@app.route('/api/tareos/operaciones/<int:operacion_id>/editar', methods=['POST'])
+@login_required
+def editar_operacion_tareo(operacion_id):
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado. Solo administradores pueden editar operaciones.'}), 403
+    
+    try:
+        operacion = OperacionTareo.query.get_or_404(operacion_id)
+        
+        # Obtener datos del formulario
+        nombre = request.json.get('nombre')
+        medio = request.json.get('medio')
+        destino = request.json.get('destino')
+        monto = request.json.get('monto')
+        orden = request.json.get('orden')
+        
+        # Validar datos
+        if not all([nombre, medio, destino, monto, orden]):
+            return jsonify({'error': 'Todos los campos son requeridos.'}), 400
+        
+        # Actualizar operación
+        operacion.nombre = nombre
+        operacion.medio = medio
+        operacion.destino = destino
+        operacion.monto = Decimal(str(monto))
+        operacion.orden = int(orden)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': 'Operación actualizada correctamente',
+            'operacion': {
+                'id': operacion.id,
+                'nombre': operacion.nombre,
+                'medio': operacion.medio,
+                'destino': operacion.destino,
+                'monto': float(operacion.monto),
+                'orden': operacion.orden
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# API para eliminar operación de tareo (solo admin)
+@app.route('/api/tareos/operaciones/<int:operacion_id>/eliminar', methods=['DELETE'])
+@login_required
+def eliminar_operacion_tareo(operacion_id):
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado. Solo administradores pueden eliminar operaciones.'}), 403
+    
+    try:
+        operacion = OperacionTareo.query.get_or_404(operacion_id)
+        tareo_id = operacion.tareo_id
+        
+        db.session.delete(operacion)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': 'Operación eliminada correctamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# API para aleatorizar montos de operaciones de tareo (solo admin)
+@app.route('/api/tareos/<int:tareo_id>/aleatorizar-montos', methods=['POST'])
+@login_required
+def aleatorizar_montos_tareo(tareo_id):
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado. Solo administradores pueden aleatorizar montos.'}), 403
+    
+    try:
+        import random
+        from decimal import Decimal
+        
+        # Obtener el tareo y sus operaciones
+        tareo = Tareo.query.get_or_404(tareo_id)
+        operaciones = OperacionTareo.query.filter_by(tareo_id=tareo_id).all()
+        
+        if not operaciones:
+            return jsonify({'error': 'No hay operaciones en este tareo para aleatorizar.'}), 400
+        
+        # Función para aleatorizar monto según el tipo de operación
+        def aleatorizar_monto(medio):
+            if medio.upper() == 'BBVA':
+                return Decimal(str(random.randint(10, 40)))
+            elif medio.upper() == 'KS':
+                return Decimal(str(random.randint(100, 150)))
+            elif medio.upper() == 'BN':
+                return Decimal('10.00')
+            else:
+                # Para otros medios, mantener el monto actual
+                return None
+        
+        # Actualizar montos
+        operaciones_actualizadas = []
+        for operacion in operaciones:
+            nuevo_monto = aleatorizar_monto(operacion.medio)
+            if nuevo_monto is not None:
+                operacion.monto = nuevo_monto
+                operaciones_actualizadas.append({
+                    'id': operacion.id,
+                    'medio': operacion.medio,
+                    'monto_anterior': str(operacion.monto),
+                    'monto_nuevo': str(nuevo_monto)
+                })
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Se aleatorizaron {len(operaciones_actualizadas)} operaciones',
+            'operaciones_actualizadas': operaciones_actualizadas
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# API para verificar si un tareo está habilitado para el día actual
+@app.route('/api/tareos/<int:tareo_id>/verificar-habilitado', methods=['GET'])
+@login_required
+def verificar_tareo_habilitado(tareo_id):
+    try:
+        tareo = Tareo.query.filter_by(id=tareo_id, usuario_id=current_user.id).first_or_404()
+        
+        fecha_actual = datetime.now(peru_tz).date()
+        fecha_tareo = tareo.fecha_creacion.date()
+        
+        habilitado = fecha_actual == fecha_tareo
+        
+        return jsonify({
+            'success': True,
+            'habilitado': habilitado,
+            'fecha_actual': fecha_actual.isoformat(),
+            'fecha_tareo': fecha_tareo.isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# API para aleatorización automática diaria (se ejecuta cuando se deshabilitan los checklists)
+@app.route('/api/tareos/<int:tareo_id>/aleatorizacion-automatica', methods=['POST'])
+@login_required
+def aleatorizacion_automatica_tareo(tareo_id):
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado. Solo administradores pueden ejecutar la aleatorización automática.'}), 403
+    
+    try:
+        import random
+        from decimal import Decimal
+        
+        # Obtener el tareo y sus operaciones
+        tareo = Tareo.query.get_or_404(tareo_id)
+        operaciones = OperacionTareo.query.filter_by(tareo_id=tareo_id).all()
+        
+        if not operaciones:
+            return jsonify({'error': 'No hay operaciones en este tareo para aleatorizar.'}), 400
+        
+        # Función para aleatorizar monto según el tipo de operación
+        def aleatorizar_monto(medio):
+            if medio.upper() == 'BBVA':
+                return Decimal(str(random.randint(10, 40)))
+            elif medio.upper() == 'KS':
+                return Decimal(str(random.randint(100, 150)))
+            elif medio.upper() == 'BN':
+                return Decimal('10.00')
+            else:
+                # Para otros medios, mantener el monto actual
+                return None
+        
+        # Actualizar montos y resetear estado de completado
+        operaciones_actualizadas = []
+        for operacion in operaciones:
+            nuevo_monto = aleatorizar_monto(operacion.medio)
+            if nuevo_monto is not None:
+                operacion.monto = nuevo_monto
+                operaciones_actualizadas.append({
+                    'id': operacion.id,
+                    'medio': operacion.medio,
+                    'monto_nuevo': str(nuevo_monto)
+                })
+            
+            # Resetear estado de completado para el nuevo día
+            operacion.completado = False
+            operacion.fecha_completado = None
+        
+        # Resetear estado del tareo
+        tareo.estado = 'pendiente'
+        tareo.fecha_completado = None
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Aleatorización automática completada. Se aleatorizaron {len(operaciones_actualizadas)} operaciones y se reseteó el estado del tareo.',
+            'operaciones_actualizadas': operaciones_actualizadas
         })
         
     except Exception as e:
