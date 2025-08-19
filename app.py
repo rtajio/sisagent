@@ -927,45 +927,28 @@ def editar_operacion(operacion_id):
 @app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
 @login_required
 def eliminar_operacion(operacion_id):
-    operacion = Operacion.query.get_or_404(operacion_id)
-    
-    # Verificar permisos
-    if not current_user.es_admin and operacion.usuario_id != current_user.id:
-        flash('No tienes permisos para eliminar esta operación', 'error')
+    # OPTIMIZACIÓN ULTRA: Eliminación instantánea
+    try:
+        operacion = Operacion.query.get_or_404(operacion_id)
+        
+        # Verificar permisos
+        if not current_user.es_admin and operacion.usuario_id != current_user.id:
+            flash('No tienes permisos para eliminar esta operación', 'error')
+            return redirect(url_for('operaciones'))
+        
+        # OPTIMIZACIÓN ULTRA: Solo eliminar operación - comisiones se recalculan en tiempo real
+        db.session.delete(operacion)
+        db.session.commit()
+        
+        flash('Operación bancaria eliminada exitosamente', 'success')
         return redirect(url_for('operaciones'))
-    
-    monto_comision = float(operacion.comision)
-    fecha_operacion = operacion.hora.date()
-    año_operacion = operacion.hora.year
-    mes_operacion = operacion.hora.month
-    sucursal_id = operacion.sucursal_id
-    
-    # Eliminar operación
-    db.session.delete(operacion)
-    
-    # Actualizar comisiones diarias y mensuales
-    comision_diaria = ComisionDiaria.query.filter_by(
-        fecha=fecha_operacion,
-        sucursal_id=sucursal_id
-    ).first()
-    
-    if comision_diaria:
-        comision_diaria.total_comision = float(comision_diaria.total_comision) - float(monto_comision)
-    
-    comision_mensual = ComisionMensual.query.filter_by(
-        año=año_operacion,
-        mes=mes_operacion,
-        sucursal_id=sucursal_id
-    ).first()
-    
-    if comision_mensual:
-        comision_mensual.total_comision = float(comision_mensual.total_comision) - float(monto_comision)
-    
-    db.session.commit()
-    flash('Operación bancaria eliminada exitosamente', 'error')
-    return redirect(url_for('operaciones'))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar operación: {str(e)}', 'error')
+        return redirect(url_for('operaciones'))
 
-# API para obtener comisiones (solo admin puede ver comisiones mensuales)
+# API para obtener comisiones en tiempo real (optimizada)
 @app.route('/api/comisiones')
 @login_required
 def api_comisiones():
@@ -984,30 +967,32 @@ def api_comisiones():
     
     if tipo == 'diaria':
         fecha = request.args.get('fecha', datetime.now(peru_tz).strftime('%Y-%m-%d'))
-        comision = ComisionDiaria.query.filter_by(
-            fecha=fecha,
-            sucursal_id=sucursal_id
-        ).first()
+        # Calcular comisión diaria en tiempo real
+        total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
+            Operacion.sucursal_id == sucursal_id,
+            db.func.date(Operacion.hora) == fecha
+        ).scalar() or 0
         
         return jsonify({
             'fecha': fecha,
-            'total_comision': float(comision.total_comision) if comision else 0
+            'total_comision': float(total_comision)
         })
     
     elif tipo == 'mensual' and current_user.es_admin:
         año = request.args.get('año', datetime.now(peru_tz).year)
         mes = request.args.get('mes', datetime.now(peru_tz).month)
         
-        comision = ComisionMensual.query.filter_by(
-            año=año,
-            mes=mes,
-            sucursal_id=sucursal_id
-        ).first()
+        # Calcular comisión mensual en tiempo real
+        total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
+            Operacion.sucursal_id == sucursal_id,
+            db.func.extract('year', Operacion.hora) == año,
+            db.func.extract('month', Operacion.hora) == mes
+        ).scalar() or 0
         
         return jsonify({
             'año': año,
             'mes': mes,
-            'total_comision': float(comision.total_comision) if comision else 0
+            'total_comision': float(total_comision)
         })
     
     else:
