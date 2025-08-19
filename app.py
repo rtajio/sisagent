@@ -1076,6 +1076,9 @@ def reportes():
 @app.route('/api/reportes/operaciones')
 @login_required
 def api_reportes_operaciones():
+    # Obtener zona horaria de Perú
+    peru_tz = pytz.timezone('America/Lima')
+    
     fecha_inicio = request.args.get('fecha_inicio')
     fecha_fin = request.args.get('fecha_fin')
     sucursal_id = request.args.get('sucursal_id')
@@ -1090,14 +1093,18 @@ def api_reportes_operaciones():
     print(f"DEBUG REPORTE: - sucursal_id: '{sucursal_id}'")
     print(f"DEBUG REPORTE: - medio: '{medio}'")
     
-    # Aplicar filtros de fecha usando filtro por fecha en Perú
+    # Aplicar filtros de fecha usando timezone específico para evitar problemas de conversión
     if fecha_inicio:
-        query = query.filter(db.func.date(Operacion.hora) >= fecha_inicio)
-        print(f"DEBUG REPORTE: Filtro fecha_inicio aplicado: >= {fecha_inicio}")
+        # Convertir fecha_inicio a datetime con timezone de Perú
+        inicio_fecha = datetime.combine(datetime.strptime(fecha_inicio, '%Y-%m-%d').date(), datetime.min.time()).replace(tzinfo=peru_tz)
+        query = query.filter(Operacion.hora >= inicio_fecha)
+        print(f"DEBUG REPORTE: Filtro fecha_inicio aplicado: >= {inicio_fecha}")
     
     if fecha_fin:
-        query = query.filter(db.func.date(Operacion.hora) <= fecha_fin)
-        print(f"DEBUG REPORTE: Filtro fecha_fin aplicado: <= {fecha_fin}")
+        # Convertir fecha_fin a datetime con timezone de Perú (hasta el final del día)
+        fin_fecha = datetime.combine(datetime.strptime(fecha_fin, '%Y-%m-%d').date(), datetime.max.time()).replace(tzinfo=peru_tz)
+        query = query.filter(Operacion.hora <= fin_fecha)
+        print(f"DEBUG REPORTE: Filtro fecha_fin aplicado: <= {fin_fecha}")
     
     if sucursal_id and sucursal_id.strip():
         # Convertir sucursal_id de string a integer
@@ -1173,12 +1180,19 @@ def exportar_reporte(formato):
         # Query base
         query = Operacion.query
         
-        # Aplicar filtros de fecha usando CAST para extraer solo la fecha
+        # Obtener zona horaria de Perú
+        peru_tz = pytz.timezone('America/Lima')
+        
+        # Aplicar filtros de fecha usando timezone específico para evitar problemas de conversión
         if fecha_inicio:
-            query = query.filter(db.func.date(Operacion.hora) >= fecha_inicio)
+            # Convertir fecha_inicio a datetime con timezone de Perú
+            inicio_fecha = datetime.combine(datetime.strptime(fecha_inicio, '%Y-%m-%d').date(), datetime.min.time()).replace(tzinfo=peru_tz)
+            query = query.filter(Operacion.hora >= inicio_fecha)
         
         if fecha_fin:
-            query = query.filter(db.func.date(Operacion.hora) <= fecha_fin)
+            # Convertir fecha_fin a datetime con timezone de Perú (hasta el final del día)
+            fin_fecha = datetime.combine(datetime.strptime(fecha_fin, '%Y-%m-%d').date(), datetime.max.time()).replace(tzinfo=peru_tz)
+            query = query.filter(Operacion.hora <= fin_fecha)
         
         if sucursal_id and sucursal_id.strip():
             # Convertir sucursal_id de string a integer
