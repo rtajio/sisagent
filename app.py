@@ -309,22 +309,21 @@ def admin_dashboard():
     comisiones_hoy = []
     comisiones_mes = {}
     
-    # Obtener todas las comisiones diarias desde Operacion usando rango de tiempo UTC naive
+    # Obtener todas las comisiones diarias desde Operacion usando filtro por fecha en Perú
     comisiones_diarias = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
     ).filter(
-        Operacion.hora >= inicio_dia_utc_naive,
-        Operacion.hora <= fin_dia_utc_naive
+        db.func.date(Operacion.hora) == hoy_peru
     ).group_by(Operacion.sucursal_id).all()
     
-    # Obtener todas las comisiones mensuales desde Operacion usando rango de tiempo UTC naive
+    # Obtener todas las comisiones mensuales desde Operacion usando filtro por año y mes en Perú
     comisiones_mensuales = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
     ).filter(
-        Operacion.hora >= inicio_mes_utc_naive,
-        Operacion.hora <= fin_mes_utc_naive
+        db.func.extract('year', Operacion.hora) == año_actual,
+        db.func.extract('month', Operacion.hora) == mes_actual
     ).group_by(Operacion.sucursal_id).all()
     
     # Crear diccionarios para acceso rápido
@@ -370,23 +369,17 @@ def user_dashboard():
     ahora = datetime.now(peru_tz)
     hoy = ahora.date()
     
-    # Calcular inicio y fin del día en Perú
-    inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
-    fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
-    
-    # Calcular la comisión diaria usando rango de tiempo
+    # Calcular la comisión diaria usando filtro por fecha en Perú
     total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
         Operacion.usuario_id == current_user.id,
-        Operacion.hora >= inicio_dia,
-        Operacion.hora <= fin_dia
+        db.func.date(Operacion.hora) == hoy
     ).scalar() or 0
     
-    # Operaciones de hoy usando rango de tiempo
+    # Operaciones de hoy usando filtro por fecha en Perú
     operaciones_hoy = Operacion.query.filter_by(
-        usuario_id=current_user.id
+        usuario_id == current_user.id
     ).filter(
-        Operacion.hora >= inicio_dia,
-        Operacion.hora <= fin_dia
+        db.func.date(Operacion.hora) == hoy
     ).order_by(Operacion.hora.desc()).all()
     
     # Debug: Mostrar información de timezone
@@ -711,23 +704,13 @@ def operaciones():
             flash('Solo los administradores pueden consultar operaciones de otros días', 'warning')
             fecha = None
         if fecha:
-            # Usar rango de tiempo para la fecha específica
-            inicio_fecha = datetime.combine(fecha_objeto, datetime.min.time()).replace(tzinfo=peru_tz)
-            fin_fecha = datetime.combine(fecha_objeto, datetime.max.time()).replace(tzinfo=peru_tz)
-            query = query.filter(
-                Operacion.hora >= inicio_fecha,
-                Operacion.hora <= fin_fecha
-            )
+            # Usar filtro por fecha específica
+            query = query.filter(db.func.date(Operacion.hora) == fecha_objeto)
     
     # Solo aplicar filtro de fecha si no es admin accediendo desde dashboard con sucursal_id
-    # Usar rango de tiempo para el día actual
+    # Usar filtro por fecha del día actual
     if (not fecha and not current_user.es_admin) or (fecha and not (current_user.es_admin and request.args.get('sucursal_id'))):
-        inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
-        fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
-        query = query.filter(
-            Operacion.hora >= inicio_dia,
-            Operacion.hora <= fin_dia
-        )
+        query = query.filter(db.func.date(Operacion.hora) == hoy)
     if medio:
         query = query.filter(Operacion.medio == medio)
     if hora_inicio:
@@ -1107,7 +1090,7 @@ def api_reportes_operaciones():
     print(f"DEBUG REPORTE: - sucursal_id: '{sucursal_id}'")
     print(f"DEBUG REPORTE: - medio: '{medio}'")
     
-    # Aplicar filtros de fecha usando CAST para extraer solo la fecha
+    # Aplicar filtros de fecha usando filtro por fecha en Perú
     if fecha_inicio:
         query = query.filter(db.func.date(Operacion.hora) >= fecha_inicio)
         print(f"DEBUG REPORTE: Filtro fecha_inicio aplicado: >= {fecha_inicio}")
