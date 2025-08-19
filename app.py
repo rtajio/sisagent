@@ -710,37 +710,32 @@ def operaciones():
     page = request.args.get('page', 1, type=int)
     per_page = 30  # Reducido para mayor velocidad
     
-    # OPTIMIZACIÓN ULTRA: Query con JOIN optimizado y solo campos necesarios
-    operaciones_paginated = query.options(
-        db.joinedload(Operacion.usuario).load_only('nombre_completo'),
-        db.joinedload(Operacion.sucursal).load_only('nombre')
-    ).order_by(Operacion.hora.desc()).paginate(
+    # OPTIMIZACIÓN: Query con JOIN básico para evitar N+1
+    operaciones_paginated = query.outerjoin(Usuario).outerjoin(Sucursal).order_by(Operacion.hora.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
     operaciones = operaciones_paginated.items
     
-    # OPTIMIZACIÓN ULTRA: Cálculo de filtros más eficiente
+    # Cálculo de filtros
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
-    # OPTIMIZACIÓN ULTRA: Cálculo de comisión optimizado
+    # Cálculo de comisión
     comision_dia = 0.0
     sucursal_nombre = None
     if current_user.es_admin and request.args.get('sucursal_id'):
         sucursal_id = int(request.args.get('sucursal_id'))
-        # OPTIMIZACIÓN ULTRA: Query directa sin JOIN innecesario
-        sucursal = db.session.query(Sucursal.nombre).filter(Sucursal.id == sucursal_id).scalar()
+        sucursal = Sucursal.query.get(sucursal_id)
         if sucursal:
-            sucursal_nombre = sucursal
-            # OPTIMIZACIÓN ULTRA: Query directa para comisión
-            comision_dia = db.session.query(db.func.coalesce(ComisionDiaria.total_comision, 0)).filter(
-                ComisionDiaria.fecha == hoy,
-                ComisionDiaria.sucursal_id == sucursal_id
-            ).scalar() or 0.0
+            sucursal_nombre = sucursal.nombre
+            comision_diaria = ComisionDiaria.query.filter_by(
+                fecha=hoy,
+                sucursal_id=sucursal_id
+            ).first()
+            if comision_diaria:
+                comision_dia = float(comision_diaria.total_comision)
     
-    # OPTIMIZACIÓN ULTRA: Cache de medios de pago
-    medios_pago = db.session.query(MedioPago.nombre_abreviado, MedioPago.nombre_completo).filter(
-        MedioPago.activo == True
-    ).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    # Medios de pago
+    medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
     return render_template('operaciones.html',
                          operaciones=operaciones,
                          pagination=operaciones_paginated,
