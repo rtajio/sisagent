@@ -358,22 +358,17 @@ def user_dashboard():
     ahora = datetime.now(peru_tz)
     hoy = ahora.date()
     
-    # Calcular la comisión diaria usando la misma lógica que los reportes
-    inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
-    fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
-    
+    # Calcular la comisión diaria usando filtro por fecha simple
     total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
         Operacion.usuario_id == current_user.id,
-        Operacion.hora >= inicio_dia,
-        Operacion.hora <= fin_dia
+        db.func.date(Operacion.hora) == hoy
     ).scalar() or 0
     
     # OPTIMIZACIÓN: Limitar operaciones mostradas a las últimas 10 para mejorar rendimiento
     operaciones_hoy = Operacion.query.filter_by(
         usuario_id == current_user.id
     ).filter(
-        Operacion.hora >= inicio_dia,
-        Operacion.hora <= fin_dia
+        db.func.date(Operacion.hora) == hoy
     ).order_by(Operacion.hora.desc()).limit(10).all()
     
     # Debug: Solo mostrar información esencial en desarrollo
