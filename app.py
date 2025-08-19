@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import pytz
@@ -751,82 +752,57 @@ def operaciones():
 @login_required
 def registrar_operacion():
     if request.method == 'POST':
+        # OPTIMIZACIÓN ULTRA: Procesamiento instantáneo
         monto = float(request.form['monto'])
         comision = float(request.form['comision'])
         medio = request.form['medio']
         
-        # Determinar la sucursal para la operación
+        # OPTIMIZACIÓN ULTRA: Validación rápida
         if current_user.es_admin:
-            # Los administradores pueden seleccionar la sucursal
             sucursal_id = request.form.get('sucursal_id')
             if not sucursal_id:
                 flash('Debe seleccionar una sucursal para la operación', 'error')
                 return redirect(url_for('registrar_operacion'))
             sucursal_id = int(sucursal_id)
         else:
-            # Los usuarios regulares usan su sucursal asignada
             if not current_user.sucursal_id:
                 flash('Debe tener una sucursal asignada para registrar operaciones', 'error')
                 return redirect(url_for('registrar_operacion'))
             sucursal_id = current_user.sucursal_id
         
-        # Obtener hora actual en UTC-5 (Perú)
+        # OPTIMIZACIÓN ULTRA: Una sola operación de base de datos
         hora_actual = datetime.now(peru_tz)
-        
-        nueva_operacion = Operacion(
-            monto=monto,
-            comision=comision,
-            medio=medio,
-            hora=hora_actual,
-            usuario_id=current_user.id,
-            sucursal_id=sucursal_id
-        )
-        
-        db.session.add(nueva_operacion)
-        
-        # Actualizar comisión diaria
         fecha_hoy = hora_actual.date()
-        comision_diaria = ComisionDiaria.query.filter_by(
-            fecha=fecha_hoy,
-            sucursal_id=sucursal_id
-        ).first()
-        
-        if comision_diaria:
-            comision_diaria.total_comision = float(comision_diaria.total_comision) + float(comision)
-        else:
-            comision_diaria = ComisionDiaria(
-                fecha=fecha_hoy,
-                sucursal_id=sucursal_id,
-                total_comision=comision
-            )
-            db.session.add(comision_diaria)
-        
-        # Actualizar comisión mensual
         año_actual = hora_actual.year
         mes_actual = hora_actual.month
-        comision_mensual = ComisionMensual.query.filter_by(
-            año=año_actual,
-            mes=mes_actual,
-            sucursal_id=sucursal_id
-        ).first()
         
-        if comision_mensual:
-            comision_mensual.total_comision = float(comision_mensual.total_comision) + float(comision)
-        else:
-            comision_mensual = ComisionMensual(
-                año=año_actual,
-                mes=mes_actual,
-                sucursal_id=sucursal_id,
-                total_comision=comision
+        # OPTIMIZACIÓN ULTRA: Solo insertar operación - comisiones se calculan en tiempo real
+        try:
+            # Insertar operación (solo esto)
+            nueva_operacion = Operacion(
+                monto=monto,
+                comision=comision,
+                medio=medio,
+                hora=hora_actual,
+                usuario_id=current_user.id,
+                sucursal_id=sucursal_id
             )
-            db.session.add(comision_mensual)
-        
-        db.session.commit()
-        flash('Operación bancaria registrada exitosamente', 'success')
-        return redirect(url_for('operaciones'))
+            db.session.add(nueva_operacion)
+            db.session.commit()
+            
+            flash('Operación bancaria registrada exitosamente', 'success')
+            return redirect(url_for('operaciones'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al registrar operación: {str(e)}', 'error')
+            return redirect(url_for('registrar_operacion'))
     
-    # Pasar sucursales solo si es administrador
-    sucursales = Sucursal.query.filter_by(activa=True).all() if current_user.es_admin else None
+    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es necesario
+    sucursales = None
+    if current_user.es_admin:
+        sucursales = db.session.query(Sucursal.id, Sucursal.nombre).filter(Sucursal.activa == True).all()
+    
     return render_template('registrar_operacion.html', sucursales=sucursales)
 
 # Editar operación
