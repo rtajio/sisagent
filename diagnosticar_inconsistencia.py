@@ -1,93 +1,107 @@
 #!/usr/bin/env python3
 """
-Script para diagnosticar inconsistencias en el dashboard del usuario
+Script para diagnosticar la inconsistencia entre dashboard y reportes
 """
 
-import os
 import sys
-from datetime import datetime, timedelta
-import pytz
-
-# Agregar el directorio actual al path
+import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app import app, db, Operacion, Usuario
+from app import app, db
+from app import Operacion, Sucursal
+from datetime import datetime
+import pytz
 
 def diagnosticar_inconsistencia():
-    """Diagnosticar inconsistencias en el dashboard"""
+    """Diagnosticar por qué hay diferencias entre dashboard y reportes"""
+    
+    print("🔍 DIAGNÓSTICO DE INCONSISTENCIA DASHBOARD vs REPORTES")
+    print("=" * 60)
+    
     with app.app_context():
-        try:
-            print("🔍 DIAGNÓSTICO DE INCONSISTENCIAS EN DASHBOARD")
-            print("=" * 60)
+        # Obtener zona horaria de Perú
+        peru_tz = pytz.timezone('America/Lima')
+        ahora = datetime.now(peru_tz)
+        hoy = ahora.date()
+        
+        print(f"📅 Fecha actual en Perú: {hoy}")
+        print(f"🕐 Hora actual en Perú: {ahora}")
+        
+        # Método 1: Dashboard (usando db.func.date)
+        print("\n📊 MÉTODO 1: Dashboard (db.func.date)")
+        print("-" * 40)
+        
+        comisiones_dashboard = db.session.query(
+            Operacion.sucursal_id,
+            db.func.sum(Operacion.comision).label('total')
+        ).filter(
+            db.func.date(Operacion.hora) == hoy
+        ).group_by(Operacion.sucursal_id).all()
+        
+        for cd in comisiones_dashboard:
+            sucursal = Sucursal.query.get(cd.sucursal_id)
+            print(f"   - {sucursal.nombre}: S/ {cd.total}")
+        
+        # Método 2: Reportes (usando rangos de tiempo)
+        print("\n📊 MÉTODO 2: Reportes (rangos de tiempo)")
+        print("-" * 40)
+        
+        inicio_fecha = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+        fin_fecha = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+        
+        comisiones_reportes = db.session.query(
+            Operacion.sucursal_id,
+            db.func.sum(Operacion.comision).label('total')
+        ).filter(
+            Operacion.hora >= inicio_fecha,
+            Operacion.hora <= fin_fecha
+        ).group_by(Operacion.sucursal_id).all()
+        
+        for cr in comisiones_reportes:
+            sucursal = Sucursal.query.get(cr.sucursal_id)
+            print(f"   - {sucursal.nombre}: S/ {cr.total}")
+        
+        # Verificar operaciones específicas de TECKNOVATION
+        print("\n🔍 VERIFICACIÓN ESPECÍFICA: TECKNOVATION")
+        print("-" * 40)
+        
+        tecknovation = Sucursal.query.filter_by(nombre='TECKNOVATION').first()
+        if tecknovation:
+            print(f"   Sucursal ID: {tecknovation.id}")
             
-            # Buscar el usuario 73800418
-            usuario = Usuario.query.filter_by(username='73800418').first()
-            if not usuario:
-                print("❌ Usuario 73800418 no encontrado")
-                return
-            
-            print(f"✅ Usuario 73800418: ID={usuario.id}, Nombre={usuario.nombre_completo}")
-            
-            # Obtener fecha actual en Perú
-            peru_tz = pytz.timezone('America/Lima')
-            hoy = datetime.now(peru_tz).date()
-            ahora = datetime.now(peru_tz)
-            
-            print(f"\n📅 Fecha actual en Perú: {hoy}")
-            print(f"🕐 Hora actual en Perú: {ahora}")
-            
-            # Todas las operaciones del usuario
-            todas_operaciones = Operacion.query.filter_by(
-                usuario_id=usuario.id
-            ).order_by(Operacion.hora.desc()).all()
-            
-            print(f"\n📊 TODAS las operaciones del usuario ({len(todas_operaciones)}):")
-            for op in todas_operaciones:
-                fecha_op = op.hora.date()
-                print(f"  - ID: {op.id}, Monto: {op.monto}, Comisión: {op.comision}, Hora: {op.hora}, Fecha: {fecha_op}")
-            
-            # Operaciones de hoy (según filtro del dashboard)
-            operaciones_hoy = Operacion.query.filter_by(
-                usuario_id=usuario.id
-            ).filter(
+            # Operaciones usando método dashboard
+            ops_dashboard = Operacion.query.filter(
+                Operacion.sucursal_id == tecknovation.id,
                 db.func.date(Operacion.hora) == hoy
-            ).order_by(Operacion.hora.desc()).all()
+            ).all()
             
-            print(f"\n📅 Operaciones de HOY según filtro ({len(operaciones_hoy)}):")
-            for op in operaciones_hoy:
-                print(f"  - ID: {op.id}, Monto: {op.monto}, Comisión: {op.comision}, Hora: {op.hora}")
+            print(f"   Operaciones (Dashboard): {len(ops_dashboard)}")
+            for op in ops_dashboard:
+                print(f"     - ID: {op.id}, Hora: {op.hora}, Comisión: S/ {op.comision}")
             
-            # Calcular comisión de hoy
-            total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
-                Operacion.usuario_id == usuario.id,
-                db.func.date(Operacion.hora) == hoy
-            ).scalar() or 0
+            # Operaciones usando método reportes
+            ops_reportes = Operacion.query.filter(
+                Operacion.sucursal_id == tecknovation.id,
+                Operacion.hora >= inicio_fecha,
+                Operacion.hora <= fin_fecha
+            ).all()
             
-            print(f"\n💰 Comisión total de hoy: S/ {total_comision_hoy}")
-            print(f"📊 Cantidad de operaciones de hoy: {len(operaciones_hoy)}")
-            
-            # Verificar operaciones recientes (últimas 24 horas)
-            hace_24_horas = ahora - timedelta(hours=24)
-            operaciones_recientes = Operacion.query.filter_by(
-                usuario_id=usuario.id
-            ).filter(
-                Operacion.hora >= hace_24_horas
-            ).order_by(Operacion.hora.desc()).all()
-            
-            print(f"\n🕐 Operaciones últimas 24 horas ({len(operaciones_recientes)}):")
-            for op in operaciones_recientes:
-                fecha_op = op.hora.date()
-                print(f"  - ID: {op.id}, Monto: {op.monto}, Comisión: {op.comision}, Hora: {op.hora}, Fecha: {fecha_op}")
-            
-            # Verificar si hay operaciones con fechas diferentes
-            fechas_unicas = set(op.hora.date() for op in todas_operaciones)
-            print(f"\n📅 Fechas únicas de operaciones: {fechas_unicas}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error: {e}")
-            return False
+            print(f"   Operaciones (Reportes): {len(ops_reportes)}")
+            for op in ops_reportes:
+                print(f"     - ID: {op.id}, Hora: {op.hora}, Comisión: S/ {op.comision}")
+        
+        # Verificar todas las operaciones de hoy
+        print("\n🔍 TODAS LAS OPERACIONES DE HOY")
+        print("-" * 40)
+        
+        todas_ops = Operacion.query.filter(
+            db.func.date(Operacion.hora) == hoy
+        ).order_by(Operacion.hora).all()
+        
+        print(f"   Total operaciones de hoy: {len(todas_ops)}")
+        for op in todas_ops:
+            sucursal = Sucursal.query.get(op.sucursal_id)
+            print(f"     - {sucursal.nombre}: {op.hora} - S/ {op.comision}")
 
 if __name__ == "__main__":
     diagnosticar_inconsistencia() 

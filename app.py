@@ -317,20 +317,21 @@ def admin_dashboard():
     comisiones_hoy = []
     comisiones_mes = {}
     
-    # OPTIMIZACIÓN: Usar queries separadas pero optimizadas
+    # OPTIMIZACIÓN: Usar la misma lógica que los reportes para consistencia
     comisiones_diarias = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
     ).filter(
-        db.func.date(Operacion.hora) == hoy_peru
+        Operacion.hora >= inicio_dia_peru,
+        Operacion.hora <= fin_dia_peru
     ).group_by(Operacion.sucursal_id).all()
     
     comisiones_mensuales = db.session.query(
         Operacion.sucursal_id,
         db.func.sum(Operacion.comision).label('total')
     ).filter(
-        db.func.extract('year', Operacion.hora) == año_actual,
-        db.func.extract('month', Operacion.hora) == mes_actual
+        Operacion.hora >= inicio_mes_peru,
+        Operacion.hora <= fin_mes_peru
     ).group_by(Operacion.sucursal_id).all()
     
     # Crear diccionarios para acceso rápido
@@ -367,17 +368,22 @@ def user_dashboard():
     ahora = datetime.now(peru_tz)
     hoy = ahora.date()
     
-    # Calcular la comisión diaria usando filtro por fecha en Perú
+    # Calcular la comisión diaria usando la misma lógica que los reportes
+    inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+    fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+    
     total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
         Operacion.usuario_id == current_user.id,
-        db.func.date(Operacion.hora) == hoy
+        Operacion.hora >= inicio_dia,
+        Operacion.hora <= fin_dia
     ).scalar() or 0
     
     # OPTIMIZACIÓN: Limitar operaciones mostradas a las últimas 10 para mejorar rendimiento
     operaciones_hoy = Operacion.query.filter_by(
         usuario_id == current_user.id
     ).filter(
-        db.func.date(Operacion.hora) == hoy
+        Operacion.hora >= inicio_dia,
+        Operacion.hora <= fin_dia
     ).order_by(Operacion.hora.desc()).limit(10).all()
     
     # Debug: Solo mostrar información esencial en desarrollo
