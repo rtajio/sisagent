@@ -743,6 +743,7 @@ def operaciones():
     ).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
     return render_template('operaciones.html',
                          operaciones=operaciones,
+                         pagination=operaciones_paginated,
                          fecha_actual=fecha or datetime.now(peru_tz).strftime('%Y-%m-%d'),
                          fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
                          filtros_aplicados=filtros_aplicados,
