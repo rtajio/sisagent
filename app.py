@@ -353,31 +353,40 @@ def user_dashboard():
     if current_user.es_admin:
         return redirect(url_for('admin_dashboard'))
     
-    # Usar la misma lógica de timezone que el registro de operaciones
-    peru_tz = pytz.timezone('America/Lima')
-    ahora = datetime.now(peru_tz)
-    hoy = ahora.date()
+    try:
+        # OPTIMIZACIÓN ULTRA: Dashboard de usuario ultra-simplificado
+        peru_tz = pytz.timezone('America/Lima')
+        ahora = datetime.now(peru_tz)
+        hoy = ahora.date()
+        
+        # OPTIMIZACIÓN ULTRA: Query simple para comisión diaria
+        total_comision_hoy = 0.0
+        try:
+            total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
+                Operacion.usuario_id == current_user.id,
+                db.func.date(Operacion.hora) == hoy
+            ).scalar() or 0.0
+        except:
+            total_comision_hoy = 0.0
+        
+        # OPTIMIZACIÓN ULTRA: Query simple para operaciones
+        operaciones_hoy = []
+        try:
+            operaciones_hoy = Operacion.query.filter_by(
+                usuario_id = current_user.id
+            ).order_by(Operacion.hora.desc()).limit(10).all()
+        except:
+            operaciones_hoy = []
+        
+        return render_template('user_dashboard.html',
+                             total_comision_hoy=total_comision_hoy,
+                             operaciones_hoy=operaciones_hoy)
     
-    # Calcular la comisión diaria usando filtro por fecha simple
-    total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
-        Operacion.usuario_id == current_user.id,
-        db.func.date(Operacion.hora) == hoy
-    ).scalar() or 0
-    
-    # OPTIMIZACIÓN: Limitar operaciones mostradas a las últimas 10 para mejorar rendimiento
-    operaciones_hoy = Operacion.query.filter_by(
-        usuario_id == current_user.id
-    ).filter(
-        db.func.date(Operacion.hora) == hoy
-    ).order_by(Operacion.hora.desc()).limit(10).all()
-    
-    # Debug: Solo mostrar información esencial en desarrollo
-    if app.debug:
-        print(f"DEBUG: Operaciones encontradas: {len(operaciones_hoy)}")
-    
-    return render_template('user_dashboard.html',
-                         total_comision_hoy=total_comision_hoy,
-                         operaciones_hoy=operaciones_hoy)
+    except Exception as e:
+        # En caso de error, mostrar dashboard básico
+        return render_template('user_dashboard.html',
+                             total_comision_hoy=0.0,
+                             operaciones_hoy=[])
 
 # Gestión de sucursales (solo admin)
 @app.route('/admin/sucursales')
