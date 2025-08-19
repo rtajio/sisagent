@@ -100,9 +100,29 @@ if fecha_inicio:
 
 **Después:**
 ```python
-# Aplicar filtros de fecha usando filtro por fecha en Perú
+# Aplicar filtros de fecha usando timezone específico para evitar problemas de conversión
+if fecha_inicio:
+    # Convertir fecha_inicio a datetime con timezone de Perú
+    inicio_fecha = datetime.combine(datetime.strptime(fecha_inicio, '%Y-%m-%d').date(), datetime.min.time()).replace(tzinfo=peru_tz)
+    query = query.filter(Operacion.hora >= inicio_fecha)
+```
+
+### 5. Cambio en Exportación de Reportes (`exportar_reporte`)
+
+**Antes:**
+```python
+# Aplicar filtros de fecha usando CAST para extraer solo la fecha
 if fecha_inicio:
     query = query.filter(db.func.date(Operacion.hora) >= fecha_inicio)
+```
+
+**Después:**
+```python
+# Aplicar filtros de fecha usando timezone específico para evitar problemas de conversión
+if fecha_inicio:
+    # Convertir fecha_inicio a datetime con timezone de Perú
+    inicio_fecha = datetime.combine(datetime.strptime(fecha_inicio, '%Y-%m-%d').date(), datetime.min.time()).replace(tzinfo=peru_tz)
+    query = query.filter(Operacion.hora >= inicio_fecha)
 ```
 
 ## Beneficios de la Corrección
@@ -125,18 +145,18 @@ if fecha_inicio:
 
 ## Verificación
 
-Se creó un script de prueba (`probar_correccion_fechas.py`) que verifica:
+Se crearon scripts de prueba que verifican:
 
 1. **Filtro por fecha actual**: Solo incluye operaciones del día actual
 2. **Filtro por fecha anterior**: Solo incluye operaciones del día anterior
 3. **Verificación de operaciones después de las 19:00**: Confirma que no se cuentan como del día siguiente
 4. **Consistencia de cálculos**: Verifica que las sumas coincidan con los filtros
+5. **Comparación de filtros**: Confirma que el filtro nuevo elimina las operaciones incorrectas
 
 ## Archivos Modificados
 
 - `app.py`: Funciones de dashboard, operaciones y reportes
-- `probar_correccion_fechas.py`: Script de verificación (nuevo)
-- `test_simple.py`: Script de prueba simple (nuevo)
+- `CORRECCION_FECHAS_REPORTES.md`: Documentación de las correcciones
 
 ## Impacto
 

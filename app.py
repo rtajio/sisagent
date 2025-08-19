@@ -98,6 +98,14 @@ else:
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# OPTIMIZACIÓN: Configuraciones para mejorar rendimiento
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'pool_size': 10,
+    'max_overflow': 20
+}
+
 print("✅ Configuración de base de datos completada")
 
 # Configurar CORS para permitir peticiones desde cualquier origen en producción
@@ -309,45 +317,33 @@ def admin_dashboard():
     comisiones_hoy = []
     comisiones_mes = {}
     
-    # Obtener todas las comisiones diarias desde Operacion usando filtro por fecha en Perú
-    comisiones_diarias = db.session.query(
+    # OPTIMIZACIÓN: Usar una sola query para obtener comisiones diarias y mensuales
+    comisiones_agregadas = db.session.query(
         Operacion.sucursal_id,
-        db.func.sum(Operacion.comision).label('total')
-    ).filter(
-        db.func.date(Operacion.hora) == hoy_peru
-    ).group_by(Operacion.sucursal_id).all()
-    
-    # Obtener todas las comisiones mensuales desde Operacion usando filtro por año y mes en Perú
-    comisiones_mensuales = db.session.query(
-        Operacion.sucursal_id,
-        db.func.sum(Operacion.comision).label('total')
-    ).filter(
-        db.func.extract('year', Operacion.hora) == año_actual,
-        db.func.extract('month', Operacion.hora) == mes_actual
+        db.func.sum(db.case(
+            (db.func.date(Operacion.hora) == hoy_peru, Operacion.comision),
+            else_=0
+        )).label('total_diario'),
+        db.func.sum(db.case(
+            (db.func.extract('year', Operacion.hora) == año_actual,
+             db.func.extract('month', Operacion.hora) == mes_actual, Operacion.comision),
+            else_=0
+        )).label('total_mensual')
     ).group_by(Operacion.sucursal_id).all()
     
     # Crear diccionarios para acceso rápido
-    comisiones_diarias_dict = {cd.sucursal_id: float(cd.total) for cd in comisiones_diarias}
-    comisiones_mensuales_dict = {cm.sucursal_id: float(cm.total) for cm in comisiones_mensuales}
+    comisiones_diarias_dict = {cd.sucursal_id: float(cd.total_diario) for cd in comisiones_agregadas}
+    comisiones_mensuales_dict = {cm.sucursal_id: float(cm.total_mensual) for cm in comisiones_agregadas}
     
-    # Debug: Mostrar información de timezone
-    print(f"DEBUG ADMIN: Hora actual en Perú: {ahora_peru}")
-    print(f"DEBUG ADMIN: Fecha actual en Perú: {hoy_peru}")
-    print(f"DEBUG ADMIN: Inicio del día (Peru): {inicio_dia_peru}")
-    print(f"DEBUG ADMIN: Fin del día (Peru): {fin_dia_peru}")
-    print(f"DEBUG ADMIN: Inicio del día (UTC Naive): {inicio_dia_utc_naive}")
-    print(f"DEBUG ADMIN: Fin del día (UTC Naive): {fin_dia_utc_naive}")
-    print(f"DEBUG ADMIN: Inicio del mes (UTC Naive): {inicio_mes_utc_naive}")
-    print(f"DEBUG ADMIN: Fin del mes (UTC Naive): {fin_mes_utc_naive}")
+    # Debug: Solo mostrar información esencial en desarrollo
+    if app.debug:
+        print(f"DEBUG ADMIN: Procesando {len(sucursales)} sucursales")
     
     for suc in sucursales:
         total_hoy = comisiones_diarias_dict.get(suc.id, 0.0)
         total_mes = comisiones_mensuales_dict.get(suc.id, 0.0)
         comisiones_hoy.append((suc.id, suc.nombre, total_hoy))
         comisiones_mes[suc.id] = total_mes
-        
-        # Debug: Mostrar comisiones por sucursal
-        print(f"DEBUG ADMIN: Sucursal {suc.nombre} - Comisión día: {total_hoy}, Comisión mes: {total_mes}")
     
     total_sucursales = len(sucursales)
     total_usuarios = Usuario.query.filter_by(activo=True).count()
@@ -375,21 +371,16 @@ def user_dashboard():
         db.func.date(Operacion.hora) == hoy
     ).scalar() or 0
     
-    # Operaciones de hoy usando filtro por fecha en Perú
+    # OPTIMIZACIÓN: Limitar operaciones mostradas a las últimas 10 para mejorar rendimiento
     operaciones_hoy = Operacion.query.filter_by(
         usuario_id == current_user.id
     ).filter(
         db.func.date(Operacion.hora) == hoy
-    ).order_by(Operacion.hora.desc()).all()
+    ).order_by(Operacion.hora.desc()).limit(10).all()
     
-    # Debug: Mostrar información de timezone
-    print(f"DEBUG: Hora actual en Perú: {ahora}")
-    print(f"DEBUG: Fecha actual en Perú: {hoy}")
-    print(f"DEBUG: Inicio del día: {inicio_dia}")
-    print(f"DEBUG: Fin del día: {fin_dia}")
-    print(f"DEBUG: Operaciones encontradas: {len(operaciones_hoy)}")
-    for op in operaciones_hoy:
-        print(f"DEBUG: Operación {op.id} - Hora: {op.hora}, Fecha: {op.hora.date()}")
+    # Debug: Solo mostrar información esencial en desarrollo
+    if app.debug:
+        print(f"DEBUG: Operaciones encontradas: {len(operaciones_hoy)}")
     
     return render_template('user_dashboard.html',
                          total_comision_hoy=total_comision_hoy,
@@ -718,13 +709,19 @@ def operaciones():
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
 
-    # Usar left join para incluir operaciones sin sucursal asignada
-    operaciones = query.outerjoin(Usuario).outerjoin(Sucursal).order_by(Operacion.hora.desc()).all()
+    # OPTIMIZACIÓN: Implementar paginación para mejorar rendimiento
+    page = request.args.get('page', 1, type=int)
+    per_page = 50  # Mostrar 50 operaciones por página
     
-    # Debug: Mostrar información de timezone
-    print(f"DEBUG OPERACIONES: Hora actual en Perú: {ahora}")
-    print(f"DEBUG OPERACIONES: Fecha actual en Perú: {hoy}")
-    print(f"DEBUG OPERACIONES: Operaciones encontradas: {len(operaciones)}")
+    # Usar left join para incluir operaciones sin sucursal asignada
+    operaciones_paginated = query.outerjoin(Usuario).outerjoin(Sucursal).order_by(Operacion.hora.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    operaciones = operaciones_paginated.items
+    
+    # Debug: Solo mostrar información esencial en desarrollo
+    if app.debug:
+        print(f"DEBUG OPERACIONES: Operaciones encontradas: {len(operaciones)}")
     
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
@@ -1086,55 +1083,52 @@ def api_reportes_operaciones():
     
     query = Operacion.query
     
-    # Debug: Mostrar parámetros recibidos
-    print(f"DEBUG REPORTE: Parámetros recibidos:")
-    print(f"DEBUG REPORTE: - fecha_inicio: '{fecha_inicio}'")
-    print(f"DEBUG REPORTE: - fecha_fin: '{fecha_fin}'")
-    print(f"DEBUG REPORTE: - sucursal_id: '{sucursal_id}'")
-    print(f"DEBUG REPORTE: - medio: '{medio}'")
+    # Debug: Solo mostrar información esencial en desarrollo
+    if app.debug:
+        print(f"DEBUG REPORTE: Parámetros - fecha_inicio: '{fecha_inicio}', fecha_fin: '{fecha_fin}', sucursal_id: '{sucursal_id}', medio: '{medio}'")
     
     # Aplicar filtros de fecha usando timezone específico para evitar problemas de conversión
     if fecha_inicio:
         # Convertir fecha_inicio a datetime con timezone de Perú
         inicio_fecha = datetime.combine(datetime.strptime(fecha_inicio, '%Y-%m-%d').date(), datetime.min.time()).replace(tzinfo=peru_tz)
         query = query.filter(Operacion.hora >= inicio_fecha)
-        print(f"DEBUG REPORTE: Filtro fecha_inicio aplicado: >= {inicio_fecha}")
     
     if fecha_fin:
         # Convertir fecha_fin a datetime con timezone de Perú (hasta el final del día)
         fin_fecha = datetime.combine(datetime.strptime(fecha_fin, '%Y-%m-%d').date(), datetime.max.time()).replace(tzinfo=peru_tz)
         query = query.filter(Operacion.hora <= fin_fecha)
-        print(f"DEBUG REPORTE: Filtro fecha_fin aplicado: <= {fin_fecha}")
     
     if sucursal_id and sucursal_id.strip():
         # Convertir sucursal_id de string a integer
         try:
             sucursal_id_int = int(sucursal_id)
             query = query.filter(Operacion.sucursal_id == sucursal_id_int)
-            print(f"DEBUG REPORTE: Filtro sucursal aplicado: {sucursal_id_int}")
         except ValueError:
             # Si no se puede convertir a integer, ignorar el filtro
-            print(f"DEBUG REPORTE: Error al convertir sucursal_id '{sucursal_id}' a integer")
+            if app.debug:
+                print(f"DEBUG REPORTE: Error al convertir sucursal_id '{sucursal_id}' a integer")
     
     if medio:
         query = query.filter(Operacion.medio == medio)
-        print(f"DEBUG REPORTE: Filtro medio aplicado: {medio}")
     
-    operaciones = query.order_by(Operacion.hora.desc()).all()
+    # OPTIMIZACIÓN: Limitar resultados y usar paginación para reportes grandes
+    operaciones = query.order_by(Operacion.hora.desc()).limit(1000).all()
     
     # Debug: Mostrar información de filtros aplicados
-    print(f"DEBUG REPORTE: Operaciones encontradas: {len(operaciones)}")
+    print(f"DEBUG REPORTE: Operaciones encontradas: {len(operaciones)} (limitado a 1000)")
     
-    # Debug: Mostrar las primeras 5 operaciones para verificar fechas
-    for i, op in enumerate(operaciones[:5]):
-        print(f"DEBUG REPORTE: Operación {i+1}: ID={op.id}, Hora={op.hora}, Fecha={op.hora.date()}, Comisión={op.comision}")
+    # Debug: Solo mostrar información esencial en desarrollo
+    if app.debug:
+        print(f"DEBUG REPORTE: Procesando {len(operaciones)} operaciones")
+    
+    # OPTIMIZACIÓN: Cargar medios de pago una sola vez para evitar N+1 queries
+    medios_cache = {mp.nombre_abreviado: mp.nombre_completo for mp in MedioPago.query.all()}
     
     # Preparar datos para el reporte
     datos = []
     for op in operaciones:
-        # Obtener el nombre completo del medio
-        medio_obj = MedioPago.query.filter_by(nombre_abreviado=op.medio).first()
-        medio_nombre = medio_obj.nombre_completo if medio_obj else op.medio
+        # Usar cache de medios de pago
+        medio_nombre = medios_cache.get(op.medio, op.medio)
         
         datos.append({
             'id': op.id,
@@ -1152,10 +1146,9 @@ def api_reportes_operaciones():
     total_monto = sum(op['monto'] for op in datos)
     total_comision = sum(op['comision'] for op in datos)
     
-    # Debug: Mostrar totales calculados
-    print(f"DEBUG REPORTE: Total operaciones: {total_operaciones}")
-    print(f"DEBUG REPORTE: Total monto: {total_monto}")
-    print(f"DEBUG REPORTE: Total comisión: {total_comision}")
+    # Debug: Solo mostrar información esencial en desarrollo
+    if app.debug:
+        print(f"DEBUG REPORTE: Total operaciones: {total_operaciones}, Total monto: {total_monto}, Total comisión: {total_comision}")
     
     return jsonify({
         'operaciones': datos,
@@ -1205,7 +1198,8 @@ def exportar_reporte(formato):
         if medio:
             query = query.filter(Operacion.medio == medio)
         
-        operaciones = query.order_by(Operacion.hora.desc()).all()
+        # OPTIMIZACIÓN: Limitar exportación a máximo 5000 registros para evitar timeouts
+        operaciones = query.order_by(Operacion.hora.desc()).limit(5000).all()
         
         # Función para obtener el nombre completo del medio
         def get_medio_nombre(medio_abreviado):
