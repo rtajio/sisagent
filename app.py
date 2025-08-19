@@ -317,23 +317,25 @@ def admin_dashboard():
     comisiones_hoy = []
     comisiones_mes = {}
     
-    # OPTIMIZACIÓN: Usar una sola query para obtener comisiones diarias y mensuales
-    comisiones_agregadas = db.session.query(
+    # OPTIMIZACIÓN: Usar queries separadas pero optimizadas
+    comisiones_diarias = db.session.query(
         Operacion.sucursal_id,
-        db.func.sum(db.case(
-            (db.func.date(Operacion.hora) == hoy_peru, Operacion.comision),
-            else_=0
-        )).label('total_diario'),
-        db.func.sum(db.case(
-            (db.func.extract('year', Operacion.hora) == año_actual,
-             db.func.extract('month', Operacion.hora) == mes_actual, Operacion.comision),
-            else_=0
-        )).label('total_mensual')
+        db.func.sum(Operacion.comision).label('total')
+    ).filter(
+        db.func.date(Operacion.hora) == hoy_peru
+    ).group_by(Operacion.sucursal_id).all()
+    
+    comisiones_mensuales = db.session.query(
+        Operacion.sucursal_id,
+        db.func.sum(Operacion.comision).label('total')
+    ).filter(
+        db.func.extract('year', Operacion.hora) == año_actual,
+        db.func.extract('month', Operacion.hora) == mes_actual
     ).group_by(Operacion.sucursal_id).all()
     
     # Crear diccionarios para acceso rápido
-    comisiones_diarias_dict = {cd.sucursal_id: float(cd.total_diario) for cd in comisiones_agregadas}
-    comisiones_mensuales_dict = {cm.sucursal_id: float(cm.total_mensual) for cm in comisiones_agregadas}
+    comisiones_diarias_dict = {cd.sucursal_id: float(cd.total) for cd in comisiones_diarias}
+    comisiones_mensuales_dict = {cm.sucursal_id: float(cm.total) for cm in comisiones_mensuales}
     
     # Debug: Solo mostrar información esencial en desarrollo
     if app.debug:
