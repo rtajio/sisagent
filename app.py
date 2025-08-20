@@ -272,6 +272,16 @@ def api_health_check():
 def ping():
     return "pong", 200
 
+# Ruta de prueba ultra simple
+@app.route('/test')
+def test():
+    return "SISAGENT funcionando correctamente", 200
+
+# Ruta raíz ultra simple
+@app.route('/')
+def root():
+    return "SISAGENT - Sistema funcionando", 200
+
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
 def login():
