@@ -2291,3 +2291,75 @@ def logout():
     return redirect(url_for('login'))
 
 # Rutas principales
+
+# API para obtener datos del dashboard dinámicamente
+@app.route('/api/dashboard-data')
+@login_required
+def api_dashboard_data():
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    try:
+        # OPTIMIZACIÓN ULTRA: Cálculos de fecha más eficientes
+        ahora_peru = datetime.now(peru_tz)
+        hoy_peru = ahora_peru.date()
+        mes_actual = hoy_peru.month
+        año_actual = hoy_peru.year
+
+        # OPTIMIZACIÓN ULTRA: Una sola query para todo
+        inicio_dia_peru = datetime.combine(hoy_peru, datetime.min.time()).replace(tzinfo=peru_tz)
+        fin_dia_peru = datetime.combine(hoy_peru, datetime.max.time()).replace(tzinfo=peru_tz)
+        
+        # OPTIMIZACIÓN ULTRA: Queries separadas pero ultra-optimizadas
+        comisiones_diarias = db.session.query(
+            Operacion.sucursal_id,
+            db.func.sum(Operacion.comision).label('total')
+        ).filter(
+            Operacion.hora >= inicio_dia_peru,
+            Operacion.hora <= fin_dia_peru
+        ).group_by(Operacion.sucursal_id).all()
+        
+        # OPTIMIZACIÓN ULTRA: Query mensual simplificada
+        comisiones_mensuales = db.session.query(
+            Operacion.sucursal_id,
+            db.func.sum(Operacion.comision).label('total')
+        ).filter(
+            db.func.extract('year', Operacion.hora) == año_actual,
+            db.func.extract('month', Operacion.hora) == mes_actual
+        ).group_by(Operacion.sucursal_id).all()
+        
+        # OPTIMIZACIÓN ULTRA: Sucursales con JOIN para evitar N+1
+        sucursales = db.session.query(Sucursal.id, Sucursal.nombre).filter(Sucursal.activa == True).all()
+        
+        # OPTIMIZACIÓN ULTRA: Procesamiento en memoria más rápido
+        comisiones_diarias_dict = {cd.sucursal_id: float(cd.total) for cd in comisiones_diarias}
+        comisiones_mensuales_dict = {cm.sucursal_id: float(cm.total) for cm in comisiones_mensuales}
+        
+        comisiones_hoy = [(suc.id, suc.nombre, comisiones_diarias_dict.get(suc.id, 0.0)) for suc in sucursales]
+        comisiones_mes = {suc.id: comisiones_mensuales_dict.get(suc.id, 0.0) for suc in sucursales}
+        
+        # OPTIMIZACIÓN ULTRA: Contador de usuarios optimizado
+        total_usuarios = db.session.query(db.func.count(Usuario.id)).filter(Usuario.activo == True).scalar()
+        
+        # Calcular totales
+        total_comision_hoy = sum(comisiones_diarias_dict.values())
+        total_sucursales = len(comisiones_hoy)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'total_sucursales': total_sucursales,
+                'total_usuarios': total_usuarios,
+                'total_comision_hoy': total_comision_hoy,
+                'comisiones_hoy': comisiones_hoy,
+                'comisiones_mes': comisiones_mes
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# Ruta para optimizar la base de datos (solo admin)

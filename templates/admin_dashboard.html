@@ -28,10 +28,14 @@
                 <span id="current-time"></span>
             </span>
         </div>
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
+                <i class="fas fa-sync-alt me-1"></i>
+                Actualizar
+            </button>
+        </div>
     </div>
 </div>
-
-{# Eliminar el formulario de filtro de sucursales #}
 
 <!-- Estadísticas generales -->
 <div class="row mb-4">
@@ -43,7 +47,7 @@
                         <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
                             Sucursales Activas
                         </div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_sucursales }}</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-sucursales">{{ total_sucursales }}</div>
                     </div>
                     <div class="col-auto">
                         <i class="fas fa-building fa-2x text-gray-300"></i>
@@ -61,7 +65,7 @@
                         <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
                             Usuarios Activos
                         </div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_usuarios }}</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-usuarios">{{ total_usuarios }}</div>
                     </div>
                     <div class="col-auto">
                         <i class="fas fa-users fa-2x text-gray-300"></i>
@@ -79,7 +83,7 @@
                         <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
                             Comisión Total Hoy
                         </div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-comision-hoy">
                             S/ {{ "%.2f"|format(comisiones_hoy | map(attribute=2) | sum) }}
                         </div>
                     </div>
@@ -90,57 +94,60 @@
             </div>
         </div>
     </div>
-
-
 </div>
 
 <!-- Comisiones por sucursal -->
 <div class="row">
     <div class="col-12">
         <div class="card shadow mb-4">
-            <div class="card-header py-3">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
                 <h6 class="m-0 font-weight-bold text-white">
                     <i class="fas fa-chart-bar me-2"></i>
                     Comisiones por Sucursal - Hoy
                 </h6>
+                <small class="text-white-50" id="last-update">
+                    Última actualización: <span id="update-time"></span>
+                </small>
             </div>
             <div class="card-body">
-                {% if comisiones_hoy %}
-                <div class="table-responsive">
-                    <table class="table table-bordered" width="100%" cellspacing="0">
-                        <thead>
-                            <tr>
-                                <th>N°</th>
-                                <th>Sucursal</th>
-                                <th>Comisión del Día</th>
-                                <th>Comisión del Mes</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for sucursal_id, sucursal_nombre, total in comisiones_hoy %}
-                            <tr>
-                                <td>{{ loop.index }}</td>
-                                <td>{{ sucursal_nombre }}</td>
-                                <td class="font-weight-bold text-success">S/ {{ "%.2f"|format(total) }}</td>
-                                <td class="font-weight-bold text-primary">S/ {{ "%.2f"|format(comisiones_mes[sucursal_id] if comisiones_mes[sucursal_id] is defined else 0) }}</td>
-                                <td>
-                                    <a href="{{ url_for('operaciones') }}?sucursal_id={{ sucursal_id }}" class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-eye me-1"></i>
-                                        Ver Operaciones
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <div id="comisiones-table">
+                    {% if comisiones_hoy %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>N°</th>
+                                    <th>Sucursal</th>
+                                    <th>Comisión del Día</th>
+                                    <th>Comisión del Mes</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comisiones-tbody">
+                                {% for sucursal_id, sucursal_nombre, total in comisiones_hoy %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ sucursal_nombre }}</td>
+                                    <td class="font-weight-bold text-success">S/ {{ "%.2f"|format(total) }}</td>
+                                    <td class="font-weight-bold text-primary">S/ {{ "%.2f"|format(comisiones_mes[sucursal_id] if comisiones_mes[sucursal_id] is defined else 0) }}</td>
+                                    <td>
+                                        <a href="{{ url_for('operaciones') }}?sucursal_id={{ sucursal_id }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye me-1"></i>
+                                            Ver Operaciones
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No hay comisiones registradas hoy</p>
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div class="text-center py-4">
-                    <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">No hay comisiones registradas hoy</p>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -164,10 +171,110 @@ function updateTime() {
     document.getElementById('current-time').textContent = now.toLocaleDateString('es-PE', options);
 }
 
+// Función para actualizar el dashboard dinámicamente
+function refreshDashboard() {
+    fetch('/api/dashboard-data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Actualizar estadísticas generales
+                document.getElementById('total-sucursales').textContent = data.data.total_sucursales;
+                document.getElementById('total-usuarios').textContent = data.data.total_usuarios;
+                document.getElementById('total-comision-hoy').textContent = `S/ ${data.data.total_comision_hoy.toFixed(2)}`;
+                
+                // Actualizar tabla de comisiones
+                updateComisionesTable(data.data.comisiones_hoy, data.data.comisiones_mes);
+                
+                // Actualizar tiempo de última actualización
+                const now = new Date();
+                document.getElementById('update-time').textContent = now.toLocaleTimeString('es-PE');
+                
+                // Mostrar notificación de éxito
+                showNotification('Dashboard actualizado correctamente', 'success');
+            } else {
+                showNotification('Error al actualizar dashboard: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('Error de conexión al actualizar dashboard', 'error');
+        });
+}
+
+// Función para actualizar la tabla de comisiones
+function updateComisionesTable(comisionesHoy, comisionesMes) {
+    const tbody = document.getElementById('comisiones-tbody');
+    
+    if (comisionesHoy.length === 0) {
+        document.getElementById('comisiones-table').innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No hay comisiones registradas hoy</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    comisionesHoy.forEach((comision, index) => {
+        const [sucursalId, sucursalNombre, total] = comision;
+        const comisionMes = comisionesMes[sucursalId] || 0;
+        
+        html += `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${sucursalNombre}</td>
+                <td class="font-weight-bold text-success">S/ ${total.toFixed(2)}</td>
+                <td class="font-weight-bold text-primary">S/ ${comisionMes.toFixed(2)}</td>
+                <td>
+                    <a href="/operaciones?sucursal_id=${sucursalId}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-eye me-1"></i>
+                        Ver Operaciones
+                    </a>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+// Función para mostrar notificaciones
+function showNotification(message, type) {
+    const alertClass = type === 'error' ? 'alert-danger' : 'alert-success';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Insertar al inicio del contenido
+    const content = document.querySelector('.container-fluid');
+    content.insertAdjacentHTML('afterbegin', alertHtml);
+    
+    // Auto-remover después de 3 segundos
+    setTimeout(() => {
+        const alerts = document.querySelectorAll('.alert');
+        if (alerts.length > 0) {
+            alerts[0].remove();
+        }
+    }, 3000);
+}
+
 // Actualizar hora cada segundo
 updateTime();
 setInterval(updateTime, 1000);
 
+// Actualizar dashboard automáticamente cada 30 segundos
+setInterval(refreshDashboard, 30000);
+
+// Actualizar dashboard al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    // Establecer tiempo inicial de actualización
+    const now = new Date();
+    document.getElementById('update-time').textContent = now.toLocaleTimeString('es-PE');
+});
 
 </script>
 {% endblock %} 
