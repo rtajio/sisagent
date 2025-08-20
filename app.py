@@ -1223,14 +1223,16 @@ def exportar_reporte(formato):
         elif formato == 'pdf':
             # OPTIMIZACIÓN: Lazy loading de reportlab para no ralentizar el startup
             try:
-                from reportlab.lib.pagesizes import letter
+                from reportlab.lib.pagesizes import A4, landscape
                 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
                 from reportlab.lib.styles import getSampleStyleSheet
                 from reportlab.lib import colors
+                from reportlab.lib.units import inch
                 from io import BytesIO
                 
                 output = BytesIO()
-                doc = SimpleDocTemplate(output, pagesize=letter)
+                # Usar A4 en landscape para más espacio horizontal
+                doc = SimpleDocTemplate(output, pagesize=landscape(A4))
                 elements = []
                 styles = getSampleStyleSheet()
                 
@@ -1258,19 +1260,34 @@ def exportar_reporte(formato):
                             op.sucursal.nombre if op.sucursal else 'Sin sucursal'
                         ])
                 
-                table = Table(data)
+                # OPTIMIZACIÓN: Definir anchos de columna específicos para que quepan
+                col_widths = [0.4*inch, 0.8*inch, 0.6*inch, 0.8*inch, 0.7*inch, 1.2*inch, 1.5*inch, 1.2*inch]
+                
+                table = Table(data, colWidths=col_widths)
                 table.setStyle(TableStyle([
+                    # Header styling
                     ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 12),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('FONTSIZE', (0, 0), (-1, 0), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                    
+                    # Data styling
                     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                     ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
                     ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 1), (-1, -1), 10),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                    ('FONTSIZE', (0, 1), (-1, -1), 8),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    
+                    # Grid styling
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.beige, colors.white]),
+                    
+                    # Specific column alignments
+                    ('ALIGN', (3, 1), (4, -1), 'RIGHT'),  # Monto y Comisión alineados a la derecha
+                    ('ALIGN', (0, 1), (0, -1), 'CENTER'),  # Número centrado
                 ]))
                 elements.append(table)
                 
