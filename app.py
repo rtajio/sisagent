@@ -124,9 +124,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Límite de 16MB para uplo
 
 print("✅ Configuración de base de datos completada")
 
-# Configurar CORS para permitir peticiones desde cualquier origen en producción
-from flask_cors import CORS
-CORS(app, origins=['*'])
+# CORS removido para simplificar
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -1220,82 +1218,9 @@ def exportar_reporte(formato):
                 headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.csv'}
             )
         elif formato == 'xlsx':
-            import openpyxl
-            from openpyxl import Workbook
-            from io import BytesIO
-            wb = Workbook()
-            ws = wb.active
-            ws.title = "Operaciones"
-            headers = ['N°', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']
-            for col, header in enumerate(headers, 1):
-                ws.cell(row=1, column=col, value=header)
-            for idx, op in enumerate(operaciones, 1):
-                row = idx + 1
-                ws.cell(row=row, column=1, value=idx)
-                ws.cell(row=row, column=2, value=format_peru_date(op.hora))
-                ws.cell(row=row, column=3, value=format_peru_time(op.hora))
-                ws.cell(row=row, column=4, value=float(op.monto))
-                ws.cell(row=row, column=5, value=float(op.comision))
-                ws.cell(row=row, column=6, value=get_medio_nombre(op.medio))
-                ws.cell(row=row, column=7, value=op.usuario.nombre_completo)
-                ws.cell(row=row, column=8, value=op.sucursal.nombre if op.sucursal else 'Sin sucursal')
-            output = BytesIO()
-            wb.save(output)
-            output.seek(0)
-            from flask import Response
-            return Response(
-                output.getvalue(),
-                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.xlsx'}
-            )
+            return 'Exportación XLSX temporalmente deshabilitada', 503
         elif formato == 'pdf':
-            from reportlab.lib.pagesizes import letter
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-            from reportlab.lib.styles import getSampleStyleSheet
-            from reportlab.lib import colors
-            from io import BytesIO
-            output = BytesIO()
-            doc = SimpleDocTemplate(output, pagesize=letter)
-            elements = []
-            styles = getSampleStyleSheet()
-            # Texto de prueba para verificar actualización
-            elements.append(Paragraph('REPORTE ACTUALIZADO - PRUEBA DE NUMERACIÓN CONSECUTIVA', styles['Title']))
-            elements.append(Spacer(1, 12))
-            data = [['N°', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']]
-            for idx, op in enumerate(operaciones, 1):
-                data.append([
-                    str(idx),
-                    format_peru_date(op.hora),
-                    format_peru_time(op.hora),
-                    f'S/. {float(op.monto):.2f}',
-                    f'S/. {float(op.comision):.2f}',
-                    get_medio_nombre(op.medio),
-                    op.usuario.nombre_completo,
-                    op.sucursal.nombre if op.sucursal else 'Sin sucursal'
-                ])
-            table = Table(data)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 14),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 12),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            elements.append(table)
-            doc.build(elements)
-            output.seek(0)
-            from flask import Response
-            return Response(
-                output.getvalue(),
-                mimetype='application/pdf',
-                headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
-            )
+            return 'Exportación PDF temporalmente deshabilitada', 503
         else:
             return 'Formato no soportado', 400
     except Exception as e:
