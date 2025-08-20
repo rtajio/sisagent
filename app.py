@@ -83,6 +83,31 @@ app = Flask(__name__)
 
 print("✅ Flask app creada")
 
+# HEALTHCHECK RUTAS - Definidas ANTES de cualquier configuración de BD
+@app.route('/ping')
+def ping():
+    return "pong", 200
+
+@app.route('/health')
+def health_check():
+    return "OK", 200
+
+@app.route('/api/health')
+def api_health_check():
+    return "OK", 200
+
+@app.route('/railway-health')
+def railway_health():
+    return "OK", 200
+
+@app.route('/test')
+def test():
+    return "SISAGENT funcionando correctamente", 200
+
+@app.route('/')
+def root():
+    return "SISAGENT - Sistema funcionando", 200
+
 # Configuración para Railway
 if os.environ.get('DATABASE_URL'):
     # Para Railway con PostgreSQL
@@ -99,28 +124,19 @@ else:
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# OPTIMIZACIÓN ULTRA: Configuraciones para máximo rendimiento
+# CONFIGURACIÓN SIMPLIFICADA: Sin configuraciones agresivas
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,
     'pool_recycle': 300,
-    'pool_size': 50,  # Aumentado drásticamente para más conexiones concurrentes
-    'max_overflow': 100,  # Aumentado drásticamente para picos de tráfico
-    'pool_timeout': 10,  # Timeout más agresivo
-    'echo': False,  # Desactivar logging SQL
-    'echo_pool': False,  # Desactivar logging del pool
-    'isolation_level': 'SERIALIZABLE',  # Nivel de aislamiento compatible con SQLite
-    'connect_args': {
-        'timeout': 10,  # Timeout de conexión más agresivo
-        'check_same_thread': False  # Para SQLite en producción
-    }
+    'pool_size': 5,  # Reducido drásticamente
+    'max_overflow': 10,  # Reducido drásticamente
+    'pool_timeout': 30,  # Timeout más largo
+    'echo': False
 }
 
-# OPTIMIZACIÓN ULTRA: Configuraciones adicionales de Flask para máximo rendimiento
-app.config['TEMPLATES_AUTO_RELOAD'] = False  # Desactivar auto-reload en producción
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # Cache estático por 1 año
-app.config['JSON_SORT_KEYS'] = False  # No ordenar JSON para mayor velocidad
-app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False  # No formatear JSON para mayor velocidad
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Límite de 16MB para uploads
+# CONFIGURACIÓN SIMPLIFICADA: Solo configuraciones básicas de Flask
+app.config['TEMPLATES_AUTO_RELOAD'] = False
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
 
 print("✅ Configuración de base de datos completada")
 
@@ -240,67 +256,6 @@ class OperacionTareo(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
-
-# Health check extremadamente simple para Railway
-@app.route('/')
-def root_health_check():
-    # Si el usuario está autenticado, redirigir a la app
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    # Si no está autenticado, mostrar página de login
-    return redirect(url_for('login'))
-
-# Health check específico para Railway (sin autenticación)
-@app.route('/railway-health')
-def railway_health():
-    return "OK", 200
-
-# Health check simple para Railway (ruta raíz sin autenticación)
-@app.route('/health')
-def health_check():
-    return "OK", 200
-
-# Health check simple para Railway
-@app.route('/api/health')
-def api_health_check():
-    return "OK", 200
-
-# Health check ultra simple para Railway
-@app.route('/ping')
-def ping():
-    return "pong", 200
-
-# Ruta de prueba ultra simple
-@app.route('/test')
-def test():
-    return "SISAGENT funcionando correctamente", 200
-
-# Ruta raíz ultra simple
-@app.route('/')
-def root():
-    return "SISAGENT - Sistema funcionando", 200
-
-# Rutas de autenticación
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = Usuario.query.filter_by(username=username).first()
-        
-        if user and check_password_hash(user.password_hash, password) and user.activo:
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Credenciales inválidas o usuario inactivo', 'error')
-    
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
 
 # Rutas principales
 @app.route('/app')
@@ -2312,3 +2267,27 @@ def init_database_manual():
         return f"❌ Error: {str(e)}", 500
 
 # Ruta para optimizar la base de datos (solo admin)
+
+# Rutas de autenticación
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = Usuario.query.filter_by(username=username).first()
+        
+        if user and check_password_hash(user.password_hash, password) and user.activo:
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Credenciales inválidas o usuario inactivo', 'error')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+# Rutas principales
