@@ -1,35 +1,11 @@
 #!/bin/bash
 
-echo "🚀 Iniciando SISAGENT en Railway..."
+echo "�� Iniciando SISAGENT..."
 
-# Activar entorno virtual si existe
-if [ -d "/opt/venv" ]; then
-    echo "📦 Activando entorno virtual..."
-    source /opt/venv/bin/activate
-fi
-
-# Inicializar base de datos
+# Intentar inicializar la base de datos, pero no fallar si hay errores
 echo "🔧 Inicializando base de datos..."
-python init_db.py
+python init_db.py || echo "⚠️ Advertencia: La inicialización de la base de datos falló, pero continuando..."
 
-# Verificar que la inicialización fue exitosa
-if [ $? -eq 0 ]; then
-    echo "✅ Base de datos inicializada correctamente"
-else
-    echo "❌ Error al inicializar la base de datos"
-    exit 1
-fi
-
-# Obtener el puerto desde la variable de entorno
-PORT=${PORT:-5000}
-echo "🌐 Iniciando servidor en puerto $PORT"
-
-# Iniciar Gunicorn
-echo "🚀 Iniciando Gunicorn..."
-exec gunicorn wsgi:application \
-    --bind 0.0.0.0:$PORT \
-    --workers 2 \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info 
+# Iniciar la aplicación
+echo "🌐 Iniciando aplicación..."
+exec gunicorn wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload 
