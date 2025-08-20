@@ -103,18 +103,24 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,
     'pool_recycle': 300,
-    'pool_size': 20,  # Aumentado para más conexiones concurrentes
-    'max_overflow': 40,  # Aumentado para picos de tráfico
-    'pool_timeout': 30,  # Timeout más corto
+    'pool_size': 50,  # Aumentado drásticamente para más conexiones concurrentes
+    'max_overflow': 100,  # Aumentado drásticamente para picos de tráfico
+    'pool_timeout': 10,  # Timeout más agresivo
     'echo': False,  # Desactivar logging SQL
     'echo_pool': False,  # Desactivar logging del pool
-    'isolation_level': 'SERIALIZABLE'  # Nivel de aislamiento compatible con SQLite
+    'isolation_level': 'SERIALIZABLE',  # Nivel de aislamiento compatible con SQLite
+    'connect_args': {
+        'timeout': 10,  # Timeout de conexión más agresivo
+        'check_same_thread': False  # Para SQLite en producción
+    }
 }
 
-# OPTIMIZACIÓN: Configuraciones adicionales de Flask
+# OPTIMIZACIÓN ULTRA: Configuraciones adicionales de Flask para máximo rendimiento
 app.config['TEMPLATES_AUTO_RELOAD'] = False  # Desactivar auto-reload en producción
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # Cache estático por 1 año
 app.config['JSON_SORT_KEYS'] = False  # No ordenar JSON para mayor velocidad
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False  # No formatear JSON para mayor velocidad
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Límite de 16MB para uploads
 
 print("✅ Configuración de base de datos completada")
 
@@ -374,14 +380,14 @@ def user_dashboard():
         except:
             total_comision_hoy = 0.0
         
-        # OPTIMIZACIÓN ULTRA: Query simple para operaciones con filtro de fecha
+        # OPTIMIZACIÓN ULTRA: Query simple para operaciones con filtro de fecha y límite reducido
         operaciones_hoy = []
         try:
             operaciones_hoy = Operacion.query.filter(
                 Operacion.usuario_id == current_user.id,
                 Operacion.hora >= inicio_dia,
                 Operacion.hora <= fin_dia
-            ).order_by(Operacion.hora.desc()).limit(10).all()
+            ).order_by(Operacion.hora.desc()).limit(5).all()  # Reducido a 5 para mayor velocidad
         except:
             operaciones_hoy = []
         
@@ -724,7 +730,7 @@ def operaciones():
 
     # OPTIMIZACIÓN ULTRA: Paginación más eficiente
     page = request.args.get('page', 1, type=int)
-    per_page = 30  # Reducido para mayor velocidad
+    per_page = 20  # Reducido drásticamente para mayor velocidad
     
     # OPTIMIZACIÓN: Query con JOIN básico para evitar N+1
     operaciones_paginated = query.outerjoin(Usuario).outerjoin(Sucursal).order_by(Operacion.hora.desc()).paginate(
@@ -783,6 +789,8 @@ def registrar_operacion():
             hora_actual = datetime.now(peru_tz)
             # Convertir a UTC para almacenamiento consistente
             hora_utc = hora_actual.astimezone(pytz.UTC)
+            
+            # OPTIMIZACIÓN ULTRA: Insert directo sin transacción compleja
             db.session.execute(text("""
                 INSERT INTO operacion (monto, comision, medio, hora, usuario_id, sucursal_id, created_at)
                 VALUES (:monto, :comision, :medio, :hora, :usuario_id, :sucursal_id, :hora)
@@ -804,10 +812,10 @@ def registrar_operacion():
             flash('Error al registrar operación', 'error')
             return redirect(url_for('registrar_operacion'))
     
-    # OPTIMIZACIÓN ULTRA: Cargar datos mínimos
+    # OPTIMIZACIÓN ULTRA: Cargar datos mínimos solo si es admin
     sucursales = []
     if current_user.es_admin:
-        sucursales = db.session.query(Sucursal.id, Sucursal.nombre).filter(Sucursal.activa == True).limit(10).all()
+        sucursales = db.session.query(Sucursal.id, Sucursal.nombre).filter(Sucursal.activa == True).limit(5).all()
     
     return render_template('registrar_operacion.html', sucursales=sucursales)
 
@@ -1072,7 +1080,7 @@ def api_reportes_operaciones():
             query = query.filter(Operacion.medio == medio)
         
         # OPTIMIZACIÓN ULTRA: Query simple sin JOINs complejos
-        operaciones = query.order_by(Operacion.hora.desc()).limit(500).all()  # Reducido a 500 para mayor velocidad
+        operaciones = query.order_by(Operacion.hora.desc()).limit(200).all()  # Reducido drásticamente a 200 para mayor velocidad
         
         # OPTIMIZACIÓN ULTRA: Cache de medios de pago optimizado
         medios_cache = {mp.nombre_abreviado: mp.nombre_completo for mp in db.session.query(
@@ -1165,8 +1173,8 @@ def exportar_reporte(formato):
         if medio:
             query = query.filter(Operacion.medio == medio)
         
-        # OPTIMIZACIÓN: Limitar exportación a máximo 5000 registros para evitar timeouts
-        operaciones = query.order_by(Operacion.hora.desc()).limit(5000).all()
+        # OPTIMIZACIÓN: Limitar exportación a máximo 2000 registros para evitar timeouts
+        operaciones = query.order_by(Operacion.hora.desc()).limit(2000).all()
         
         # Función para obtener el nombre completo del medio
         def get_medio_nombre(medio_abreviado):
@@ -2204,6 +2212,66 @@ def debug_filtro_fecha():
     
     return jsonify(resultado)
 
+# Función para optimizar la base de datos con índices
+def optimizar_base_datos():
+    """Crea índices para mejorar el rendimiento de las consultas más frecuentes"""
+    try:
+        # Índices para operaciones (las consultas más frecuentes)
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_operacion_usuario_hora 
+            ON operacion (usuario_id, hora DESC)
+        """))
+        
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_operacion_sucursal_hora 
+            ON operacion (sucursal_id, hora DESC)
+        """))
+        
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_operacion_hora 
+            ON operacion (hora DESC)
+        """))
+        
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_operacion_medio 
+            ON operacion (medio)
+        """))
+        
+        # Índices para usuarios
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_usuario_username 
+            ON usuario (username)
+        """))
+        
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_usuario_sucursal 
+            ON usuario (sucursal_id)
+        """))
+        
+        # Índices para sucursales
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_sucursal_activa 
+            ON sucursal (activa)
+        """))
+        
+        # Configuraciones SQLite para mejor rendimiento
+        db.session.execute(text("PRAGMA journal_mode = WAL"))
+        db.session.execute(text("PRAGMA synchronous = NORMAL"))
+        db.session.execute(text("PRAGMA cache_size = 10000"))
+        db.session.execute(text("PRAGMA temp_store = MEMORY"))
+        
+        db.session.commit()
+        print("✅ Índices de base de datos creados exitosamente")
+        
+    except Exception as e:
+        print(f"⚠️ Error al crear índices: {e}")
+        db.session.rollback()
+
+# Ejecutar optimización al iniciar
+if __name__ == '__main__':
+    with app.app_context():
+        optimizar_base_datos()
+
 if __name__ == '__main__':
     try:
         with app.app_context():
@@ -2231,3 +2299,21 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=debug_mode, use_reloader=False, port=port)
 
 print("🎉 SISAGENT Flask cargado completamente - Listo para producción!") 
+
+# Ruta para optimizar la base de datos (solo admin)
+@app.route('/admin/optimizar-db')
+@login_required
+def admin_optimizar_db():
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    try:
+        optimizar_base_datos()
+        flash('Base de datos optimizada exitosamente', 'success')
+    except Exception as e:
+        flash(f'Error al optimizar: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_dashboard'))
+
+# Función para optimizar la base de datos con índices
