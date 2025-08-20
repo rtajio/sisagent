@@ -1173,9 +1173,120 @@ def exportar_reporte(formato):
                 headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.csv'}
             )
         elif formato == 'xlsx':
-            return 'Exportación XLSX temporalmente deshabilitada', 503
+            # OPTIMIZACIÓN: Lazy loading de openpyxl para no ralentizar el startup
+            try:
+                import openpyxl
+                from openpyxl import Workbook
+                from io import BytesIO
+                
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "Operaciones"
+                headers = ['N°', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']
+                
+                # OPTIMIZACIÓN: Escribir headers de una vez
+                for col, header in enumerate(headers, 1):
+                    ws.cell(row=1, column=col, value=header)
+                
+                # OPTIMIZACIÓN: Procesar datos en lotes para mejor rendimiento
+                batch_size = 100
+                for batch_start in range(0, len(operaciones), batch_size):
+                    batch_end = min(batch_start + batch_size, len(operaciones))
+                    batch = operaciones[batch_start:batch_end]
+                    
+                    for idx, op in enumerate(batch, batch_start + 1):
+                        row = idx + 1
+                        ws.cell(row=row, column=1, value=idx)
+                        ws.cell(row=row, column=2, value=format_peru_date(op.hora))
+                        ws.cell(row=row, column=3, value=format_peru_time(op.hora))
+                        ws.cell(row=row, column=4, value=float(op.monto))
+                        ws.cell(row=row, column=5, value=float(op.comision))
+                        ws.cell(row=row, column=6, value=get_medio_nombre(op.medio))
+                        ws.cell(row=row, column=7, value=op.usuario.nombre_completo)
+                        ws.cell(row=row, column=8, value=op.sucursal.nombre if op.sucursal else 'Sin sucursal')
+                
+                output = BytesIO()
+                wb.save(output)
+                output.seek(0)
+                
+                from flask import Response
+                return Response(
+                    output.getvalue(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.xlsx'}
+                )
+            except ImportError:
+                return 'Librería openpyxl no disponible', 503
+            except Exception as e:
+                return f'Error al generar Excel: {str(e)}', 500
+                
         elif formato == 'pdf':
-            return 'Exportación PDF temporalmente deshabilitada', 503
+            # OPTIMIZACIÓN: Lazy loading de reportlab para no ralentizar el startup
+            try:
+                from reportlab.lib.pagesizes import letter
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.lib import colors
+                from io import BytesIO
+                
+                output = BytesIO()
+                doc = SimpleDocTemplate(output, pagesize=letter)
+                elements = []
+                styles = getSampleStyleSheet()
+                
+                # OPTIMIZACIÓN: Título simplificado
+                elements.append(Paragraph('REPORTE DE OPERACIONES - SISAGENT', styles['Title']))
+                elements.append(Spacer(1, 12))
+                
+                # OPTIMIZACIÓN: Procesar datos en lotes
+                data = [['N°', 'Fecha', 'Hora', 'Monto', 'Comisión', 'Medio', 'Usuario', 'Sucursal']]
+                
+                batch_size = 50  # Lotes más pequeños para PDF
+                for batch_start in range(0, len(operaciones), batch_size):
+                    batch_end = min(batch_start + batch_size, len(operaciones))
+                    batch = operaciones[batch_start:batch_end]
+                    
+                    for idx, op in enumerate(batch, batch_start + 1):
+                        data.append([
+                            str(idx),
+                            format_peru_date(op.hora),
+                            format_peru_time(op.hora),
+                            f'S/. {float(op.monto):.2f}',
+                            f'S/. {float(op.comision):.2f}',
+                            get_medio_nombre(op.medio),
+                            op.usuario.nombre_completo,
+                            op.sucursal.nombre if op.sucursal else 'Sin sucursal'
+                        ])
+                
+                table = Table(data)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                elements.append(table)
+                
+                doc.build(elements)
+                output.seek(0)
+                
+                from flask import Response
+                return Response(
+                    output.getvalue(),
+                    mimetype='application/pdf',
+                    headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
+                )
+            except ImportError:
+                return 'Librería reportlab no disponible', 503
+            except Exception as e:
+                return f'Error al generar PDF: {str(e)}', 500
         else:
             return 'Formato no soportado', 400
     except Exception as e:
