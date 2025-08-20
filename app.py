@@ -359,12 +359,17 @@ def user_dashboard():
         ahora = datetime.now(peru_tz)
         hoy = ahora.date()
         
-        # OPTIMIZACIÓN ULTRA: Query simple para comisión diaria
+        # OPTIMIZACIÓN ULTRA: Query simple para comisión diaria con zona horaria correcta
         total_comision_hoy = 0.0
         try:
+            # Calcular rangos de fecha en UTC para comparar correctamente
+            inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz).astimezone(pytz.UTC)
+            fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz).astimezone(pytz.UTC)
+            
             total_comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0)).filter(
                 Operacion.usuario_id == current_user.id,
-                db.func.date(Operacion.hora) == hoy
+                Operacion.hora >= inicio_dia,
+                Operacion.hora <= fin_dia
             ).scalar() or 0.0
         except:
             total_comision_hoy = 0.0
@@ -697,13 +702,17 @@ def operaciones():
             flash('Solo los administradores pueden consultar operaciones de otros días', 'warning')
             fecha = None
         if fecha:
-            # Usar filtro por fecha específica
-            query = query.filter(db.func.date(Operacion.hora) == fecha_objeto)
+            # Usar filtro por fecha específica con zona horaria correcta
+            inicio_fecha = datetime.combine(fecha_objeto, datetime.min.time()).replace(tzinfo=peru_tz).astimezone(pytz.UTC)
+            fin_fecha = datetime.combine(fecha_objeto, datetime.max.time()).replace(tzinfo=peru_tz).astimezone(pytz.UTC)
+            query = query.filter(Operacion.hora >= inicio_fecha, Operacion.hora <= fin_fecha)
     
     # Solo aplicar filtro de fecha si no es admin accediendo desde dashboard con sucursal_id
-    # Usar filtro por fecha del día actual
+    # Usar filtro por fecha del día actual con zona horaria correcta
     if (not fecha and not current_user.es_admin) or (fecha and not (current_user.es_admin and request.args.get('sucursal_id'))):
-        query = query.filter(db.func.date(Operacion.hora) == hoy)
+        inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz).astimezone(pytz.UTC)
+        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz).astimezone(pytz.UTC)
+        query = query.filter(Operacion.hora >= inicio_hoy, Operacion.hora <= fin_hoy)
     if medio:
         query = query.filter(Operacion.medio == medio)
     if hora_inicio:
@@ -768,8 +777,10 @@ def registrar_operacion():
             else:
                 sucursal_id = current_user.sucursal_id or 1
             
-            # OPTIMIZACIÓN ULTRA: Query directa para registro instantáneo
+            # OPTIMIZACIÓN ULTRA: Query directa para registro instantáneo con zona horaria correcta
             hora_actual = datetime.now(peru_tz)
+            # Convertir a UTC para almacenamiento consistente
+            hora_utc = hora_actual.astimezone(pytz.UTC)
             db.session.execute(text("""
                 INSERT INTO operacion (monto, comision, medio, hora, usuario_id, sucursal_id, created_at)
                 VALUES (:monto, :comision, :medio, :hora, :usuario_id, :sucursal_id, :hora)
@@ -777,7 +788,7 @@ def registrar_operacion():
                 'monto': monto,
                 'comision': comision,
                 'medio': medio,
-                'hora': hora_actual,
+                'hora': hora_utc,
                 'usuario_id': current_user.id,
                 'sucursal_id': sucursal_id
             })
