@@ -1105,7 +1105,7 @@ def api_reportes_operaciones():
     
     return jsonify({
         'operaciones': datos,
-        'total_operaciones': total_operaciones,
+        'total_operaciones': len(operaciones),
         'total_monto': total_monto,
         'total_comision': total_comision
     })
