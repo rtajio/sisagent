@@ -73,8 +73,23 @@ if __name__ == '__main__':
     port = os.environ.get('PORT', 5000)
     print(f"🌐 Puerto: {port}")
     
-    # Importar y ejecutar la aplicación
+    # Importar la aplicación para Gunicorn
     from app import app
     
-    print("✅ Aplicación iniciada correctamente")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print("✅ Aplicación lista para Gunicorn")
+    
+    # Iniciar con Gunicorn (lo que Railway espera)
+    import subprocess
+    import sys
+    
+    cmd = [
+        'gunicorn',
+        'wsgi:application',
+        '--bind', f'0.0.0.0:{port}',
+        '--workers', '2',
+        '--timeout', '120',
+        '--preload'
+    ]
+    
+    print(f"🚀 Ejecutando: {' '.join(cmd)}")
+    subprocess.run(cmd)

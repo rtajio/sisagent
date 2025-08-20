@@ -267,6 +267,11 @@ def health_check():
 def api_health_check():
     return "OK", 200
 
+# Health check ultra simple para Railway
+@app.route('/ping')
+def ping():
+    return "pong", 200
+
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
 def login():
