@@ -374,11 +374,13 @@ def user_dashboard():
         except:
             total_comision_hoy = 0.0
         
-        # OPTIMIZACIÓN ULTRA: Query simple para operaciones
+        # OPTIMIZACIÓN ULTRA: Query simple para operaciones con filtro de fecha
         operaciones_hoy = []
         try:
-            operaciones_hoy = Operacion.query.filter_by(
-                usuario_id = current_user.id
+            operaciones_hoy = Operacion.query.filter(
+                Operacion.usuario_id == current_user.id,
+                Operacion.hora >= inicio_dia,
+                Operacion.hora <= fin_dia
             ).order_by(Operacion.hora.desc()).limit(10).all()
         except:
             operaciones_hoy = []
