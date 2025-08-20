@@ -106,7 +106,7 @@ def test():
 
 @app.route('/')
 def root():
-    return "SISAGENT - Sistema funcionando", 200
+    return redirect(url_for('login'))
 
 # Configuración para Railway
 if os.environ.get('DATABASE_URL'):
