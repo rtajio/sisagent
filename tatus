@@ -1,0 +1,5 @@
+[33mf356077[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m FIX: Corregir ruta raíz para redirigir al login en lugar de mostrar mensaje simple
+[33maea0d73[m FIX: Optimizar formato PDF - A4 landscape con columnas compactas
+[33m8d214b5[m FEATURE: Reactivar exportaciones PDF y Excel optimizadas - sin ralentizar el sistema
+[33m5b18c93[m FIX: Actualización automática cada 10 segundos con logs de debug
+[33m0d812a4[m FEATURE: Dashboard dinámico - actualización automática sin refrescar página
