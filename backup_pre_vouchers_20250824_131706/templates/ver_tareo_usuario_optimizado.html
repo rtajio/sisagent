@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block title %}Tareo: {{ tareo.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="fas fa-tasks me-2"></i>
+                    {{ tareo.nombre }}
+                </h2>
+                <a href="{{ url_for('tareos_usuario') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>
+                    Volver a Mis Tareos
+                </a>
+            </div>
+
+            <!-- Información del Tareo -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header 
+                    {% if tareo.estado == 'completado' %}bg-success
+                    {% elif tareo.estado == 'en_progreso' %}bg-info
+                    {% else %}bg-warning{% endif %} text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Información del Tareo
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Estado:</strong> 
+                                {% if tareo.estado == 'pendiente' %}
+                                    <span class="badge bg-warning">Pendiente</span>
+                                {% elif tareo.estado == 'en_progreso' %}
+                                    <span class="badge bg-info">En Progreso</span>
+                                {% elif tareo.estado == 'completado' %}
+                                    <span class="badge bg-success">Completado</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>Sucursal:</strong> {{ tareo.sucursal.nombre }}</p>
+                            {% if tareo.descripcion %}
+                                <p><strong>Descripción:</strong> {{ tareo.descripcion }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Fecha Creación:</strong> {{ tareo.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</p>
+                            {% if tareo.fecha_completado %}
+                                <p><strong>Fecha Completado:</strong> {{ tareo.fecha_completado.strftime('%d/%m/%Y %H:%M') }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Operaciones -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list-check me-2"></i>
+                        Operaciones ({{ operaciones|length }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if operaciones %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Medio</th>
+                                        <th>Destino</th>
+                                        <th>Nombre</th>
+                                        <th>Monto</th>
+                                        <th>Estado</th>
+                                        <th>Fecha Completado</th>
+                                        <th>Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for operacion in operaciones %}
+                                    <tr id="operacion-{{ operacion.id }}" 
+                                        class="{% if operacion.completado %}table-success{% endif %}">
+                                        <td>{{ operacion.orden }}</td>
+                                        <td>{{ operacion.medio }}</td>
+                                        <td>{{ operacion.destino }}</td>
+                                        <td>{{ operacion.nombre }}</td>
+                                        <td>S/ {{ "%.2f"|format(operacion.monto) }}</td>
+                                        <td>
+                                            {% if operacion.completado %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check me-1"></i>
+                                                    Completado
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-warning">
+                                                    <i class="fas fa-clock me-1"></i>
+                                                    Pendiente
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td id="fecha-{{ operacion.id }}">
+                                            {% if operacion.fecha_completado %}
+                                                {{ operacion.fecha_completado.strftime('%d/%m/%Y %H:%M') }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="form-check">
+                                                <input class="form-check-input" 
+                                                       type="checkbox" 
+                                                       id="check-{{ operacion.id }}"
+                                                       {% if operacion.completado %}checked{% endif %}
+                                                       onchange="toggleOperacion({{ operacion.id }}, this.checked)">
+                                                <label class="form-check-label" for="check-{{ operacion.id }}">
+                                                    {% if operacion.completado %}
+                                                        Completado
+                                                    {% else %}
+                                                        Marcar como completado
+                                                    {% endif %}
+                                                </label>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Resumen de progreso -->
+                        <div class="mt-4">
+                            {% set completadas = operaciones|selectattr('completado', 'equalto', true)|list %}
+                            {% set total = operaciones|length %}
+                            {% set porcentaje = (completadas|length / total * 100) if total > 0 else 0 %}
+                            
+                            <div class="progress mb-3">
+                                <div class="progress-bar bg-success" 
+                                     role="progressbar" 
+                                     style="width: {{ porcentaje }}%"
+                                     aria-valuenow="{{ porcentaje }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    {{ "%.1f"|format(porcentaje) }}%
+                                </div>
+                            </div>
+                            
+                            <p class="text-muted mb-0">
+                                <i class="fas fa-chart-bar me-1"></i>
+                                Progreso: {{ completadas|length }} de {{ total }} operaciones completadas
+                            </p>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-list fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No hay operaciones en este tareo</h5>
+                            <p class="text-muted">Contacta al administrador para que agregue operaciones.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Variables globales para control de estado
+let operacionesEnProceso = new Set();
+let timeoutId = null;
+
+function toggleOperacion(operacionId, completado) {
+    // Prevenir múltiples clicks simultáneos
+    if (operacionesEnProceso.has(operacionId)) {
+        console.log('Operación ya en proceso, ignorando click');
+        return;
+    }
+    
+    // Marcar operación como en proceso
+    operacionesEnProceso.add(operacionId);
+    
+    // Feedback visual inmediato
+    const checkbox = document.getElementById(`check-${operacionId}`);
+    const fila = document.getElementById(`operacion-${operacionId}`);
+    
+    // Mostrar estado de carga
+    checkbox.disabled = true;
+    fila.classList.add('table-info');
+    
+    // Agregar spinner al checkbox
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner-border spinner-border-sm ms-2';
+    spinner.setAttribute('role', 'status');
+    checkbox.parentNode.appendChild(spinner);
+    
+    // Limpiar timeout anterior si existe
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+    }
+    
+    // Timeout de seguridad (5 segundos)
+    timeoutId = setTimeout(() => {
+        if (operacionesEnProceso.has(operacionId)) {
+            console.error('Timeout en operación:', operacionId);
+            revertirCambios(operacionId, !completado);
+            mostrarMensaje('Error: Tiempo de espera agotado. Intenta nuevamente.', 'error');
+        }
+    }, 5000);
+    
+    fetch(`/api/tareos/operaciones/${operacionId}/completar`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            completado: completado
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Limpiar timeout
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+        }
+        
+        if (data.success) {
+            // Actualizar la fila
+            const fechaCell = document.getElementById(`fecha-${operacionId}`);
+            const checkLabel = document.querySelector(`#check-${operacionId}`).nextElementSibling;
+            
+            if (completado) {
+                fila.classList.remove('table-info');
+                fila.classList.add('table-success');
+                fechaCell.innerHTML = new Date().toLocaleString('es-PE');
+                checkLabel.textContent = 'Completado';
+                
+                // Actualizar badge de estado
+                const estadoCell = fila.querySelector('td:nth-child(6)');
+                estadoCell.innerHTML = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Completado</span>';
+            } else {
+                fila.classList.remove('table-info');
+                fila.classList.remove('table-success');
+                fechaCell.innerHTML = '<span class="text-muted">-</span>';
+                checkLabel.textContent = 'Marcar como completado';
+                
+                // Actualizar badge de estado
+                const estadoCell = fila.querySelector('td:nth-child(6)');
+                estadoCell.innerHTML = '<span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Pendiente</span>';
+            }
+            
+            // Actualizar progreso
+            actualizarProgreso();
+            
+            // Mostrar mensaje de éxito
+            mostrarMensaje(completado ? '✅ Operación marcada como completada' : '⏳ Operación marcada como pendiente', 'success');
+            
+        } else {
+            // Revertir el checkbox si hay error
+            revertirCambios(operacionId, !completado);
+            mostrarMensaje('❌ Error al actualizar la operación: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        // Limpiar timeout
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+        }
+        
+        // Revertir el checkbox si hay error
+        revertirCambios(operacionId, !completado);
+        mostrarMensaje('❌ Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+    })
+    .finally(() => {
+        // Limpiar estado de proceso
+        operacionesEnProceso.delete(operacionId);
+    });
+}
+
+function revertirCambios(operacionId, estadoOriginal) {
+    const checkbox = document.getElementById(`check-${operacionId}`);
+    const fila = document.getElementById(`operacion-${operacionId}`);
+    
+    // Revertir checkbox
+    checkbox.checked = estadoOriginal;
+    checkbox.disabled = false;
+    
+    // Limpiar clases de estado
+    fila.classList.remove('table-info');
+    if (estadoOriginal) {
+        fila.classList.add('table-success');
+    } else {
+        fila.classList.remove('table-success');
+    }
+    
+    // Remover spinner
+    const spinner = checkbox.parentNode.querySelector('.spinner-border');
+    if (spinner) {
+        spinner.remove();
+    }
+}
+
+function actualizarProgreso() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    const total = checkboxes.length;
+    const completadas = Array.from(checkboxes).filter(cb => cb.checked).length;
+    const porcentaje = total > 0 ? (completadas / total * 100) : 0;
+    
+    const progressBar = document.querySelector('.progress-bar');
+    if (progressBar) {
+        progressBar.style.width = porcentaje + '%';
+        progressBar.setAttribute('aria-valuenow', porcentaje);
+        progressBar.textContent = porcentaje.toFixed(1) + '%';
+    }
+    
+    const progresoText = document.querySelector('.text-muted');
+    if (progresoText) {
+        progresoText.innerHTML = `<i class="fas fa-chart-bar me-1"></i>Progreso: ${completadas} de ${total} operaciones completadas`;
+    }
+}
+
+function mostrarMensaje(mensaje, tipo) {
+    const alertClass = tipo === 'error' ? 'alert-danger' : 'alert-success';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${mensaje}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    const firstRow = container.querySelector('.row');
+    container.insertBefore(document.createRange().createContextualFragment(alertHtml), firstRow);
+    
+    // Auto-dismiss después de 4 segundos
+    setTimeout(() => {
+        const alert = container.querySelector('.alert');
+        if (alert) {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }
+    }, 4000);
+}
+
+// Optimización: Prevenir múltiples clicks accidentales
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('click', function(e) {
+            // Pequeño delay para prevenir clicks accidentales
+            if (this.disabled) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 

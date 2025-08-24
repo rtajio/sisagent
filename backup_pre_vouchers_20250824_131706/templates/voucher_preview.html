@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview Voucher Térmico - SISAGENT</title>
+    <style>
+        body {
+            font-family: 'Courier New', 'Monaco', 'Consolas', monospace;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .voucher-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border: 1px solid #000;
+            overflow: hidden;
+        }
+        
+        .voucher-header {
+            border-bottom: 1px solid #000;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .voucher-header h1 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .voucher-header p {
+            margin: 5px 0 0 0;
+            font-size: 10px;
+        }
+        
+        .voucher-body {
+            padding: 10px;
+        }
+        
+        .voucher-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            border-bottom: 1px dotted #000;
+            padding-bottom: 3px;
+            font-size: 11px;
+        }
+        
+        .voucher-row:last-child {
+            border-bottom: 2px solid #000;
+            margin-bottom: 0;
+            padding-bottom: 5px;
+        }
+        
+        .voucher-label {
+            font-weight: bold;
+            min-width: 80px;
+        }
+        
+        .voucher-value {
+            text-align: right;
+            font-weight: bold;
+        }
+        
+        .voucher-total {
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            padding: 5px;
+            margin-top: 10px;
+        }
+        
+        .voucher-footer {
+            border-top: 1px solid #000;
+            padding: 8px;
+            text-align: center;
+            font-size: 10px;
+        }
+        
+        .size-selector {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .size-btn {
+            background: #000;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .size-btn.active {
+            background: #000;
+        }
+        
+        .size-btn:hover {
+            background: #000;
+        }
+        
+        .voucher-58mm {
+            max-width: 220px;
+        }
+        
+        .voucher-58mm .voucher-header h1 {
+            font-size: 12px;
+        }
+        
+        .voucher-58mm .voucher-header p {
+            font-size: 8px;
+        }
+        
+        .voucher-58mm .voucher-body {
+            padding: 8px;
+        }
+        
+        .voucher-58mm .voucher-row {
+            margin-bottom: 3px;
+            padding-bottom: 2px;
+            font-size: 9px;
+        }
+        
+        .voucher-58mm .voucher-label {
+            min-width: 60px;
+            font-size: 8px;
+        }
+        
+        .voucher-58mm .voucher-value {
+            font-size: 8px;
+        }
+        
+        .voucher-58mm .voucher-total {
+            padding: 4px;
+            margin-top: 8px;
+        }
+        
+        .voucher-58mm .voucher-footer {
+            padding: 6px;
+            font-size: 8px;
+        }
+        
+        .voucher-80mm {
+            max-width: 320px;
+        }
+        
+        .print-btn {
+            background: #000;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 20px auto;
+            display: block;
+        }
+        
+        .print-btn:hover {
+            background: #000;
+        }
+        
+        @media print {
+            .size-selector, .print-btn {
+                display: none;
+            }
+            
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .voucher-container {
+                border: none;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="size-selector">
+        <button class="size-btn active" onclick="changeSize('80mm')">80mm</button>
+        <button class="size-btn" onclick="changeSize('58mm')">58mm</button>
+    </div>
+    
+    <div class="voucher-container voucher-80mm" id="voucher">
+        <div class="voucher-header">
+            <h1>SISAGENT</h1>
+            <p>Sistema de Gestión de Operaciones</p>
+        </div>
+        
+        <div class="voucher-body">
+            <div class="voucher-row">
+                <span class="voucher-label">Sucursal:</span>
+                <span class="voucher-value">Sucursal Central</span>
+            </div>
+            
+            <div class="voucher-row">
+                <span class="voucher-label">N° Operación:</span>
+                <span class="voucher-value">#12345</span>
+            </div>
+            
+            <div class="voucher-row">
+                <span class="voucher-label">Fecha:</span>
+                <span class="voucher-value">15/12/2024</span>
+            </div>
+            
+            <div class="voucher-row">
+                <span class="voucher-label">Hora:</span>
+                <span class="voucher-value">14:30:25</span>
+            </div>
+            
+            <div class="voucher-row">
+                <span class="voucher-label">Medio:</span>
+                <span class="voucher-value">BBVA</span>
+            </div>
+            
+            <div class="voucher-row">
+                <span class="voucher-label">Monto:</span>
+                <span class="voucher-value">S/ 150.00</span>
+            </div>
+            
+            <div class="voucher-row">
+                <span class="voucher-label">Comisión:</span>
+                <span class="voucher-value">S/ 7.50</span>
+            </div>
+            
+            <div class="voucher-total">
+                <div class="voucher-row">
+                    <span class="voucher-label">TOTAL:</span>
+                    <span class="voucher-value">S/ 157.50</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="voucher-footer">
+            <p>¡Gracias por su operación!</p>
+            <p>Operador: Juan Pérez</p>
+        </div>
+    </div>
+    
+    <button class="print-btn" onclick="printVoucher()">🖨️ Imprimir Voucher</button>
+    
+    <script>
+        function changeSize(size) {
+            const voucher = document.getElementById('voucher');
+            const buttons = document.querySelectorAll('.size-btn');
+            
+            // Remover clases activas
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            // Agregar clase activa al botón clickeado
+            event.target.classList.add('active');
+            
+            // Cambiar tamaño del voucher
+            voucher.className = `voucher-container voucher-${size}`;
+        }
+        
+        function printVoucher() {
+            window.print();
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Sucursal - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-edit me-2"></i>
+        Editar Sucursal
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('admin_sucursales') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>
+            Volver
+        </a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-warning">
+                    <i class="fas fa-edit me-2"></i>
+                    Editar Sucursal: {{ sucursal.nombre }}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="sucursalForm">
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label">
+                            <i class="fas fa-building me-1"></i>
+                            Nombre de la Sucursal
+                        </label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="nombre" 
+                               name="nombre" 
+                               required
+                               value="{{ sucursal.nombre }}"
+                               placeholder="Ej: Sucursal Centro">
+                        <div class="form-text">Ingrese el nombre de la sucursal</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="direccion" class="form-label">
+                            <i class="fas fa-map-marker-alt me-1"></i>
+                            Dirección
+                        </label>
+                        <textarea class="form-control" 
+                                  id="direccion" 
+                                  name="direccion" 
+                                  rows="3"
+                                  placeholder="Ej: Av. Principal 123, Distrito, Ciudad">{{ sucursal.direccion or '' }}</textarea>
+                        <div class="form-text">Ingrese la dirección de la sucursal (opcional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" 
+                                   type="checkbox" 
+                                   id="activa" 
+                                   name="activa" 
+                                   {% if sucursal.activa %}checked{% endif %}>
+                            <label class="form-check-label" for="activa">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Sucursal Activa
+                            </label>
+                        </div>
+                        <div class="form-text">Desmarque esta opción para desactivar la sucursal</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Medios de Pago Activos</label>
+                        <div class="row g-2">
+                            {% for medio in medios %}
+                            <div class="col-md-4">
+                                <div class="form-switch d-flex align-items-center mb-2">
+                                    <input type="checkbox" class="form-check-input switch-medio" name="medios" id="medio{{ medio.id }}" value="{{ medio.id }}" autocomplete="off" {% if medio.id in medios_activos %}checked{% endif %} style="width:2.5em;height:1.5em;">
+                                    <label class="ms-2" for="medio{{ medio.id }}">
+                                        <span class="fw-bold">{{ medio.nombre_abreviado }}</span>
+                                        <span class="text-muted small">({{ medio.nombre_completo }})</span>
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Advertencia:</strong> Al desactivar una sucursal, los usuarios no podrán registrar 
+                        nuevas operaciones en ella hasta que se reactive.
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin_sucursales') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-times me-1"></i>
+                            Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-save me-1"></i>
+                            Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Validación del formulario
+document.getElementById('sucursalForm').addEventListener('submit', function(e) {
+    const nombre = document.getElementById('nombre').value.trim();
+    
+    if (!nombre) {
+        e.preventDefault();
+        alert('Por favor ingrese el nombre de la sucursal');
+        return false;
+    }
+    
+    // Confirmar antes de enviar
+    if (!confirm('¿Está seguro de guardar los cambios en esta sucursal?')) {
+        e.preventDefault();
+        return false;
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.switch-medio').forEach(function(switchInput) {
+        switchInput.addEventListener('change', function() {
+            const medioId = this.value;
+            const activo = this.checked;
+            fetch(`/admin/sucursales/{{ sucursal.id }}/toggle_medio`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `medio_id=${medioId}&activo=${activo}`
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.success) {
+                    // Cambia el color del switch
+                    if (data.activo) {
+                        this.classList.add('is-valid');
+                        this.classList.remove('is-invalid');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                    }
+                }
+            }.bind(this));
+        });
+    });
+});
+</script>
+{% endblock %} 

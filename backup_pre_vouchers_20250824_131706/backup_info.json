@@ -1,0 +1,20 @@
+{
+  "fecha_backup": "2025-08-24T13:17:07.254645",
+  "version": "Pre-deploy Vouchers",
+  "descripcion": "Backup completo antes de implementar sistema de vouchers",
+  "archivos_incluidos": [
+    "Base de datos SQLite",
+    "Archivos principales de la aplicación",
+    "Templates completos",
+    "Archivos de configuración",
+    "Directorio instance",
+    "Logs del sistema"
+  ],
+  "cambios_implementados": [
+    "Sistema de vouchers para ticketeras térmicas",
+    "Plantillas 58mm y 80mm",
+    "Rutas para generar e imprimir vouchers",
+    "Selección de tamaño de voucher",
+    "Integración con sistema de operaciones"
+  ]
+}

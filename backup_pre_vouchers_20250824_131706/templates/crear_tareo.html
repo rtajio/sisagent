@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Tareo - Administrador{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="fas fa-plus me-2"></i>
+                    Crear Nuevo Tareo
+                </h2>
+                <a href="{{ url_for('admin_tareos') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>
+                    Volver a Tareos
+                </a>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" id="tareoForm">
+                <div class="row">
+                    <!-- Información del Tareo -->
+                    <div class="col-md-6">
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    Información del Tareo
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="nombre" class="form-label">Nombre del Tareo *</label>
+                                    <input type="text" class="form-control" id="nombre" name="nombre" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="descripcion" class="form-label">Descripción</label>
+                                    <textarea class="form-control" id="descripcion" name="descripcion" rows="3"></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="usuario_id" class="form-label">Usuario Asignado *</label>
+                                    <select class="form-select" id="usuario_id" name="usuario_id" required>
+                                        <option value="">Seleccionar usuario...</option>
+                                        {% for usuario in usuarios %}
+                                            <option value="{{ usuario.id }}">{{ usuario.nombre_completo }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="sucursal_id" class="form-label">Sucursal *</label>
+                                    <select class="form-select" id="sucursal_id" name="sucursal_id" required>
+                                        <option value="">Seleccionar sucursal...</option>
+                                        {% for sucursal in sucursales %}
+                                            <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Operaciones del Tareo -->
+                    <div class="col-md-6">
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-list-check me-2"></i>
+                                    Operaciones del Tareo
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="operaciones-container">
+                                    <!-- Las operaciones se agregarán aquí dinámicamente -->
+                                </div>
+                                
+                                <button type="button" class="btn btn-success w-100" onclick="agregarOperacion()">
+                                    <i class="fas fa-plus me-2"></i>
+                                    Agregar Operación
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botones de acción -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <a href="{{ url_for('admin_tareos') }}" class="btn btn-secondary">
+                                        <i class="fas fa-times me-2"></i>
+                                        Cancelar
+                                    </a>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save me-2"></i>
+                                        Crear Tareo
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Template para operación -->
+<template id="operacion-template">
+    <div class="operacion-item border rounded p-3 mb-3" data-index="{index}">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">Operación #{index}</h6>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarOperacion(this)">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6 mb-2">
+                <label class="form-label">Medio *</label>
+                <select class="form-select operacion-medio" name="operaciones[]" required>
+                    <option value="">Seleccionar medio...</option>
+                    {% for medio in medios %}
+                        <option value="{{ medio.nombre_abreviado }}">{{ medio.nombre_completo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6 mb-2">
+                <label class="form-label">Destino *</label>
+                <input type="text" class="form-control operacion-destino" name="operaciones[]" required>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6 mb-2">
+                <label class="form-label">Nombre *</label>
+                <input type="text" class="form-control operacion-nombre" name="operaciones[]" required>
+            </div>
+            <div class="col-md-6 mb-2">
+                <label class="form-label">Monto *</label>
+                <input type="number" class="form-control operacion-monto" name="operaciones[]" step="0.01" min="0" required>
+            </div>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let operacionIndex = 0;
+
+function agregarOperacion() {
+    const container = document.getElementById('operaciones-container');
+    const template = document.getElementById('operacion-template');
+    const clone = template.content.cloneNode(true);
+    
+    // Actualizar el índice
+    operacionIndex++;
+    clone.querySelector('.operacion-item').setAttribute('data-index', operacionIndex);
+    clone.querySelector('h6').textContent = `Operación #${operacionIndex}`;
+    
+    // Actualizar los valores de los campos para el formato esperado
+    const medioSelect = clone.querySelector('.operacion-medio');
+    const destinoInput = clone.querySelector('.operacion-destino');
+    const nombreInput = clone.querySelector('.operacion-nombre');
+    const montoInput = clone.querySelector('.operacion-monto');
+    
+    // Configurar los campos para que se combinen en el formato "medio|destino|nombre|monto"
+    medioSelect.addEventListener('change', actualizarOperacionString);
+    destinoInput.addEventListener('input', actualizarOperacionString);
+    nombreInput.addEventListener('input', actualizarOperacionString);
+    montoInput.addEventListener('input', actualizarOperacionString);
+    
+    container.appendChild(clone);
+}
+
+function eliminarOperacion(button) {
+    button.closest('.operacion-item').remove();
+    renumerarOperaciones();
+}
+
+function renumerarOperaciones() {
+    const operaciones = document.querySelectorAll('.operacion-item');
+    operaciones.forEach((operacion, index) => {
+        const numero = index + 1;
+        operacion.setAttribute('data-index', numero);
+        operacion.querySelector('h6').textContent = `Operación #${numero}`;
+    });
+}
+
+function actualizarOperacionString() {
+    const operacionItem = this.closest('.operacion-item');
+    const medio = operacionItem.querySelector('.operacion-medio').value;
+    const destino = operacionItem.querySelector('.operacion-destino').value;
+    const nombre = operacionItem.querySelector('.operacion-nombre').value;
+    const monto = operacionItem.querySelector('.operacion-monto').value;
+    
+    // Crear el string combinado
+    const operacionString = `${medio}|${destino}|${nombre}|${monto}`;
+    
+    // Actualizar todos los campos con el string combinado
+    operacionItem.querySelectorAll('input, select').forEach(field => {
+        field.setAttribute('data-operacion-string', operacionString);
+    });
+}
+
+// Validación del formulario
+document.getElementById('tareoForm').addEventListener('submit', function(e) {
+    const operaciones = document.querySelectorAll('.operacion-item');
+    if (operaciones.length === 0) {
+        e.preventDefault();
+        alert('Debe agregar al menos una operación al tareo.');
+        return;
+    }
+    
+    // Validar que todas las operaciones tengan los campos completos
+    let operacionesValidas = [];
+    operaciones.forEach(operacion => {
+        const medio = operacion.querySelector('.operacion-medio').value;
+        const destino = operacion.querySelector('.operacion-destino').value;
+        const nombre = operacion.querySelector('.operacion-nombre').value;
+        const monto = operacion.querySelector('.operacion-monto').value;
+        
+        if (medio && destino && nombre && monto) {
+            operacionesValidas.push(`${medio}|${destino}|${nombre}|${monto}`);
+        }
+    });
+    
+    if (operacionesValidas.length === 0) {
+        e.preventDefault();
+        alert('Debe completar al menos una operación válida.');
+        return;
+    }
+    
+    // Limpiar campos duplicados y mantener solo los strings combinados
+    document.querySelectorAll('input[name="operaciones[]"], select[name="operaciones[]"]').forEach(field => {
+        field.removeAttribute('name');
+    });
+    
+    // Agregar campos ocultos con los strings combinados
+    operacionesValidas.forEach(operacionString => {
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'operaciones[]';
+        hiddenInput.value = operacionString;
+        document.getElementById('tareoForm').appendChild(hiddenInput);
+    });
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Ver Tareo - Administrador{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="fas fa-eye me-2"></i>
+                    Detalles del Tareo
+                </h2>
+                <div>
+                    <button type="button" class="btn btn-success me-2" onclick="mostrarModalAgregarOperacion()">
+                        <i class="fas fa-plus me-2"></i>
+                        Agregar Operación
+                    </button>
+                    <a href="{{ url_for('admin_tareos') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>
+                        Volver a Tareos
+                    </a>
+                </div>
+            </div>
+
+            <!-- Información del Tareo -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Información del Tareo
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>ID:</strong> {{ tareo.id }}</p>
+                            <p><strong>Nombre:</strong> {{ tareo.nombre }}</p>
+                            <p><strong>Descripción:</strong> {{ tareo.descripcion or 'Sin descripción' }}</p>
+                            <p><strong>Usuario Asignado:</strong> {{ tareo.usuario.nombre_completo }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Sucursal:</strong> {{ tareo.sucursal.nombre }}</p>
+                            <p><strong>Estado:</strong> 
+                                {% if tareo.estado == 'pendiente' %}
+                                    <span class="badge bg-warning">Pendiente</span>
+                                {% elif tareo.estado == 'en_progreso' %}
+                                    <span class="badge bg-info">En Progreso</span>
+                                {% elif tareo.estado == 'completado' %}
+                                    <span class="badge bg-success">Completado</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>Fecha Creación:</strong> {{ tareo.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</p>
+                            {% if tareo.fecha_completado %}
+                                <p><strong>Fecha Completado:</strong> {{ tareo.fecha_completado.strftime('%d/%m/%Y %H:%M') }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Operaciones -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list-check me-2"></i>
+                        Operaciones del Tareo ({{ operaciones|length }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if operaciones %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Medio</th>
+                                        <th>Destino</th>
+                                        <th>Nombre</th>
+                                        <th>Monto</th>
+                                        <th>Estado</th>
+                                        <th>Fecha Completado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for operacion in operaciones %}
+                                    <tr>
+                                        <td>{{ operacion.orden }}</td>
+                                        <td>{{ operacion.medio }}</td>
+                                        <td>{{ operacion.destino }}</td>
+                                        <td>{{ operacion.nombre }}</td>
+                                        <td>S/ {{ "%.2f"|format(operacion.monto) }}</td>
+                                        <td>
+                                            {% if operacion.completado %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check me-1"></i>
+                                                    Completado
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-warning">
+                                                    <i class="fas fa-clock me-1"></i>
+                                                    Pendiente
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if operacion.fecha_completado %}
+                                                {{ operacion.fecha_completado.strftime('%d/%m/%Y %H:%M') }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-list fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No hay operaciones en este tareo</h5>
+                            <p class="text-muted">Agrega operaciones para que el usuario pueda completarlas.</p>
+                            <button type="button" class="btn btn-success" onclick="mostrarModalAgregarOperacion()">
+                                <i class="fas fa-plus me-2"></i>
+                                Agregar Primera Operación
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para agregar operación -->
+<div class="modal fade" id="agregarOperacionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Agregar Operación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formAgregarOperacion">
+                    <div class="mb-3">
+                        <label for="medio" class="form-label">Medio *</label>
+                        <select class="form-select" id="medio" required>
+                            <option value="">Seleccionar medio...</option>
+                            {% for medio in medios %}
+                                <option value="{{ medio.nombre_abreviado }}">{{ medio.nombre_completo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="destino" class="form-label">Destino *</label>
+                        <input type="text" class="form-control" id="destino" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label">Nombre *</label>
+                        <input type="text" class="form-control" id="nombre" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="monto" class="form-label">Monto *</label>
+                        <input type="number" class="form-control" id="monto" step="0.01" min="0" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="agregarOperacion()">Agregar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function mostrarModalAgregarOperacion() {
+    const modal = new bootstrap.Modal(document.getElementById('agregarOperacionModal'));
+    modal.show();
+}
+
+function agregarOperacion() {
+    const medio = document.getElementById('medio').value;
+    const destino = document.getElementById('destino').value;
+    const nombre = document.getElementById('nombre').value;
+    const monto = document.getElementById('monto').value;
+    
+    if (!medio || !destino || !nombre || !monto) {
+        alert('Todos los campos son requeridos.');
+        return;
+    }
+    
+    fetch(`/api/tareos/{{ tareo.id }}/operaciones`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            medio: medio,
+            destino: destino,
+            nombre: nombre,
+            monto: parseFloat(monto)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error al agregar la operación: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al agregar la operación');
+    });
+}
+</script>
+{% endblock %} 

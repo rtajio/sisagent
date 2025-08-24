@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imprimir Voucher - SISAGENT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .voucher-option {
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .voucher-option:hover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        
+        .voucher-option.selected {
+            border-color: #007bff;
+            background-color: #e7f3ff;
+        }
+        
+        .voucher-preview {
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto;
+            border: 1px solid #000;
+            background: white;
+        }
+        
+        .voucher-preview-58mm {
+            max-width: 220px;
+        }
+        
+        .voucher-preview-80mm {
+            max-width: 320px;
+        }
+        
+        .voucher-header {
+            border-bottom: 1px solid #000;
+            padding: 8px;
+            text-align: center;
+        }
+        
+        .voucher-header h1 {
+            margin: 0;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .voucher-header p {
+            margin: 3px 0 0 0;
+            font-size: 8px;
+        }
+        
+        .voucher-body {
+            padding: 8px;
+        }
+        
+        .voucher-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+            border-bottom: 1px dotted #000;
+            padding-bottom: 2px;
+            font-size: 9px;
+        }
+        
+        .voucher-row:last-child {
+            border-bottom: 2px solid #000;
+            margin-bottom: 0;
+            padding-bottom: 3px;
+        }
+        
+        .voucher-label {
+            font-weight: bold;
+            min-width: 60px;
+            font-size: 8px;
+        }
+        
+        .voucher-value {
+            text-align: right;
+            font-weight: bold;
+            font-size: 8px;
+        }
+        
+        .voucher-total {
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            padding: 4px;
+            margin-top: 8px;
+        }
+        
+        .voucher-footer {
+            border-top: 1px solid #000;
+            padding: 6px;
+            text-align: center;
+            font-size: 8px;
+        }
+        
+        .voucher-preview-80mm .voucher-header h1 {
+            font-size: 16px;
+        }
+        
+        .voucher-preview-80mm .voucher-header p {
+            font-size: 10px;
+        }
+        
+        .voucher-preview-80mm .voucher-body {
+            padding: 10px;
+        }
+        
+        .voucher-preview-80mm .voucher-row {
+            margin-bottom: 5px;
+            padding-bottom: 3px;
+            font-size: 11px;
+        }
+        
+        .voucher-preview-80mm .voucher-label {
+            min-width: 80px;
+            font-size: 11px;
+        }
+        
+        .voucher-preview-80mm .voucher-value {
+            font-size: 11px;
+        }
+        
+        .voucher-preview-80mm .voucher-total {
+            padding: 5px;
+            margin-top: 10px;
+        }
+        
+        .voucher-preview-80mm .voucher-footer {
+            padding: 8px;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="mb-0">🖨️ Imprimir Voucher</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <h6>Información de la Operación:</h6>
+                                <p><strong>N° Operación:</strong> #{{ operacion.id }}</p>
+                                <p><strong>Sucursal:</strong> {{ operacion.sucursal.nombre }}</p>
+                                <p><strong>Medio:</strong> {{ operacion.medio }}</p>
+                                <p><strong>Monto:</strong> S/ {{ "%.2f"|format(operacion.monto) }}</p>
+                                <p><strong>Comisión:</strong> S/ {{ "%.2f"|format(operacion.comision) }}</p>
+                                <p><strong>Total:</strong> S/ {{ "%.2f"|format(operacion.monto + operacion.comision) }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Selecciona el tamaño:</h6>
+                                
+                                <div class="voucher-option" onclick="selectSize('80mm')" id="option-80mm">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1">📏 80mm (Estándar)</h6>
+                                            <small class="text-muted">Tamaño estándar para la mayoría de ticketeras</small>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="tamaño" value="80mm" checked>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <div class="voucher-preview voucher-preview-80mm">
+                                            <div class="voucher-header">
+                                                <h1>SISAGENT</h1>
+                                                <p>Sistema de Gestión</p>
+                                            </div>
+                                            <div class="voucher-body">
+                                                <div class="voucher-row">
+                                                    <span class="voucher-label">Sucursal:</span>
+                                                    <span class="voucher-value">{{ operacion.sucursal.nombre[:15] }}...</span>
+                                                </div>
+                                                <div class="voucher-row">
+                                                    <span class="voucher-label">N° Op:</span>
+                                                    <span class="voucher-value">#{{ operacion.id }}</span>
+                                                </div>
+                                                <div class="voucher-row">
+                                                    <span class="voucher-label">Total:</span>
+                                                    <span class="voucher-value">S/ {{ "%.2f"|format(operacion.monto + operacion.comision) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="voucher-option" onclick="selectSize('58mm')" id="option-58mm">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1">📏 58mm (Compacto)</h6>
+                                            <small class="text-muted">Tamaño compacto para ticketeras pequeñas</small>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="tamaño" value="58mm">
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <div class="voucher-preview voucher-preview-58mm">
+                                            <div class="voucher-header">
+                                                <h1>SISAGENT</h1>
+                                                <p>Sistema</p>
+                                            </div>
+                                            <div class="voucher-body">
+                                                <div class="voucher-row">
+                                                    <span class="voucher-label">Suc:</span>
+                                                    <span class="voucher-value">{{ operacion.sucursal.nombre[:10] }}...</span>
+                                                </div>
+                                                <div class="voucher-row">
+                                                    <span class="voucher-label">Op:</span>
+                                                    <span class="voucher-value">#{{ operacion.id }}</span>
+                                                </div>
+                                                <div class="voucher-row">
+                                                    <span class="voucher-label">Total:</span>
+                                                    <span class="voucher-value">S/ {{ "%.2f"|format(operacion.monto + operacion.comision) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('operaciones') }}" class="btn btn-secondary">
+                                ← Volver a Operaciones
+                            </a>
+                            <button onclick="imprimirVoucher()" class="btn btn-primary">
+                                🖨️ Imprimir Voucher
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function selectSize(tamaño) {
+            // Remover selección anterior
+            document.querySelectorAll('.voucher-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            // Seleccionar nueva opción
+            document.getElementById(`option-${tamaño}`).classList.add('selected');
+            
+            // Marcar radio button
+            document.querySelector(`input[value="${tamaño}"]`).checked = true;
+        }
+        
+        function imprimirVoucher() {
+            const tamaño = document.querySelector('input[name="tamaño"]:checked').value;
+            const url = `/voucher/{{ operacion.id }}/${tamaño}`;
+            
+            // Abrir en nueva ventana para imprimir
+            const ventana = window.open(url, '_blank', 'width=400,height=600');
+            
+            // Esperar a que cargue y imprimir automáticamente
+            ventana.onload = function() {
+                ventana.print();
+            };
+        }
+        
+        // Seleccionar 80mm por defecto
+        selectSize('80mm');
+    </script>
+</body>
+</html>
+
