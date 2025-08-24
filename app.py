@@ -96,15 +96,15 @@ def railway_health():
 def api_health():
     return "OK", 200
 
-# Ruta de vouchers
-@app.route('/voucher/<int:operacion_id>/<tamaño>')
+# Ruta de vouchers CORREGIDA - sin caracteres especiales
+@app.route('/voucher/<int:operacion_id>/<tamanio>')
 @login_required
-def generar_voucher(operacion_id, tamaño):
+def generar_voucher(operacion_id, tamanio):
     operacion = Operacion.query.get_or_404(operacion_id)
-    if tamaño not in ['58mm', '80mm']:
-        tamaño = '80mm'
+    if tamanio not in ['58mm', '80mm']:
+        tamanio = '80mm'
     
-    template = f'voucher_{tamaño}.html'
+    template = f'voucher_{tamanio}.html'
     return render_template(template, operacion=operacion)
 
 @app.route('/operaciones/<int:operacion_id>/voucher')
