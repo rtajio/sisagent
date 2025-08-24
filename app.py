@@ -21,7 +21,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Modelos básicos
+# Modelos completos
 class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -33,6 +33,12 @@ class Sucursal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     direccion = db.Column(db.String(200))
+
+class MedioPago(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(50), nullable=False)
+    descripcion = db.Column(db.String(200))
+    activo = db.Column(db.Boolean, default=True)
 
 class Operacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
