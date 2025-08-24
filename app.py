@@ -100,6 +100,10 @@ def api_health_check():
 def railway_health():
     return "OK", 200
 
+@app.route('/ping')
+def ping():
+    return "OK", 200
+
 @app.route('/voucher/preview')
 @login_required
 def voucher_preview():
@@ -2559,3 +2563,19 @@ def api_dashboard_data():
         }), 500
 
 # Ruta para optimizar la base de datos (solo admin)
+@app.route('/ping')
+def ping():
+    return "OK", 200
+
+
+@app.route('/ping')
+def ping():
+    return "OK", 200
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+@app.route('/railway-health')
+def railway_health():
+    return "OK", 200
