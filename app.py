@@ -174,7 +174,7 @@ def test():
     return "SISAGENT funcionando correctamente", 200
 
 # ---- Aliases/compat para rutas antiguas (evitan 404/crash) ----
-@app.route('/reportes')
+@app.route('/reportes', endpoint='reportes')
 @login_required
 def reportes_alias():
     return redirect(url_for('operaciones'))
