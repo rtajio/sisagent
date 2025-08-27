@@ -184,7 +184,16 @@ if os.environ.get('DATABASE_URL'):
 else:
     # Para desarrollo local y Railway sin DATABASE_URL
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
-    print("✅ Usando SQLite para desarrollo local")
+if os.environ.get('DATABASE_URL'):
+    # Para Railway con PostgreSQL
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    print(f"✅ Usando PostgreSQL en Railway: {database_url[:20]}...")
+else:
+    # Para desarrollo local y Railway sin DATABASE_URL
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
