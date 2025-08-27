@@ -329,7 +329,7 @@ def api_comisiones():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
-@app.route('/seleccionar_voucher/<int:operacion_id>')
+@app.route('/seleccionar_voucher/<int:operacion_id>', endpoint='seleccionar_voucher')
 @login_required
 def seleccionar_voucher_alias(operacion_id):
     # Alias temporal: redirige a operaciones
