@@ -25,6 +25,14 @@ else:
     print("✅ Usando SQLite para desarrollo local")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Estabilización de conexión (evita conexiones colgadas en Railway)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'pool_timeout': 30,
+    'pool_size': 5,
+    'max_overflow': 10,
+}
 
 # Inicializar extensiones
 db = SQLAlchemy(app)
@@ -128,13 +136,22 @@ def dashboard():
     except Exception as e:
         return f"Error en dashboard: {str(e)}", 500
 
-@app.route('/operaciones')
+@app.route('/operaciones', methods=['GET', 'POST'])
 @login_required
 def operaciones():
     try:
-        operaciones_list = Operacion.query.all()
+        # Si llega un POST desde formularios antiguos, evitar caída
+        if request.method == 'POST':
+            flash('Registro temporalmente redirigido. Use Operaciones solo para consulta.')
+            return redirect(url_for('operaciones'))
+
+        operaciones_list = Operacion.query.limit(200).all()
         return render_template('operaciones.html', operaciones=operaciones_list)
     except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return f"Error en operaciones: {str(e)}", 500
 
 @app.route('/logout')
@@ -155,6 +172,49 @@ def health():
 @app.route('/test')
 def test():
     return "SISAGENT funcionando correctamente", 200
+
+# ---- Aliases/compat para rutas antiguas (evitan 404/crash) ----
+@app.route('/reportes')
+@login_required
+def reportes_alias():
+    return redirect(url_for('operaciones'))
+
+@app.route('/user_dashboard')
+def user_dashboard_alias():
+    return redirect(url_for('dashboard'))
+
+@app.route('/admin_dashboard')
+def admin_dashboard_alias():
+    return redirect(url_for('dashboard'))
+
+@app.route('/admin_sucursales')
+@app.route('/admin_usuarios')
+@app.route('/admin_medios')
+@app.route('/admin_tareos')
+def admin_sections_alias():
+    return redirect(url_for('operaciones'))
+
+@app.route('/registrar_operacion', methods=['GET', 'POST'])
+def registrar_operacion_alias():
+    flash('Ruta antigua redirigida a Operaciones')
+    return redirect(url_for('operaciones'))
+
+@app.route('/tareos_usuario')
+def tareos_usuario_alias():
+    return redirect(url_for('operaciones'))
+
+# ---- Manejadores de error para mayor estabilidad ----
+@app.errorhandler(404)
+def handle_404(_e):
+    return "Ruta no encontrada", 404
+
+@app.errorhandler(500)
+def handle_500(_e):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    return "Error interno del servidor", 500
 
 if __name__ == '__main__':
     try:
