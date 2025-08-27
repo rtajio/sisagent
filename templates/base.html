@@ -549,7 +549,7 @@
                         
                         {% else %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}" href="{{ url_for('user_dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard
                             </a>
