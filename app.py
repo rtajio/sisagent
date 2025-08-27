@@ -40,6 +40,27 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# Utilidad para templates: formatear hora (tolerante a None y strings)
+def format_peru_time(value):
+    try:
+        if not value:
+            return "--:--"
+        # Si ya es datetime o time
+        if hasattr(value, 'strftime'):
+            return value.strftime('%H:%M')
+        # Si viene como string, intentar parseos comunes
+        text = str(value).strip()
+        # Formatos posibles: HH:MM:SS, HH:MM
+        if len(text) >= 5 and ':' in text:
+            return text[:5]
+        return text
+    except Exception:
+        return "--:--"
+
+@app.context_processor
+def inject_utils():
+    return dict(format_peru_time=format_peru_time)
+
 # Modelo que se adapta a la estructura real de la BD
 class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
@@ -122,8 +143,8 @@ def dashboard():
         total_comision_hoy = 0.0
         total_monto_hoy = 0.0
         
-        # Por ahora, usar todas las operaciones ya que no hay fecha
-        operaciones_hoy = Operacion.query.all()
+        # Por ahora, usar hasta 20 operaciones recientes (si hubiera campo fecha/hora no disponible)
+        operaciones_hoy = Operacion.query.limit(20).all()
         
         for op in operaciones_hoy:
             total_comision_hoy += op.comision or 0.0
@@ -197,6 +218,27 @@ def admin_sections_alias():
 @app.route('/registrar_operacion', methods=['GET', 'POST'])
 def registrar_operacion_alias():
     flash('Ruta antigua redirigida a Operaciones')
+    return redirect(url_for('operaciones'))
+
+@app.route('/api/comisiones')
+@login_required
+def api_comisiones():
+    try:
+        # Sin fecha, devolver totales globales simples
+        total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).scalar() or 0.0
+        total_monto = db.session.query(db.func.coalesce(db.func.sum(Operacion.monto), 0.0)).scalar() or 0.0
+        return jsonify({
+            'ok': True,
+            'total_comision': float(total_comision),
+            'total_monto': float(total_monto)
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/seleccionar_voucher/<int:operacion_id>')
+@login_required
+def seleccionar_voucher_alias(operacion_id):
+    # Alias temporal: redirige a operaciones
     return redirect(url_for('operaciones'))
 
 @app.route('/tareos_usuario')
