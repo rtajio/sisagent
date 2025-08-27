@@ -505,7 +505,7 @@
                     <ul class="nav flex-column">
                         {% if current_user.es_admin %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard
                             </a>
