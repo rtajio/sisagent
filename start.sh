@@ -1,10 +1,15 @@
 #!/bin/bash
+echo "🚀 Iniciando SISAGENT en Railway..."
 
-echo "🚀 Iniciando SISAGENT con Gunicorn..."
+# Esperar un momento para que todo esté listo
+sleep 2
 
-# Obtener el puerto desde la variable de entorno
-PORT=${PORT:-5000}
-echo "🌐 Puerto: $PORT"
-
-# Iniciar Gunicorn directamente
-exec gunicorn wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload 
+# Iniciar la aplicación con Gunicorn
+exec gunicorn wsgi:app \
+    --bind 0.0.0.0:$PORT \
+    --workers 1 \
+    --timeout 300 \
+    --preload \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info 

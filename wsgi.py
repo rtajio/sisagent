@@ -2,16 +2,10 @@
 """
 WSGI entry point para Railway
 """
+
 import os
-import sys
-
-# Agregar el directorio actual al path
-sys.path.insert(0, os.path.dirname(__file__))
-
-# Importar la aplicación
 from app import app
 
-# Variable global para la aplicación
-application = app
-
-print("✅ SISAGENT listo para Gunicorn") 
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port) 
