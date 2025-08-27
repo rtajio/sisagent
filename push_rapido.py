@@ -1,17 +1,29 @@
-import subprocess
+#!/usr/bin/env python3
 import os
+import subprocess
 
-# Configurar Git para no usar pager
-os.environ['GIT_PAGER'] = 'cat'
+def push_rapido():
+    print("🚀 PUSH RÁPIDO A RAILWAY")
+    print("=" * 30)
+    
+    try:
+        # Git add
+        print("📦 Agregando archivos...")
+        subprocess.run(["git", "add", "."], check=True)
+        
+        # Git commit
+        print("💾 Haciendo commit...")
+        subprocess.run(["git", "commit", "-m", "FIX: Internal Server Error solucionado"], check=True)
+        
+        # Git push
+        print("🚀 Haciendo push a Railway...")
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+        
+        print("✅ PUSH COMPLETADO")
+        print("🎯 Railway detectará los cambios en 1-2 minutos")
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
 
-# Hacer push forzado
-print("🚀 Haciendo push forzado...")
-resultado = subprocess.run("git push origin main --force", shell=True, capture_output=True, text=True)
-
-if resultado.returncode == 0:
-    print("✅ Push exitoso!")
-    print("🚀 Railway detectará los cambios automáticamente")
-    print("⏱️ Deploy en progreso...")
-else:
-    print("❌ Error en push:")
-    print(resultado.stderr)
+if __name__ == '__main__':
+    push_rapido()

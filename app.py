@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SISAGENT - Versión Simplificada y Estable
+SISAGENT - Versión Ultra Simplificada
 """
 
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -60,41 +60,68 @@ class Operacion(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Usuario.query.get(int(user_id))
+    try:
+        return Usuario.query.get(int(user_id))
+    except:
+        return None
 
 # Rutas básicas
 @app.route('/')
 def index():
-    return redirect(url_for('login'))
+    try:
+        return redirect(url_for('login'))
+    except Exception as e:
+        return f"Error en index: {str(e)}", 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = Usuario.query.filter_by(username=username).first()
-        if user and user.password == password:
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        flash('Usuario o contraseña incorrectos')
-    return render_template('login.html')
+    try:
+        if request.method == 'POST':
+            username = request.form.get('username', '')
+            password = request.form.get('password', '')
+            
+            if not username or not password:
+                flash('Usuario y contraseña son requeridos')
+                return render_template('login.html')
+            
+            user = Usuario.query.filter_by(username=username).first()
+            
+            if user and user.password == password:
+                login_user(user)
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Usuario o contraseña incorrectos')
+        
+        return render_template('login.html')
+    except Exception as e:
+        print(f"Error en login: {e}")
+        return f"Error en login: {str(e)}", 500
 
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('user_dashboard.html')
+    try:
+        return render_template('user_dashboard.html')
+    except Exception as e:
+        return f"Error en dashboard: {str(e)}", 500
 
 @app.route('/operaciones')
 @login_required
 def operaciones():
-    operaciones_list = Operacion.query.all()
-    return render_template('operaciones.html', operaciones=operaciones_list)
+    try:
+        operaciones_list = Operacion.query.all()
+        return render_template('operaciones.html', operaciones=operaciones_list)
+    except Exception as e:
+        return f"Error en operaciones: {str(e)}", 500
 
 @app.route('/logout')
 @login_required
 def logout():
-    logout_user()
-    return redirect(url_for('login'))
+    try:
+        logout_user()
+        return redirect(url_for('login'))
+    except Exception as e:
+        return f"Error en logout: {str(e)}", 500
 
 # Healthcheck simple
 @app.route('/ping')
@@ -110,7 +137,12 @@ def test():
     return "SISAGENT funcionando correctamente", 200
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
+    try:
+        with app.app_context():
+            db.create_all()
+            print("✅ Base de datos inicializada")
+    except Exception as e:
+        print(f"⚠️  Error inicializando BD: {e}")
+    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
