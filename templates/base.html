@@ -505,7 +505,7 @@
                     <ul class="nav flex-column">
                         {% if current_user.es_admin %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard
                             </a>
@@ -517,31 +517,31 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                            <a class="nav-link {% if request.endpoint == 'admin_sucursales' %}active{% endif %}" href="{{ url_for('admin_sucursales') }}">
                                 <i class="fas fa-building me-2"></i>
                                 Sucursales
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                            <a class="nav-link {% if request.endpoint == 'admin_usuarios' %}active{% endif %}" href="{{ url_for('admin_usuarios') }}">
                                 <i class="fas fa-users me-2"></i>
                                 Usuarios
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                            <a class="nav-link {% if request.endpoint == 'admin_medios' %}active{% endif %}" href="{{ url_for('admin_medios') }}">
                                 <i class="fas fa-credit-card me-2"></i>
                                 Medios de Pago
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                            <a class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}" href="{{ url_for('reportes') }}">
                                 <i class="fas fa-chart-bar me-2"></i>
                                 Reportes
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                            <a class="nav-link {% if request.endpoint == 'admin_tareos' or request.endpoint == 'crear_tareo' or request.endpoint == 'ver_tareo' %}active{% endif %}" href="{{ url_for('admin_tareos') }}">
                                 <i class="fas fa-tasks me-2"></i>
                                 Tareos
                             </a>
@@ -549,7 +549,7 @@
                         
                         {% else %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}" href="{{ url_for('user_dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard
                             </a>
@@ -561,7 +561,7 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                            <a class="nav-link {% if request.endpoint == 'tareos_usuario' or request.endpoint == 'ver_tareo_usuario' %}active{% endif %}" href="{{ url_for('tareos_usuario') }}">
                                 <i class="fas fa-tasks me-2"></i>
                                 Tareos
                             </a>
