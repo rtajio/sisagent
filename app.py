@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-SISAGENT - Sistema de Gestión de Operaciones
-Aplicación Flask para gestión de operaciones y vouchers
+Sistema de Vouchers - App Simple y Funcional
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from datetime import datetime
 import os
+from datetime import datetime
+import pytz
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+app.config['SECRET_KEY'] = 'tu_clave_secreta_aqui'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///sisagent.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -20,13 +21,13 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Modelos
+# Modelos completos
 class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(120), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
-    rol = db.Column(db.String(20), default='usuario')
+    es_admin = db.Column(db.Boolean, default=False)
 
 class Sucursal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -56,46 +57,6 @@ class Operacion(db.Model):
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
 
-# RUTAS DE HEALTHCHECK - CRÍTICAS PARA RAILWAY
-@app.route('/ping')
-def ping():
-    """Healthcheck básico para Railway"""
-    try:
-        # Verificar que la base de datos esté disponible
-        db.session.execute('SELECT 1')
-        return "OK", 200
-    except Exception as e:
-        return f"ERROR: {str(e)}", 500
-
-@app.route('/health')
-def health():
-    """Healthcheck completo"""
-    try:
-        # Verificar base de datos
-        db.session.execute('SELECT 1')
-        # Verificar que la aplicación esté funcionando
-        return "OK", 200
-    except Exception as e:
-        return f"ERROR: {str(e)}", 500
-
-@app.route('/railway-health')
-def railway_health():
-    """Healthcheck específico para Railway"""
-    try:
-        db.session.execute('SELECT 1')
-        return "OK", 200
-    except Exception as e:
-        return f"ERROR: {str(e)}", 500
-
-@app.route('/api/health')
-def api_health():
-    """Healthcheck de API"""
-    try:
-        db.session.execute('SELECT 1')
-        return "OK", 200
-    except Exception as e:
-        return f"ERROR: {str(e)}", 500
-
 # Rutas básicas
 @app.route('/')
 def index():
@@ -124,6 +85,27 @@ def operaciones():
     operaciones_list = Operacion.query.all()
     return render_template('operaciones.html', operaciones=operaciones_list)
 
+# RUTAS DE HEALTHCHECK - CRÍTICAS PARA RAILWAY
+@app.route('/ping')
+def ping():
+    """Healthcheck básico para Railway"""
+    return "OK", 200
+
+@app.route('/health')
+def health():
+    """Healthcheck completo"""
+    return "OK", 200
+
+@app.route('/railway-health')
+def railway_health():
+    """Healthcheck específico para Railway"""
+    return "OK", 200
+
+@app.route('/api/health')
+def api_health():
+    """Healthcheck de API"""
+    return "OK", 200
+
 # Ruta de vouchers CORREGIDA - sin caracteres especiales
 @app.route('/voucher/<int:operacion_id>/<tamanio>')
 @login_required
@@ -145,3 +127,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
