@@ -111,7 +111,25 @@ def login():
 @login_required
 def dashboard():
     try:
-        return render_template('user_dashboard.html')
+        # Calcular estadísticas básicas
+        total_operaciones = Operacion.query.count()
+        total_comision_hoy = 0.0
+        total_monto_hoy = 0.0
+        
+        # Calcular totales del día actual
+        hoy = datetime.now().date()
+        operaciones_hoy = Operacion.query.filter(
+            db.func.date(Operacion.fecha) == hoy
+        ).all()
+        
+        for op in operaciones_hoy:
+            total_comision_hoy += op.comision or 0.0
+            total_monto_hoy += op.monto or 0.0
+        
+        return render_template('user_dashboard.html', 
+                             total_operaciones=total_operaciones,
+                             total_comision_hoy=total_comision_hoy,
+                             total_monto_hoy=total_monto_hoy)
     except Exception as e:
         return f"Error en dashboard: {str(e)}", 500
 
