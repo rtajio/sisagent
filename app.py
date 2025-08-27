@@ -63,6 +63,18 @@ def format_peru_time(value):
 def inject_utils():
     return dict(format_peru_time=format_peru_time)
 
+# Utilidad: detectar columna temporal disponible en Operacion
+def get_operacion_datetime_column():
+    possible_names = ['hora', 'fecha', 'created_at', 'timestamp', 'fecha_creacion']
+    try:
+        columns = {c.name: c for c in Operacion.__table__.columns}
+        for name in possible_names:
+            if name in columns:
+                return getattr(Operacion, name)
+    except Exception:
+        pass
+    return None
+
 # Modelo que se adapta a la estructura real de la BD
 class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
@@ -181,17 +193,61 @@ def dashboard():
         total_comision_hoy = 0.0
         total_monto_hoy = 0.0
         
-        # Por ahora, usar hasta 20 operaciones recientes (si hubiera campo fecha/hora no disponible)
-        operaciones_hoy = Operacion.query.limit(20).all()
+        # Intentar calcular por día y mes si hay columna temporal
+        dt_col = get_operacion_datetime_column()
+        if dt_col is not None:
+            hoy = datetime.utcnow().date()
+            operaciones_hoy = Operacion.query.filter(db.func.date(dt_col) == hoy).all()
+
+            # Comisiones por sucursal (hoy)
+            comisiones_hoy = db.session.query(
+                Operacion.sucursal_id,
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+            ).filter(
+                db.func.date(dt_col) == hoy
+            ).group_by(Operacion.sucursal_id).all()
+
+            # Comisiones del mes por sucursal
+            mes = db.func.extract('month', dt_col)
+            año = db.func.extract('year', dt_col)
+            ahora = datetime.utcnow()
+            comisiones_mes = db.session.query(
+                Operacion.sucursal_id,
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+            ).filter(
+                año == ahora.year,
+                mes == ahora.month
+            ).group_by(Operacion.sucursal_id).all()
+        else:
+            # Sin columna temporal, mostrar recientes y totales globales
+            operaciones_hoy = Operacion.query.limit(20).all()
+            comisiones_hoy = []
+            comisiones_mes = []
         
         for op in operaciones_hoy:
             total_comision_hoy += op.comision or 0.0
             total_monto_hoy += op.monto or 0.0
         
+        # Preparar listado de sucursales y acumulados de mes si existen
+        sucursales_info = []
+        try:
+            sucursales = db.session.query(Sucursal.id, Sucursal.nombre).all()
+        except Exception:
+            sucursales = []
+        com_mes_dict = {sid: float(total) for sid, total in comisiones_mes} if comisiones_mes else {}
+        for sid, nombre in sucursales:
+            sucursales_info.append({
+                'id': sid,
+                'nombre': nombre,
+                'acumulado_mes': com_mes_dict.get(sid, 0.0)
+            })
+
         return render_template('user_dashboard.html', 
                              total_operaciones=total_operaciones,
                              total_comision_hoy=total_comision_hoy,
-                             total_monto_hoy=total_monto_hoy)
+                             total_monto_hoy=total_monto_hoy,
+                             operaciones_hoy=operaciones_hoy,
+                             sucursales_info=sucursales_info)
     except Exception as e:
         return f"Error en dashboard: {str(e)}", 500
 
