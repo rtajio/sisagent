@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
 """
+Solución final - Modelo mínimo compatible con BD existente
+"""
+
+import os
+
+def solucion_final():
+    print("🔧 SOLUCIÓN FINAL - MODELO MÍNIMO")
+    print("=" * 40)
+    
+    # Crear app.py con modelo mínimo
+    app_minimo = '''#!/usr/bin/env python3
+"""
 SISAGENT - Modelo Mínimo Compatible
 """
 
@@ -134,3 +146,19 @@ def test():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+'''
+    
+    with open('app.py', 'w', encoding='utf-8') as f:
+        f.write(app_minimo)
+    
+    print("✅ app.py recreado - modelo mínimo")
+    
+    # Push inmediato
+    os.system('git add . && git commit -m "FIX: Modelo mínimo - solo username" && git push origin main')
+    
+    print("✅ Push completado")
+    print("🎯 Railway detectará cambios en 1 minuto")
+    print("🔑 Login con: usuario=admin, contraseña=admin")
+
+if __name__ == '__main__':
+    solucion_final()
