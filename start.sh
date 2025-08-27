@@ -4,13 +4,9 @@ echo "🚀 Iniciando SISAGENT en Railway..."
 # Esperar un momento para que todo esté listo
 sleep 2
 
-# Inicializar las tablas
-echo "📋 Inicializando tablas..."
+# Crear solo las tablas (sin tocar datos existentes)
+echo "📋 Creando tablas..."
 python init_db_railway.py
-
-# Crear usuario administrador si no existe
-echo "👤 Verificando usuario administrador..."
-python crear_admin_railway.py
 
 # Iniciar la aplicación con Gunicorn
 echo "🌐 Iniciando aplicación..."

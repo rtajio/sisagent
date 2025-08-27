@@ -1,33 +1,26 @@
 #!/usr/bin/env python3
 """
-Script para inicializar solo las tablas en Railway (sin crear datos duplicados)
+Script para crear solo las tablas en Railway (sin tocar datos existentes)
 """
 
 import os
-from app import app, db, Usuario, Sucursal, MedioPago, Operacion
+from app import app, db
 
 def init_database():
-    """Inicializar solo las tablas en Railway"""
+    """Crear solo las tablas en Railway"""
     
-    print("🚀 Inicializando tablas en Railway...")
+    print("🚀 Creando tablas en Railway...")
     
     with app.app_context():
         try:
-            # Crear todas las tablas
+            # Solo crear las tablas
             print("📋 Creando tablas...")
             db.create_all()
             print("✅ Tablas creadas exitosamente")
-            
-            # Verificar si ya existen datos
-            if Usuario.query.first():
-                print("✅ Base de datos ya tiene datos - no se crearán duplicados")
-                return
-            
-            print("✅ Base de datos lista para usar")
-            print("📝 Nota: Los datos se pueden agregar manualmente desde la aplicación")
+            print("📝 Nota: Los datos existentes se mantienen intactos")
             
         except Exception as e:
-            print(f"❌ Error al inicializar tablas: {e}")
+            print(f"❌ Error al crear tablas: {e}")
             db.session.rollback()
             raise
 
