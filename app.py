@@ -90,6 +90,12 @@ def operaciones():
     operaciones_list = Operacion.query.all()
     return render_template('operaciones.html', operaciones=operaciones_list)
 
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
 # Healthcheck simple
 @app.route('/ping')
 def ping():
