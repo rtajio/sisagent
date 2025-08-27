@@ -37,7 +37,16 @@ class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    # NO incluir password ni nombre - usar solo las columnas que existen
+    # Agregar atributos que pueden faltar
+    es_admin = db.Column(db.Boolean, default=False)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
+    
+    # Relaciones
+    sucursal = db.relationship('Sucursal', backref='usuarios')
+    
+    @property
+    def nombre_completo(self):
+        return self.username
     
     def check_password(self, password):
         # Usar username como contraseña temporal
