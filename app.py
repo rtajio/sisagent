@@ -60,9 +60,8 @@ class Sucursal(db.Model):
 class Operacion(db.Model):
     __tablename__ = 'operacion'
     id = db.Column(db.Integer, primary_key=True)
-    # Solo usar columnas que realmente existen en la BD
+    # Solo usar columnas básicas que seguramente existen
     monto = db.Column(db.Float, nullable=False)
-    metodo_pago = db.Column(db.String(50), nullable=False)
     comision = db.Column(db.Float, default=0.0)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
