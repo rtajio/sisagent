@@ -60,19 +60,30 @@ def load_user(user_id):
 # Rutas básicas
 @app.route('/')
 def index():
-    return redirect(url_for('login'))
+    try:
+        return redirect(url_for('login'))
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+@app.route('/test')
+def test():
+    """Ruta de prueba simple"""
+    return "✅ SISAGENT funcionando correctamente en Railway!", 200
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = Usuario.query.filter_by(username=username).first()
-        if user and user.password == password:
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        flash('Usuario o contraseña incorrectos')
-    return render_template('login.html')
+    try:
+        if request.method == 'POST':
+            username = request.form['username']
+            password = request.form['password']
+            user = Usuario.query.filter_by(username=username).first()
+            if user and user.password == password:
+                login_user(user)
+                return redirect(url_for('dashboard'))
+            flash('Usuario o contraseña incorrectos')
+        return render_template('login.html')
+    except Exception as e:
+        return f"Error en login: {str(e)}", 500
 
 @app.route('/dashboard')
 @login_required
@@ -88,22 +99,18 @@ def operaciones():
 # RUTAS DE HEALTHCHECK - CRÍTICAS PARA RAILWAY
 @app.route('/ping')
 def ping():
-    """Healthcheck básico para Railway"""
     return "OK", 200
 
 @app.route('/health')
 def health():
-    """Healthcheck completo"""
     return "OK", 200
 
 @app.route('/railway-health')
 def railway_health():
-    """Healthcheck específico para Railway"""
     return "OK", 200
 
 @app.route('/api/health')
 def api_health():
-    """Healthcheck de API"""
     return "OK", 200
 
 # Ruta de vouchers CORREGIDA - sin caracteres especiales
