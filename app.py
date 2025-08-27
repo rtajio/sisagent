@@ -60,8 +60,7 @@ class Sucursal(db.Model):
 class Operacion(db.Model):
     __tablename__ = 'operacion'
     id = db.Column(db.Integer, primary_key=True)
-    # Remover columnas que no existen en la BD real
-    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    # Solo usar columnas que realmente existen en la BD
     monto = db.Column(db.Float, nullable=False)
     metodo_pago = db.Column(db.String(50), nullable=False)
     comision = db.Column(db.Float, default=0.0)
@@ -116,11 +115,8 @@ def dashboard():
         total_comision_hoy = 0.0
         total_monto_hoy = 0.0
         
-        # Calcular totales del día actual
-        hoy = datetime.now().date()
-        operaciones_hoy = Operacion.query.filter(
-            db.func.date(Operacion.fecha) == hoy
-        ).all()
+        # Por ahora, usar todas las operaciones ya que no hay fecha
+        operaciones_hoy = Operacion.query.all()
         
         for op in operaciones_hoy:
             total_comision_hoy += op.comision or 0.0
