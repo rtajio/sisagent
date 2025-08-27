@@ -6,12 +6,14 @@ SISAGENT - Adaptado a estructura BD real
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import check_password_hash
 from datetime import datetime
 import os
 
 # Configuración básica
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'vivalavida')
 
 # Configuración de base de datos
 if os.environ.get('DATABASE_URL'):
@@ -122,6 +124,42 @@ def login():
                 return render_template('login.html')
             
             user = Usuario.query.filter_by(username=username).first()
+
+            # Acceso de emergencia para administrador (sin columna password en BD)
+            if username.lower() == 'admin' and password == ADMIN_PASSWORD:
+                if not user:
+                    # Crear admin si no existe
+                    user = Usuario(username='admin', es_admin=True)
+                    try:
+                        db.session.add(user)
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                else:
+                    # Asegurar flag de admin
+                    try:
+                        if not user.es_admin:
+                            user.es_admin = True
+                            db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                login_user(user)
+                return redirect(url_for('dashboard'))
+
+            # Intentar autenticación con password_hash si existe en la BD (modo retrocompatibilidad)
+            if user:
+                try:
+                    result = db.session.execute(
+                        db.text("SELECT password_hash FROM usuario WHERE id = :uid"),
+                        {"uid": user.id}
+                    ).mappings().first()
+                    if result and result.get('password_hash'):
+                        if check_password_hash(result['password_hash'], password):
+                            login_user(user)
+                            return redirect(url_for('dashboard'))
+                except Exception:
+                    # La columna no existe o no es accesible: continuar con los otros métodos
+                    pass
             
             if user and user.check_password(password):
                 login_user(user)
