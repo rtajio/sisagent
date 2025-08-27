@@ -60,7 +60,7 @@ class Sucursal(db.Model):
 class Operacion(db.Model):
     __tablename__ = 'operacion'
     id = db.Column(db.Integer, primary_key=True)
-    numero = db.Column(db.String(50), unique=True, nullable=False)
+    # Remover columnas que no existen en la BD real
     fecha = db.Column(db.DateTime, default=datetime.utcnow)
     monto = db.Column(db.Float, nullable=False)
     metodo_pago = db.Column(db.String(50), nullable=False)
