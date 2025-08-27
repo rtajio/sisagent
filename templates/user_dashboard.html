@@ -139,49 +139,6 @@
     </div>
 </div>
 
-<!-- Comisiones por Sucursal - Mes actual -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #28a745, #1e7e34);">
-                <h6 class="m-0 font-weight-bold text-white">
-                    <i class="fas fa-building me-2"></i>
-                    Comisiones por Sucursal - Mes Actual
-                </h6>
-            </div>
-            <div class="card-body">
-                {% if sucursales_info %}
-                <div class="table-responsive">
-                    <table class="table table-bordered" width="100%" cellspacing="0">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Sucursal</th>
-                                <th>Acumulado Mes (S/)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for s in sucursales_info %}
-                            <tr>
-                                <td>{{ loop.index }}</td>
-                                <td>{{ s.nombre }}</td>
-                                <td class="font-weight-bold">S/ {{ '%.2f'|format(s.acumulado_mes) }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center py-4">
-                    <i class="fas fa-building fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">No hay información de sucursales disponible</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
