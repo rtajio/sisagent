@@ -23,44 +23,18 @@ login_manager.login_view = 'login'
 
 # Modelos completos
 class Usuario(UserMixin, db.Model):
-    __tablename__ = 'usuario'
-    
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    # Intentar diferentes nombres de columnas para password
     password = db.Column(db.String(120), nullable=False)
-    password_hash = db.Column(db.String(255), nullable=True)
-    # Intentar diferentes nombres de columnas para nombre
-    nombre = db.Column(db.String(100), nullable=True)
-    nombre_completo = db.Column(db.String(100), nullable=True)
-    # Intentar diferentes nombres de columnas para admin
+    nombre = db.Column(db.String(100), nullable=False)
     es_admin = db.Column(db.Boolean, default=False)
-    admin = db.Column(db.Boolean, default=False)
-    rol = db.Column(db.String(20), default='usuario')
-    
-    def get_id(self):
-        return str(self.id)
     
     def check_password(self, password):
-        """Verificar contraseña con diferentes métodos"""
-        # Si tiene password_hash, usar check_password_hash
-        if hasattr(self, 'password_hash') and self.password_hash:
-            from werkzeug.security import check_password_hash
-            return check_password_hash(self.password_hash, password)
-        # Si tiene password directo, comparar directamente
-        elif hasattr(self, 'password') and self.password:
+        """Verificar contraseña de forma simple"""
+        try:
             return self.password == password
-        return False
-    
-    @property
-    def is_admin(self):
-        """Verificar si es administrador"""
-        return getattr(self, 'es_admin', False) or getattr(self, 'admin', False)
-    
-    @property
-    def display_name(self):
-        """Obtener nombre para mostrar"""
-        return getattr(self, 'nombre', None) or getattr(self, 'nombre_completo', None) or self.username
+        except:
+            return False
 
 class Sucursal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -101,7 +75,7 @@ def login():
         username = request.form['username']
         password = request.form['password']
         user = Usuario.query.filter_by(username=username).first()
-        if user and user.check_password(password):
+        if user and user.password == password:
             login_user(user)
             return redirect(url_for('dashboard'))
         flash('Usuario o contraseña incorrectos')
@@ -156,4 +130,7 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+@app.route('/ping')
+def ping():
+    return "OK", 200
 
