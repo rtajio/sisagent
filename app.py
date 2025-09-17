@@ -115,7 +115,7 @@ class Operacion(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     try:
-        return Usuario.query.get(int(user_id))
+    return Usuario.query.get(int(user_id))
     except:
         return None
 
@@ -127,7 +127,7 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     try:
-        if request.method == 'POST':
+    if request.method == 'POST':
             username = request.form.get('username', '')
             password = request.form.get('password', '')
             
@@ -135,7 +135,7 @@ def login():
                 flash('Usuario y contraseña son requeridos')
                 return render_template('login.html')
             
-            user = Usuario.query.filter_by(username=username).first()
+        user = Usuario.query.filter_by(username=username).first()
 
             # Acceso de emergencia para administrador (sin columna password en BD)
             if username.lower() == 'admin' and password == ADMIN_PASSWORD:
@@ -174,12 +174,12 @@ def login():
                     pass
             
             if user and user.check_password(password):
-                login_user(user)
-                return redirect(url_for('dashboard'))
+            login_user(user)
+            return redirect(url_for('dashboard'))
             else:
-                flash('Usuario o contraseña incorrectos')
+        flash('Usuario o contraseña incorrectos')
         
-        return render_template('login.html')
+    return render_template('login.html')
     except Exception as e:
         print(f"Error en login: {e}")
         return f"Error en login: {str(e)}", 500
@@ -255,13 +255,44 @@ def dashboard():
 @login_required
 def operaciones():
     try:
-        # Si llega un POST desde formularios antiguos, evitar caída
+        # Si llega un POST, procesar registro de operación
         if request.method == 'POST':
-            flash('Registro temporalmente redirigido. Use Operaciones solo para consulta.')
+            monto = float(request.form.get('monto', 0))
+            comision = float(request.form.get('comision', 0))
+            metodo_pago = request.form.get('metodo_pago', '')
+            sucursal_id = request.form.get('sucursal_id')
+            
+            # Crear nueva operación
+            nueva_operacion = Operacion(
+                monto=monto,
+                comision=comision,
+                usuario_id=current_user.id,
+                sucursal_id=sucursal_id if sucursal_id else None
+            )
+            
+            # Agregar campo de método de pago si existe
+            if hasattr(nueva_operacion, 'metodo_pago'):
+                nueva_operacion.metodo_pago = metodo_pago
+            
+            # Agregar campo de hora si existe
+            dt_col = get_operacion_datetime_column()
+            if dt_col is not None:
+                setattr(nueva_operacion, dt_col.name, datetime.utcnow())
+            
+            db.session.add(nueva_operacion)
+            db.session.commit()
+            flash('Operación registrada exitosamente')
             return redirect(url_for('operaciones'))
 
-        operaciones_list = Operacion.query.limit(200).all()
-        return render_template('operaciones.html', operaciones=operaciones_list)
+        # Obtener todas las operaciones (sin límite para ver todas del día)
+    operaciones_list = Operacion.query.all()
+        
+        # Obtener sucursales para el dropdown
+        sucursales = Sucursal.query.all()
+        
+        return render_template('operaciones.html', 
+                             operaciones=operaciones_list,
+                             sucursales=sucursales)
     except Exception as e:
         try:
             db.session.rollback()
@@ -303,6 +334,37 @@ def admin_dashboard_alias():
     return redirect(url_for('dashboard'))
 
 @app.route('/admin_sucursales')
+@login_required
+def admin_sucursales():
+    if not current_user.es_admin:
+        flash('Acceso denegado - Solo administradores')
+        return redirect(url_for('dashboard'))
+    try:
+        sucursales = Sucursal.query.all()
+        return render_template('admin_sucursales.html', sucursales=sucursales)
+    except Exception as e:
+        return f"Error en sucursales: {str(e)}", 500
+
+@app.route('/admin_sucursales/<int:sucursal_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_sucursal(sucursal_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado - Solo administradores')
+        return redirect(url_for('dashboard'))
+    try:
+        sucursal = Sucursal.query.get_or_404(sucursal_id)
+        if request.method == 'POST':
+            sucursal.nombre = request.form.get('nombre', sucursal.nombre)
+            if hasattr(sucursal, 'direccion'):
+                sucursal.direccion = request.form.get('direccion', getattr(sucursal, 'direccion', ''))
+            db.session.commit()
+            flash('Sucursal actualizada exitosamente')
+            return redirect(url_for('admin_sucursales'))
+        return render_template('editar_sucursal.html', sucursal=sucursal)
+    except Exception as e:
+        db.session.rollback()
+        return f"Error editando sucursal: {str(e)}", 500
+
 @app.route('/admin_usuarios')
 @app.route('/admin_medios')
 @app.route('/admin_tareos')
@@ -318,8 +380,19 @@ def registrar_operacion_alias():
 @login_required
 def api_comisiones():
     try:
-        # Sin fecha, devolver totales globales simples
-        total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).scalar() or 0.0
+        # Calcular comisión del día actual
+        dt_col = get_operacion_datetime_column()
+        if dt_col is not None:
+            hoy = datetime.utcnow().date()
+            total_comision = db.session.query(
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+            ).filter(
+                db.func.date(dt_col) == hoy
+            ).scalar() or 0.0
+        else:
+            # Sin fecha, devolver totales globales simples
+            total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).scalar() or 0.0
+        
         total_monto = db.session.query(db.func.coalesce(db.func.sum(Operacion.monto), 0.0)).scalar() or 0.0
         return jsonify({
             'ok': True,
@@ -327,6 +400,30 @@ def api_comisiones():
             'total_monto': float(total_monto)
         })
     except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/api/operaciones/<int:operacion_id>', methods=['PUT'])
+@login_required
+def api_editar_operacion(operacion_id):
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+    try:
+        operacion = Operacion.query.get_or_404(operacion_id)
+        data = request.get_json()
+        
+        if 'monto' in data:
+            operacion.monto = float(data['monto'])
+        if 'comision' in data:
+            operacion.comision = float(data['comision'])
+        if 'sucursal_id' in data:
+            operacion.sucursal_id = data['sucursal_id']
+        if 'metodo_pago' in data and hasattr(operacion, 'metodo_pago'):
+            operacion.metodo_pago = data['metodo_pago']
+        
+        db.session.commit()
+        return jsonify({'ok': True, 'message': 'Operación actualizada'})
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 @app.route('/seleccionar_voucher/<int:operacion_id>', endpoint='seleccionar_voucher')
@@ -354,7 +451,7 @@ def handle_500(_e):
 
 if __name__ == '__main__':
     try:
-        with app.app_context():
+    with app.app_context():
             # NO crear tablas - usar las existentes
             print("✅ Usando base de datos existente")
     except Exception as e:
