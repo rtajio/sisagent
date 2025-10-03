@@ -115,7 +115,7 @@ class Operacion(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     try:
-    return Usuario.query.get(int(user_id))
+        return Usuario.query.get(int(user_id))
     except:
         return None
 
@@ -127,7 +127,7 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     try:
-    if request.method == 'POST':
+        if request.method == 'POST':
             username = request.form.get('username', '')
             password = request.form.get('password', '')
             
@@ -135,7 +135,7 @@ def login():
                 flash('Usuario y contraseña son requeridos')
                 return render_template('login.html')
             
-        user = Usuario.query.filter_by(username=username).first()
+            user = Usuario.query.filter_by(username=username).first()
 
             # Acceso de emergencia para administrador (sin columna password en BD)
             if username.lower() == 'admin' and password == ADMIN_PASSWORD:
@@ -174,12 +174,12 @@ def login():
                     pass
             
             if user and user.check_password(password):
-            login_user(user)
-            return redirect(url_for('dashboard'))
+                login_user(user)
+                return redirect(url_for('dashboard'))
             else:
-        flash('Usuario o contraseña incorrectos')
+                flash('Usuario o contraseña incorrectos')
         
-    return render_template('login.html')
+        return render_template('login.html')
     except Exception as e:
         print(f"Error en login: {e}")
         return f"Error en login: {str(e)}", 500
@@ -285,7 +285,7 @@ def operaciones():
             return redirect(url_for('operaciones'))
 
         # Obtener todas las operaciones (sin límite para ver todas del día)
-    operaciones_list = Operacion.query.all()
+        operaciones_list = Operacion.query.all()
         
         # Obtener sucursales para el dropdown
         sucursales = Sucursal.query.all()
@@ -451,7 +451,7 @@ def handle_500(_e):
 
 if __name__ == '__main__':
     try:
-    with app.app_context():
+        with app.app_context():
             # NO crear tablas - usar las existentes
             print("✅ Usando base de datos existente")
     except Exception as e:

@@ -106,9 +106,9 @@ def voucher_preview():
     """Muestra una vista previa del voucher para que el usuario pueda ver cómo se verá"""
     return render_template('voucher_preview.html')
 
-@app.route('/voucher/<int:operacion_id>/<tamaño>')
+@app.route('/voucher/<int:operacion_id>/<tamano>')
 @login_required
-def generar_voucher(operacion_id, tamaño):
+def generar_voucher(operacion_id, tamano):
     """Genera un voucher para una operación específica"""
     operacion = Operacion.query.get_or_404(operacion_id)
     
@@ -118,11 +118,11 @@ def generar_voucher(operacion_id, tamaño):
         return redirect(url_for('operaciones'))
     
     # Validar tamaño
-    if tamaño not in ['58mm', '80mm']:
-        tamaño = '80mm'  # Por defecto
+    if tamano not in ['58mm', '80mm']:
+        tamano = '80mm'  # Por defecto
     
     # Seleccionar plantilla según tamaño
-    template = f'voucher_{tamaño}.html'
+    template = f'voucher_{tamano}.html'
     
     return render_template(template, operacion=operacion)
 
@@ -159,15 +159,15 @@ def seleccionar_voucher(operacion_id):
     operacion = Operacion.query.get_or_404(operacion_id)
     return render_template('seleccionar_voucher.html', operacion=operacion)
 
-@app.route('/generar-voucher/<int:operacion_id>/<tamaño>')
+@app.route('/generar-voucher/<int:operacion_id>/<tamano>')
 @login_required
-def generar_voucher(operacion_id, tamaño):
+def generar_voucher(operacion_id, tamano):
     """Genera el voucher para la operación especificada"""
     operacion = Operacion.query.get_or_404(operacion_id)
     
-    if tamaño == '58mm':
+    if tamano == '58mm':
         return render_template('voucher_58mm.html', operacion=operacion)
-    elif tamaño == '80mm':
+    elif tamano == '80mm':
         return render_template('voucher_80mm.html', operacion=operacion)
     else:
         flash('Tamaño de voucher no válido', 'error')

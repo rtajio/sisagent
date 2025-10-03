@@ -81,18 +81,18 @@ def operaciones():
     operaciones_list = Operacion.query.all()
     return render_template('operaciones_simple.html', operaciones=operaciones_list)
 
-@app.route('/voucher/<int:operacion_id>/<tamaño>')
+@app.route('/voucher/<int:operacion_id>/<tamano>')
 @login_required
-def generar_voucher(operacion_id, tamaño):
+def generar_voucher(operacion_id, tamano):
     """Genera un voucher para una operación específica"""
     operacion = Operacion.query.get_or_404(operacion_id)
     
     # Validar tamaño
-    if tamaño not in ['58mm', '80mm']:
-        tamaño = '80mm'  # Por defecto
+    if tamano not in ['58mm', '80mm']:
+        tamano = '80mm'  # Por defecto
     
     # Seleccionar plantilla según tamaño
-    template = f'voucher_{tamaño}.html'
+    template = f'voucher_{tamano}.html'
     
     return render_template(template, operacion=operacion)
 

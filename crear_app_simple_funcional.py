@@ -131,14 +131,14 @@ def api_health():
     return "OK", 200
 
 # Ruta de vouchers
-@app.route('/voucher/<int:operacion_id>/<tamaño>')
+@app.route('/voucher/<int:operacion_id>/<tamano>')
 @login_required
-def generar_voucher(operacion_id, tamaño):
+def generar_voucher(operacion_id, tamano):
     operacion = Operacion.query.get_or_404(operacion_id)
-    if tamaño not in ['58mm', '80mm']:
-        tamaño = '80mm'
+    if tamano not in ['58mm', '80mm']:
+        tamano = '80mm'
     
-    template = f'voucher_{tamaño}.html'
+    template = f'voucher_{tamano}.html'
     return render_template(template, operacion=operacion)
 
 @app.route('/operaciones/<int:operacion_id>/voucher')
@@ -147,10 +147,11 @@ def seleccionar_voucher(operacion_id):
     operacion = Operacion.query.get_or_404(operacion_id)
     return render_template('seleccionar_voucher.html', operacion=operacion)
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+# DESHABILITADO: Este bloque no debe ejecutarse automáticamente
+# if __name__ == '__main__':
+#     with app.app_context():
+#         db.create_all()
+#     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 '''
     
     with open('app.py', 'w', encoding='utf-8') as f:
@@ -247,14 +248,15 @@ pytz==2023.3'''
     
     return True
 
-if __name__ == '__main__':
-    print("🔄 Iniciando creación de app completamente funcional...")
-    print("📅 Fecha:", time.strftime('%d/%m/%Y %H:%M:%S'))
-    print("-" * 50)
-    
-    if crear_app_simple_funcional():
-        print("\n✅ App completamente funcional creada")
-        print("🚀 El sistema de vouchers estará disponible pronto")
-    else:
-        print("\n❌ Error en la creación")
-        sys.exit(1)
+# DESHABILITADO: Este archivo no debe ejecutarse automáticamente
+# if __name__ == '__main__':
+#     print("🔄 Iniciando creación de app completamente funcional...")
+#     print("📅 Fecha:", time.strftime('%d/%m/%Y %H:%M:%S'))
+#     print("-" * 50)
+#     
+#     if crear_app_simple_funcional():
+#         print("\n✅ App completamente funcional creada")
+#         print("🚀 El sistema de vouchers estará disponible pronto")
+#     else:
+#         print("\n❌ Error en la creación")
+#         sys.exit(1)

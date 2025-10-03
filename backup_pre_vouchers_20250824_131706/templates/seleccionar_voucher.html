@@ -264,7 +264,7 @@
         
         function imprimirVoucher() {
             const tamaño = document.querySelector('input[name="tamaño"]:checked').value;
-            const url = `/voucher/{{ operacion.id }}/${tamaño}`;
+            const url = `/voucher/{{ operacion.id }}/${tamano}`;
             
             // Abrir en nueva ventana para imprimir
             const ventana = window.open(url, '_blank', 'width=400,height=600');
