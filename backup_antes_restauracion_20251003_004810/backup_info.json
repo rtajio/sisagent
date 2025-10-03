@@ -1,0 +1,16 @@
+{
+  "fecha_backup": "2025-10-03T00:48:10.146881",
+  "descripcion": "Backup antes de restaurar al estado del 25 de julio de 2025",
+  "archivos_incluidos": [
+    "app.py",
+    "requirements.txt",
+    "Procfile",
+    "railway.toml",
+    "config.py",
+    "wsgi.py",
+    "runtime.txt",
+    "gunicorn.conf.py",
+    "templates/"
+  ],
+  "motivo": "Restauración conservando datos de BD"
+}

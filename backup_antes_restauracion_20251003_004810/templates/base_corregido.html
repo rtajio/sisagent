@@ -209,26 +209,26 @@
                     <ul class="nav flex-column">
                         {% if current_user.es_admin %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard Admin
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_sucursales' %}active{% endif %}" href="{{ url_for('admin_sucursales') }}">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-building me-2"></i>
                                 Sucursales
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_usuarios' %}active{% endif %}" href="{{ url_for('admin_usuarios') }}">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-users me-2"></i>
                                 Usuarios
                             </a>
                         </li>
                         {% else %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}" href="{{ url_for('user_dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard
                             </a>
@@ -243,7 +243,7 @@
                         </li>
                         
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'registrar_operacion' %}active{% endif %}" href="{{ url_for('registrar_operacion') }}">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-plus-circle me-2"></i>
                                 Nueva Operación
                             </a>

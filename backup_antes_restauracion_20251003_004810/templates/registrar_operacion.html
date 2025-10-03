@@ -302,5 +302,54 @@ document.getElementById('operacionForm').addEventListener('submit', function(e) 
         return false;
     }
 });
+
+// Función para limpiar formulario y regresar cursor al monto
+function limpiarFormularioYEnfocarMonto() {
+    const monto = document.getElementById('monto');
+    const comision = document.getElementById('comision');
+    const medio = document.getElementById('medio');
+    const sucursal = document.getElementById('sucursal_id');
+    
+    // Limpiar campos
+    if (monto) monto.value = '';
+    if (comision) comision.value = '';
+    if (medio) medio.value = '';
+    if (sucursal) sucursal.value = '';
+    
+    // Enfocar en el campo de monto
+    if (monto) {
+        monto.focus();
+        monto.select(); // Seleccionar todo el texto si hay alguno
+    }
+    
+    // Actualizar resumen
+    actualizarResumen();
+}
+
+// Detectar si la operación fue exitosa (mensaje flash de éxito)
+document.addEventListener('DOMContentLoaded', function() {
+    // Verificar si hay mensaje de éxito
+    const mensajesFlash = document.querySelectorAll('.alert-success');
+    if (mensajesFlash.length > 0) {
+        // Si hay mensaje de éxito, limpiar formulario y enfocar monto
+        setTimeout(function() {
+            limpiarFormularioYEnfocarMonto();
+        }, 500); // Pequeño delay para que se vea el mensaje
+    }
+    
+    // También enfocar monto al cargar la página
+    const monto = document.getElementById('monto');
+    if (monto) {
+        monto.focus();
+    }
+});
+
+// Función para manejar envío exitoso del formulario
+function manejarEnvioExitoso() {
+    // Limpiar formulario y enfocar monto después de un envío exitoso
+    setTimeout(function() {
+        limpiarFormularioYEnfocarMonto();
+    }, 1000);
+}
 </script>
 {% endblock %} 

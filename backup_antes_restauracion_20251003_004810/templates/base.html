@@ -505,7 +505,7 @@
                     <ul class="nav flex-column">
                         {% if current_user.es_admin %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard
                             </a>
@@ -517,19 +517,19 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_sucursales' %}active{% endif %}" href="{{ url_for('admin_sucursales') }}">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-building me-2"></i>
                                 Sucursales
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_usuarios' %}active{% endif %}" href="{{ url_for('admin_usuarios') }}">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-users me-2"></i>
                                 Usuarios
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin_medios' %}active{% endif %}" href="{{ url_for('admin_medios') }}">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-credit-card me-2"></i>
                                 Medios de Pago
                             </a>
@@ -540,10 +540,16 @@
                                 Reportes
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' or request.endpoint == 'crear_tareo' or request.endpoint == 'ver_tareo' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                                <i class="fas fa-tasks me-2"></i>
+                                Tareos
+                            </a>
+                        </li>
                         
                         {% else %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}" href="{{ url_for('user_dashboard') }}">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
                                 <i class="fas fa-tachometer-alt me-2"></i>
                                 Dashboard
                             </a>
@@ -552,6 +558,12 @@
                             <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-list me-2"></i>
                                 Operaciones
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' or request.endpoint == 'ver_tareo_usuario' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                                <i class="fas fa-tasks me-2"></i>
+                                Tareos
                             </a>
                         </li>
                         {% endif %}
@@ -1197,5 +1209,20 @@
     });
 </script>
 {% endif %}
+
+<!-- Footer -->
+<footer class="footer mt-auto py-3" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%); color: white; text-align: center; position: relative; z-index: 1000;">
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <p class="mb-0" style="font-weight: 500; font-size: 0.95rem;">
+                    <i class="fas fa-copyright me-2"></i>
+                    Desarrollado por <strong>INC Technology E.I.R.L.</strong> || Todos los derechos reservados
+                </p>
+            </div>
+        </div>
+    </div>
+</footer>
+
 </body>
 </html> 

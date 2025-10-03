@@ -85,12 +85,12 @@
 <div class="row">
     <div class="col-12">
         <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                <h6 class="m-0 font-weight-bold text-primary">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #007bff, #0056b3);">
+                <h6 class="m-0 font-weight-bold text-white">
                     <i class="fas fa-clock me-2"></i>
                     Operaciones Recientes - Hoy
                 </h6>
-                <a href="{{ url_for('operaciones') }}" class="btn btn-sm btn-outline-primary">
+                <a href="{{ url_for('operaciones') }}" class="btn btn-sm btn-outline-light">
                     <i class="fas fa-eye me-1"></i>
                     Ver Todas
                 </a>
@@ -106,16 +106,23 @@
                                 <th>Monto</th>
                                 <th>Comisión</th>
                                 <th>Medio</th>
+                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for operacion in operaciones_hoy %}
                             <tr>
                                 <td>{{ loop.index }}</td>
-                                                                    <td>{{ format_peru_time(operacion.hora) }}</td>
+                                <td>{{ format_peru_time(operacion.hora) }}</td>
                                 <td class="font-weight-bold">S/ {{ "%.2f"|format(operacion.monto) }}</td>
                                 <td class="text-success font-weight-bold">S/ {{ "%.2f"|format(operacion.comision) }}</td>
                                 <td><span class="badge bg-primary">{{ operacion.medio }}</span></td>
+                                <td>
+                                    <a href="{{ url_for('seleccionar_voucher', operacion_id=operacion.id) }}" 
+                                       class="btn btn-sm btn-outline-info" title="Generar Voucher">
+                                        <i class="fas fa-receipt"></i>
+                                    </a>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
