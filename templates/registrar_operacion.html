@@ -109,35 +109,26 @@
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>Información:</strong> 
-                        {% if current_user.es_admin %}
-                            Esta operación se registrará en la sucursal seleccionada y la comisión se sumará 
-                            automáticamente al total diario de esa sucursal.
-                        {% else %}
-                            Esta operación se registrará en la sucursal 
-                            <strong>{{ current_user.sucursal.nombre if current_user.sucursal else 'Sin sucursal asignada' }}</strong> 
-                            y la comisión se sumará automáticamente al total diario.
-                        {% endif %}
+                        Esta operación se registrará en la sucursal 
+                        <strong>{{ current_user.sucursal.nombre if current_user.sucursal else 'Sin sucursal asignada' }}</strong> 
+                        y la comisión se sumará automáticamente al total diario de esta sucursal.
                         <br><small class="text-muted">La hora se registrará automáticamente en UTC-5 (Perú)</small>
                     </div>
 
-                    <!-- Campo de sucursal solo para administradores -->
-                    {% if current_user.es_admin %}
+                    <!-- Campo de sucursal fija para todos los usuarios -->
                     <div class="mb-3">
-                        <label for="sucursal_id" class="form-label">
+                        <label for="sucursal_info" class="form-label">
                             <i class="fas fa-building me-1"></i>
                             Sucursal
                         </label>
-                        <select class="form-select form-select-lg" id="sucursal_id" name="sucursal_id" required tabindex="6">
-                            <option value="">Seleccione una sucursal</option>
-                            {% for sucursal in sucursales %}
-                            <option value="{{ sucursal.id }}" {% if current_user.sucursal_id == sucursal.id %}selected{% endif %}>
-                                {{ sucursal.nombre }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">Solo los administradores pueden asignar sucursales</div>
+                        <input type="text" 
+                               class="form-control form-control-lg" 
+                               id="sucursal_info" 
+                               value="{{ current_user.sucursal.nombre if current_user.sucursal else 'Sin sucursal asignada' }}" 
+                               readonly
+                               style="background-color: #f8f9fa;">
+                        <div class="form-text">Operación se registrará en esta sucursal</div>
                     </div>
-                    {% endif %}
                 </form>
             </div>
         </div>

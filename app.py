@@ -355,11 +355,12 @@ def registrar_operacion():
         comision = float(request.form['comision'])
         medio = request.form['medio']
         
-        # Determinar sucursal
-        if current_user.es_admin:
-            sucursal_id = int(request.form.get('sucursal_id'))
-        else:
-            sucursal_id = current_user.sucursal_id
+        # NUEVA LÓGICA: Todos los usuarios (admin y regulares) solo pueden registrar en su sucursal asignada
+        if not current_user.sucursal_id:
+            flash('Debe tener una sucursal asignada para registrar operaciones', 'error')
+            return redirect(url_for('operaciones'))
+        
+        sucursal_id = current_user.sucursal_id
         
         # Crear operación
         operacion = Operacion(
@@ -419,39 +420,36 @@ def registrar_operacion():
         flash('Operación bancaria registrada exitosamente', 'success')
         return redirect(url_for('operaciones'))
     
-    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
-    sucursales = []
-    if current_user.es_admin:
-        sucursales = get_sucursales_activas_cache()
-    
-    return render_template('registrar_operacion.html', sucursales=sucursales)
+    # NUEVA LÓGICA: No se pasan sucursales al template, todos usan su sucursal asignada
+    return render_template('registrar_operacion.html')
 
 @app.route('/operaciones/<int:operacion_id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_operacion(operacion_id):
     operacion = Operacion.query.get_or_404(operacion_id)
     
+    # NUEVA LÓGICA: Solo se puede editar operaciones de la misma sucursal del usuario
+    if operacion.sucursal_id != current_user.sucursal_id:
+        flash('No tienes permisos para editar operaciones de otras sucursales', 'error')
+        return redirect(url_for('operaciones'))
+    
     if not current_user.es_admin and operacion.usuario_id != current_user.id:
         flash('No tienes permisos para editar esta operación', 'error')
         return redirect(url_for('operaciones'))
     
     if request.method == 'POST':
-        monto_anterior = float(operacion.comision)
-        sucursal_anterior = operacion.sucursal_id
         monto = float(request.form['monto'])
         comision = float(request.form['comision'])
         medio = request.form['medio']
         
-        if current_user.es_admin:
-            nueva_sucursal_id = int(request.form.get('sucursal_id'))
-        else:
-            nueva_sucursal_id = operacion.sucursal_id
+        # NUEVA LÓGICA: La sucursal no se puede cambiar, siempre es la del usuario
+        sucursal_id = current_user.sucursal_id
         
         # Actualizar operación
         operacion.monto = monto
         operacion.comision = comision
         operacion.medio = medio
-        operacion.sucursal_id = nueva_sucursal_id
+        operacion.sucursal_id = sucursal_id
         
         # Actualizar comisiones (lógica simplificada)
         db.session.commit()
@@ -462,12 +460,8 @@ def editar_operacion(operacion_id):
         flash('Operación actualizada exitosamente', 'success')
         return redirect(url_for('operaciones'))
     
-    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
-    sucursales = []
-    if current_user.es_admin:
-        sucursales = get_sucursales_activas_cache()
-    
-    return render_template('editar_operacion.html', operacion=operacion, sucursales=sucursales)
+    # NUEVA LÓGICA: No se pasan sucursales al template, todos usan su sucursal asignada
+    return render_template('editar_operacion.html', operacion=operacion)
 
 # Rutas de administración optimizadas
 @app.route('/admin/usuarios')
