@@ -1,1 +1,1 @@
-web: python app_optimizado_ultra.py
+web: python app.py
