@@ -145,7 +145,9 @@ class Usuario(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
     es_admin = db.Column(db.Boolean, default=False)
-    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=True)
+    # OPTIMIZACIÓN ULTRA FLUIDA: Solo campos que existen en la BD real
+    # NOTA: No incluir hora_creacion, created_at, email, nombre_completo si no existen en la BD
     operaciones = db.relationship('Operacion', backref='usuario', lazy='dynamic')
 
 class Operacion(db.Model):
