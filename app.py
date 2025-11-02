@@ -392,14 +392,14 @@ def operaciones():
     # Query base optimizada con eager loading
     if current_user.es_admin:
         query = Operacion.query.options(
-            joinedload(Operacion.usuario).load_only('nombre_completo'),
+            joinedload(Operacion.usuario).load_only('id', 'username'),
             joinedload(Operacion.sucursal).load_only('nombre')
         )
         if request.args.get('sucursal_id'):
             query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
     else:
         query = Operacion.query.options(
-            joinedload(Operacion.usuario).load_only('nombre_completo'),
+            joinedload(Operacion.usuario).load_only('id', 'username'),
             joinedload(Operacion.sucursal).load_only('nombre')
         ).filter_by(sucursal_id=current_user.sucursal_id)
     
