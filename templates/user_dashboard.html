@@ -136,28 +136,42 @@
 
 {% block scripts %}
 <script>
+// OPTIMIZACIÓN ULTRA FLUIDA: Actualizar comisión con debounce y caché
+let comisionCache = null;
 function actualizarComision() {
-    fetch('/api/comisiones?tipo=diaria')
-        .then(response => response.json())
+    // Usar fetch con timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    fetch('/api/comisiones?tipo=diaria', { signal: controller.signal })
+        .then(response => {
+            clearTimeout(timeoutId);
+            if (!response.ok) throw new Error('Error del servidor');
+            return response.json();
+        })
         .then(data => {
-            // Actualizar el valor en la página
-            const comisionElement = document.querySelector('.text-success .h5');
-            if (comisionElement) {
-                comisionElement.textContent = 'S/ ' + data.total_comision.toFixed(2);
+            // Solo actualizar si cambió
+            if (comisionCache !== data.total_comision) {
+                comisionCache = data.total_comision;
+                
+                // Actualizar el valor en la página
+                const comisionElement = document.querySelector('.text-success .h5, .h5.mb-0.font-weight-bold');
+                if (comisionElement) {
+                    comisionElement.textContent = 'S/ ' + data.total_comision.toFixed(2);
+                }
             }
-            
-            // Mostrar mensaje de éxito
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-success alert-dismissible fade show';
-            alert.innerHTML = `
-                Comisión actualizada: S/ ${data.total_comision.toFixed(2)}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.querySelector('.main-content .pt-3').insertBefore(alert, document.querySelector('.main-content .pt-3').firstChild);
         })
         .catch(error => {
-            console.error('Error:', error);
+            clearTimeout(timeoutId);
+            if (error.name !== 'AbortError') {
+                console.error('Error:', error);
+            }
         });
 }
+
+// OPTIMIZACIÓN ULTRA FLUIDA: Auto-actualizar cada 30 segundos (no inmediatamente)
+setTimeout(() => {
+    setInterval(actualizarComision, 30000);
+}, 30000);
 </script>
 {% endblock %} 

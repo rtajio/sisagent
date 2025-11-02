@@ -14,6 +14,8 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_caching import Cache
 from flask_compress import Compress
+from sqlalchemy.orm import joinedload, load_only
+from sqlalchemy import Index
 import pytz
 import time
 
@@ -83,17 +85,35 @@ else:
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# OPTIMIZACIÓN ULTRA: Configuración de caché
-app.config['CACHE_TYPE'] = 'simple'
-app.config['CACHE_DEFAULT_TIMEOUT'] = 300  # 5 minutos
+# OPTIMIZACIÓN ULTRA FLUIDA: Configuración SQLAlchemy optimizada
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'pool_size': 20,
+    'max_overflow': 40,
+    'pool_timeout': 30,
+    'echo': False,
+    'echo_pool': False,
+    'connect_args': {'connect_timeout': 10}
+}
 
-# OPTIMIZACIÓN ULTRA: Configuración de compresión
+# OPTIMIZACIÓN ULTRA FLUIDA: Configuración Flask optimizada
+app.config['TEMPLATES_AUTO_RELOAD'] = False
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # Cache estático 1 año
+app.config['JSON_SORT_KEYS'] = False
+
+# OPTIMIZACIÓN ULTRA FLUIDA: Configuración de caché mejorada
+app.config['CACHE_TYPE'] = 'simple'
+app.config['CACHE_DEFAULT_TIMEOUT'] = 600  # 10 minutos (aumentado)
+app.config['CACHE_THRESHOLD'] = 1000
+
+# OPTIMIZACIÓN ULTRA FLUIDA: Configuración de compresión mejorada
 app.config['COMPRESS_MIMETYPES'] = [
     'text/html', 'text/css', 'text/xml', 'text/javascript',
-    'application/json', 'application/javascript'
+    'application/json', 'application/javascript', 'application/xml'
 ]
-app.config['COMPRESS_LEVEL'] = 6
-app.config['COMPRESS_MIN_SIZE'] = 500
+app.config['COMPRESS_LEVEL'] = 9  # Máxima compresión
+app.config['COMPRESS_MIN_SIZE'] = 100  # Comprimir desde 100 bytes
 
 # Inicializar extensiones
 db = SQLAlchemy(app)
@@ -134,9 +154,16 @@ class Operacion(db.Model):
     monto = db.Column(db.Numeric(10, 2), nullable=False)
     comision = db.Column(db.Numeric(10, 2), nullable=False)
     medio = db.Column(db.String(50), nullable=False)
-    hora = db.Column(db.DateTime, default=lambda: get_peru_time())
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
-    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    hora = db.Column(db.DateTime, default=lambda: get_peru_time(), index=True)  # Índice para consultas por fecha
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False, index=True)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False, index=True)
+    
+    # Índices compuestos para consultas frecuentes
+    __table_args__ = (
+        Index('idx_operacion_fecha_sucursal', 'hora', 'sucursal_id'),
+        Index('idx_operacion_fecha_usuario', 'hora', 'usuario_id'),
+        Index('idx_operacion_medio', 'medio'),
+    )
 
 class MedioPago(db.Model):
     __tablename__ = 'medio_pago'
@@ -149,17 +176,27 @@ class MedioPago(db.Model):
 class ComisionDiaria(db.Model):
     __tablename__ = 'comision_diaria'
     id = db.Column(db.Integer, primary_key=True)
-    fecha = db.Column(db.Date, nullable=False)
-    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    fecha = db.Column(db.Date, nullable=False, index=True)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False, index=True)
     total_comision = db.Column(db.Numeric(10, 2), default=0.0)
+    
+    # Índice compuesto para búsquedas frecuentes
+    __table_args__ = (
+        Index('idx_comision_diaria_fecha_sucursal', 'fecha', 'sucursal_id', unique=True),
+    )
 
 class ComisionMensual(db.Model):
     __tablename__ = 'comision_mensual'
     id = db.Column(db.Integer, primary_key=True)
-    año = db.Column(db.Integer, nullable=False)
-    mes = db.Column(db.Integer, nullable=False)
-    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    año = db.Column(db.Integer, nullable=False, index=True)
+    mes = db.Column(db.Integer, nullable=False, index=True)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False, index=True)
     total_comision = db.Column(db.Numeric(10, 2), default=0.0)
+    
+    # Índice compuesto para búsquedas frecuentes
+    __table_args__ = (
+        Index('idx_comision_mensual_ano_mes_sucursal', 'año', 'mes', 'sucursal_id', unique=True),
+    )
 
 # OPTIMIZACIÓN ULTRA: Cache de medios de pago
 @cache.memoize(timeout=300)
@@ -232,7 +269,8 @@ def get_dashboard_stats_cache(user_id, is_admin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Usuario.query.get(int(user_id))
+    # OPTIMIZACIÓN ULTRA FLUIDA: Eager load sucursal al cargar usuario
+    return Usuario.query.options(joinedload(Usuario.sucursal)).get(int(user_id))
 
 # OPTIMIZACIÓN ULTRA: Función para limpiar caché
 def clear_cache():
@@ -271,17 +309,77 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # OPTIMIZACIÓN ULTRA: Usar caché para estadísticas
-    stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
-    
-    return render_template('dashboard.html', **stats)
+    # OPTIMIZACIÓN ULTRA FLUIDA: Redirigir según tipo de usuario
+    if current_user.es_admin:
+        # Dashboard de administrador con consultas optimizadas
+        hoy = get_peru_time().date()
+        ahora = get_peru_time()
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Consulta única optimizada para comisiones
+        comisiones_hoy_query = db.session.query(
+            Operacion.sucursal_id,
+            Sucursal.nombre,
+            db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+        ).join(Sucursal, Operacion.sucursal_id == Sucursal.id).filter(
+            db.func.date(Operacion.hora) == hoy
+        ).group_by(Operacion.sucursal_id, Sucursal.nombre).all()
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Consulta única optimizada para comisiones mensuales
+        año_actual = ahora.year
+        mes_actual = ahora.month
+        comisiones_mes_query = db.session.query(
+            Operacion.sucursal_id,
+            db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+        ).filter(
+            db.func.extract('year', Operacion.hora) == año_actual,
+            db.func.extract('month', Operacion.hora) == mes_actual
+        ).group_by(Operacion.sucursal_id).all()
+        
+        # Convertir a diccionario para acceso rápido
+        comisiones_mes_dict = {suc_id: float(total) for suc_id, total in comisiones_mes_query}
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Stats con caché
+        stats = get_dashboard_stats_cache(current_user.id, True)
+        
+        comisiones_hoy = [
+            (suc_id, nombre, float(total)) 
+            for suc_id, nombre, total in comisiones_hoy_query
+        ]
+        
+        return render_template('admin_dashboard.html',
+                             comisiones_hoy=comisiones_hoy,
+                             comisiones_mes=comisiones_mes_dict,
+                             **stats)
+    else:
+        # Dashboard de usuario normal
+        hoy = get_peru_time().date()
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Limitar operaciones del día (últimas 10)
+        operaciones_hoy = Operacion.query.filter_by(
+            sucursal_id=current_user.sucursal_id
+        ).filter(
+            db.func.date(Operacion.hora) == hoy
+        ).order_by(Operacion.hora.desc()).limit(10).all()
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Calcular comisión del día con una query
+        comision_hoy = db.session.query(
+            db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+        ).filter_by(
+            sucursal_id=current_user.sucursal_id
+        ).filter(
+            db.func.date(Operacion.hora) == hoy
+        ).scalar() or 0.0
+        
+        return render_template('user_dashboard.html',
+                             operaciones_hoy=operaciones_hoy,
+                             total_comision_hoy=float(comision_hoy))
 
 @app.route('/operaciones')
 @login_required
 def operaciones():
-    # OPTIMIZACIÓN ULTRA: Paginación para operaciones
+    # OPTIMIZACIÓN ULTRA FLUIDA: Paginación reducida para mayor velocidad
     page = request.args.get('page', 1, type=int)
-    per_page = 50  # Reducido para mayor velocidad
+    per_page = 30  # Reducido de 50 a 30 para mayor velocidad
     
     # Obtener parámetros de filtro
     fecha = request.args.get('fecha')
@@ -289,18 +387,24 @@ def operaciones():
     hora_inicio = request.args.get('hora_inicio')
     hora_fin = request.args.get('hora_fin')
     
-    # Query base optimizada
+    # Query base optimizada con eager loading
     if current_user.es_admin:
-        query = Operacion.query
+        query = Operacion.query.options(
+            joinedload(Operacion.usuario).load_only('nombre_completo'),
+            joinedload(Operacion.sucursal).load_only('nombre')
+        )
         if request.args.get('sucursal_id'):
             query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
     else:
-        query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
+        query = Operacion.query.options(
+            joinedload(Operacion.usuario).load_only('nombre_completo'),
+            joinedload(Operacion.sucursal).load_only('nombre')
+        ).filter_by(sucursal_id=current_user.sucursal_id)
     
     # Obtener fecha actual para comparación
     hoy = datetime.now(peru_tz).date()
     
-    # Aplicar filtros
+    # Aplicar filtros optimizados
     if fecha:
         fecha_objeto = datetime.strptime(fecha, '%Y-%m-%d').date()
         if not current_user.es_admin and fecha_objeto != hoy:
@@ -308,10 +412,19 @@ def operaciones():
             fecha = None
         
         if fecha:
-            query = query.filter(db.func.date(Operacion.hora) == fecha)
+            # Usar índice de fecha directamente
+            inicio_dia = datetime.combine(fecha_objeto, datetime.min.time())
+            fin_dia = datetime.combine(fecha_objeto, datetime.max.time())
+            inicio_dia = peru_tz.localize(inicio_dia)
+            fin_dia = peru_tz.localize(fin_dia)
+            query = query.filter(Operacion.hora >= inicio_dia, Operacion.hora <= fin_dia)
     
     if not fecha or not current_user.es_admin:
-        query = query.filter(db.func.date(Operacion.hora) == hoy)
+        inicio_dia = datetime.combine(hoy, datetime.min.time())
+        fin_dia = datetime.combine(hoy, datetime.max.time())
+        inicio_dia = peru_tz.localize(inicio_dia)
+        fin_dia = peru_tz.localize(fin_dia)
+        query = query.filter(Operacion.hora >= inicio_dia, Operacion.hora <= fin_dia)
     
     if medio:
         query = query.filter(Operacion.medio == medio)
@@ -322,7 +435,7 @@ def operaciones():
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
     
-    # OPTIMIZACIÓN ULTRA: Paginación
+    # OPTIMIZACIÓN ULTRA FLUIDA: Paginación con eager loading
     operaciones_paginated = query.order_by(Operacion.hora.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
@@ -330,12 +443,12 @@ def operaciones():
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
-    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
+    # OPTIMIZACIÓN ULTRA FLUIDA: Cargar sucursales solo si es admin
     sucursales = []
     if current_user.es_admin:
         sucursales = get_sucursales_activas_cache()
     
-    # OPTIMIZACIÓN ULTRA: Cargar medios de pago con caché
+    # OPTIMIZACIÓN ULTRA FLUIDA: Cargar medios de pago con caché
     medios_pago = get_medios_pago_cache()
     
     return render_template('operaciones.html',
@@ -471,10 +584,13 @@ def admin_usuarios():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    # OPTIMIZACIÓN ULTRA: Paginación para usuarios
+    # OPTIMIZACIÓN ULTRA FLUIDA: Paginación optimizada con eager loading
     page = request.args.get('page', 1, type=int)
-    usuarios_paginated = Usuario.query.paginate(
-        page=page, per_page=20, error_out=False
+    query = Usuario.query.options(
+        joinedload(Usuario.sucursal).load_only('nombre')
+    )
+    usuarios_paginated = query.paginate(
+        page=page, per_page=30, error_out=False  # Aumentado de 20 a 30
     )
     
     return render_template('admin_usuarios.html', 
@@ -492,6 +608,118 @@ def admin_sucursales():
     sucursales = get_sucursales_activas_cache()
     
     return render_template('admin_sucursales.html', sucursales=sucursales)
+
+# OPTIMIZACIÓN ULTRA FLUIDA: API para actualizar operaciones (edición inline)
+@app.route('/api/operaciones/<int:operacion_id>', methods=['PUT'])
+@login_required
+def api_actualizar_operacion(operacion_id):
+    """API optimizada para actualizar operaciones"""
+    try:
+        # OPTIMIZACIÓN ULTRA FLUIDA: Eager load relacionado
+        operacion = Operacion.query.options(
+            joinedload(Operacion.sucursal).load_only('id', 'nombre')
+        ).get_or_404(operacion_id)
+        
+        # Verificar permisos optimizado
+        if not current_user.es_admin:
+            if operacion.usuario_id != current_user.id or operacion.sucursal_id != current_user.sucursal_id:
+                return jsonify({'success': False, 'message': 'No tienes permisos para editar esta operación'}), 403
+        
+        # Obtener datos del JSON
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'No se recibieron datos'}), 400
+        
+        monto = data.get('monto')
+        comision = data.get('comision')
+        medio = data.get('medio')
+        
+        # Validación rápida
+        if not monto or not comision or not medio:
+            return jsonify({'success': False, 'message': 'Todos los campos son requeridos'}), 400
+        
+        try:
+            monto = float(monto)
+            comision = float(comision)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Monto y comisión deben ser números válidos'}), 400
+        
+        if monto <= 0:
+            return jsonify({'success': False, 'message': 'El monto debe ser mayor a 0'}), 400
+        
+        if comision < 0:
+            return jsonify({'success': False, 'message': 'La comisión no puede ser negativa'}), 400
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Validar medio de pago usando caché
+        medios_pago_cache = {mp.nombre_abreviado: mp for mp in get_medios_pago_cache()}
+        if medio not in medios_pago_cache:
+            return jsonify({'success': False, 'message': 'Medio de pago no válido'}), 400
+        
+        # Guardar valores originales para actualizar comisiones
+        comision_anterior = float(operacion.comision)
+        fecha_operacion = operacion.hora.date()
+        año_operacion = operacion.hora.year
+        mes_operacion = operacion.hora.month
+        
+        # Actualizar operación
+        operacion.monto = monto
+        operacion.comision = comision
+        operacion.medio = medio
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Actualizar comisiones con query optimizada
+        diferencia_comision = comision - comision_anterior
+        
+        # Actualizar comisión diaria
+        comision_diaria = ComisionDiaria.query.filter_by(
+            fecha=fecha_operacion,
+            sucursal_id=operacion.sucursal_id
+        ).first()
+        
+        if comision_diaria:
+            comision_diaria.total_comision = float(comision_diaria.total_comision) + diferencia_comision
+        else:
+            comision_diaria = ComisionDiaria(
+                fecha=fecha_operacion,
+                sucursal_id=operacion.sucursal_id,
+                total_comision=comision
+            )
+            db.session.add(comision_diaria)
+        
+        # Actualizar comisión mensual
+        comision_mensual = ComisionMensual.query.filter_by(
+            año=año_operacion,
+            mes=mes_operacion,
+            sucursal_id=operacion.sucursal_id
+        ).first()
+        
+        if comision_mensual:
+            comision_mensual.total_comision = float(comision_mensual.total_comision) + diferencia_comision
+        else:
+            comision_mensual = ComisionMensual(
+                año=año_operacion,
+                mes=mes_operacion,
+                sucursal_id=operacion.sucursal_id,
+                total_comision=comision
+            )
+            db.session.add(comision_mensual)
+        
+        # Commit optimizado
+        db.session.commit()
+        
+        # Limpiar caché después de cambios
+        clear_cache()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Operación actualizada exitosamente',
+            'monto': float(monto),
+            'comision': float(comision),
+            'medio': medio
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Error al actualizar operación: {str(e)}'}), 500
 
 # Healthcheck optimizado
 @app.route('/ping')

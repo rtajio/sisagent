@@ -223,12 +223,37 @@
 
 {% block scripts %}
 <script>
-// Array con los medios de pago de la base de datos
+// OPTIMIZACIÓN ULTRA FLUIDA: Cache de medios de pago
 const mediosPago = [
     {% for medio in medios_pago %}
-        { valor: '{{ medio.nombre_abreviado }}', nombre: '{{ medio.nombre_abreviado }}' },
+        { valor: '{{ medio.nombre_abreviado }}', nombre: '{{ medio.nombre_completo }}' },
     {% endfor %}
 ];
+
+// OPTIMIZACIÓN ULTRA FLUIDA: Debounce para funciones frecuentes
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// OPTIMIZACIÓN ULTRA FLUIDA: Throttle para funciones de scroll/resize
+function throttle(func, limit) {
+    let inThrottle;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
 
 function toggleEdit(id, hora, monto, comision, medio, usuarioOriginal) {
     const fila = document.getElementById(`fila-${id}`);
@@ -265,17 +290,39 @@ function toggleEdit(id, hora, monto, comision, medio, usuarioOriginal) {
     fila.innerHTML = filaHTML;
 }
 
+// OPTIMIZACIÓN ULTRA FLUIDA: Guardar cambios con validación y loading
 function guardarCambios(id, usuarioOriginal) {
-    const monto = document.getElementById(`edit-monto-${id}`).value;
-    const comision = document.getElementById(`edit-comision-${id}`).value;
+    const monto = parseFloat(document.getElementById(`edit-monto-${id}`).value);
+    const comision = parseFloat(document.getElementById(`edit-comision-${id}`).value);
     const medio = document.getElementById(`edit-medio-${id}`).value;
+    
+    // Validación rápida
+    if (isNaN(monto) || monto < 0 || isNaN(comision) || comision < 0 || !medio) {
+        showNotification('Por favor complete todos los campos correctamente', 'error');
+        return;
+    }
+    
+    // Mostrar loading
+    const btnSave = document.querySelector(`#fila-${id} .btn-success`);
+    const originalHTML = btnSave.innerHTML;
+    btnSave.disabled = true;
+    btnSave.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    
+    // OPTIMIZACIÓN ULTRA FLUIDA: Fetch con timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos timeout
     
     fetch(`/api/operaciones/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monto, comision, medio })
+        body: JSON.stringify({ monto, comision, medio }),
+        signal: controller.signal
     })
-    .then(resp => resp.json())
+    .then(resp => {
+        clearTimeout(timeoutId);
+        if (!resp.ok) throw new Error('Error del servidor');
+        return resp.json();
+    })
     .then(data => {
         if (data.success) {
             showNotification('Operación actualizada exitosamente', 'success');
@@ -283,9 +330,20 @@ function guardarCambios(id, usuarioOriginal) {
             actualizarFila(id, data.monto, data.comision, data.medio, usuarioOriginal);
         } else {
             showNotification('Error al actualizar la operación', 'error');
+            btnSave.disabled = false;
+            btnSave.innerHTML = originalHTML;
         }
     })
-    .catch(() => showNotification('Error de red al actualizar la operación', 'error'));
+    .catch(err => {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            showNotification('Tiempo de espera agotado. Por favor intente nuevamente.', 'error');
+        } else {
+            showNotification('Error de red al actualizar la operación', 'error');
+        }
+        btnSave.disabled = false;
+        btnSave.innerHTML = originalHTML;
+    });
 }
 
 function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
