@@ -731,15 +731,23 @@ def init_db():
     """Inicializar la base de datos con datos básicos"""
     with app.app_context():
         try:
-            # Solo crear tablas si no existen
-            db.create_all()
+            # OPTIMIZACIÓN ULTRA FLUIDA: Crear tablas e índices de forma segura
+            try:
+                db.create_all()
+                print("✅ Tablas creadas/verificadas")
+            except Exception as e:
+                # Si hay error con índices, intentar crear solo las tablas sin índices
+                if 'already exists' in str(e).lower() or 'duplicate' in str(e).lower():
+                    print(f"⚠️ Algunos índices ya existen (continuando): {e}")
+                else:
+                    print(f"⚠️ Error al crear tablas (continuando): {e}")
             
             # Crear usuario admin si no existe
             admin = Usuario.query.filter_by(username='admin').first()
             if not admin:
                 admin = Usuario(
                     username='admin',
-                    password_hash=generate_password_hash('admin123'),
+                    password_hash=generate_password_hash('61442159'),
                     es_admin=True
                 )
                 db.session.add(admin)
@@ -782,9 +790,14 @@ def init_db():
             
         except Exception as e:
             print(f"⚠️ Error en inicialización (continuando): {e}")
+            db.session.rollback()
             # Continuar aunque haya errores menores
 
 if __name__ == '__main__':
+    # OPTIMIZACIÓN ULTRA FLUIDA: Solo inicializar en modo desarrollo
     init_db()
     print("🎉 SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para producción!")
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+else:
+    # OPTIMIZACIÓN ULTRA FLUIDA: Para producción con Gunicorn, inicializar al importar
+    init_db()

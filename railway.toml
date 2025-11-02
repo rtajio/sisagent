@@ -2,11 +2,11 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "python app_optimizado_ultra.py"
+startCommand = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300 --preload"
 healthcheckPath = "/ping"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 [environments.production]
-variables = { COMPRESS_LEVEL = "6", CACHE_TYPE = "simple", CACHE_DEFAULT_TIMEOUT = "300" }
+variables = { COMPRESS_LEVEL = "9", CACHE_TYPE = "simple", CACHE_DEFAULT_TIMEOUT = "600" }
