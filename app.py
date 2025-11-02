@@ -328,46 +328,46 @@ def dashboard():
     try:
         # OPTIMIZACIÓN ULTRA FLUIDA: Redirigir según tipo de usuario
         if current_user.es_admin:
-        # Dashboard de administrador con consultas optimizadas
-        hoy = get_peru_time().date()
-        ahora = get_peru_time()
-        
-        # OPTIMIZACIÓN ULTRA FLUIDA: Consulta única optimizada para comisiones
-        comisiones_hoy_query = db.session.query(
-            Operacion.sucursal_id,
-            Sucursal.nombre,
-            db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
-        ).join(Sucursal, Operacion.sucursal_id == Sucursal.id).filter(
-            db.func.date(Operacion.hora) == hoy
-        ).group_by(Operacion.sucursal_id, Sucursal.nombre).all()
-        
-        # OPTIMIZACIÓN ULTRA FLUIDA: Consulta única optimizada para comisiones mensuales
-        año_actual = ahora.year
-        mes_actual = ahora.month
-        comisiones_mes_query = db.session.query(
-            Operacion.sucursal_id,
-            db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
-        ).filter(
-            db.func.extract('year', Operacion.hora) == año_actual,
-            db.func.extract('month', Operacion.hora) == mes_actual
-        ).group_by(Operacion.sucursal_id).all()
-        
-        # Convertir a diccionario para acceso rápido
-        comisiones_mes_dict = {suc_id: float(total) for suc_id, total in comisiones_mes_query}
-        
-        # OPTIMIZACIÓN ULTRA FLUIDA: Stats con caché
-        stats = get_dashboard_stats_cache(current_user.id, True)
-        
-        comisiones_hoy = [
-            (suc_id, nombre, float(total)) 
-            for suc_id, nombre, total in comisiones_hoy_query
-        ]
-        
-        return render_template('admin_dashboard.html',
-                             comisiones_hoy=comisiones_hoy,
-                             comisiones_mes=comisiones_mes_dict,
-                             **stats)
-    else:
+            # Dashboard de administrador con consultas optimizadas
+            hoy = get_peru_time().date()
+            ahora = get_peru_time()
+            
+            # OPTIMIZACIÓN ULTRA FLUIDA: Consulta única optimizada para comisiones
+            comisiones_hoy_query = db.session.query(
+                Operacion.sucursal_id,
+                Sucursal.nombre,
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+            ).join(Sucursal, Operacion.sucursal_id == Sucursal.id).filter(
+                db.func.date(Operacion.hora) == hoy
+            ).group_by(Operacion.sucursal_id, Sucursal.nombre).all()
+            
+            # OPTIMIZACIÓN ULTRA FLUIDA: Consulta única optimizada para comisiones mensuales
+            año_actual = ahora.year
+            mes_actual = ahora.month
+            comisiones_mes_query = db.session.query(
+                Operacion.sucursal_id,
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+            ).filter(
+                db.func.extract('year', Operacion.hora) == año_actual,
+                db.func.extract('month', Operacion.hora) == mes_actual
+            ).group_by(Operacion.sucursal_id).all()
+            
+            # Convertir a diccionario para acceso rápido
+            comisiones_mes_dict = {suc_id: float(total) for suc_id, total in comisiones_mes_query}
+            
+            # OPTIMIZACIÓN ULTRA FLUIDA: Stats con caché
+            stats = get_dashboard_stats_cache(current_user.id, True)
+            
+            comisiones_hoy = [
+                (suc_id, nombre, float(total)) 
+                for suc_id, nombre, total in comisiones_hoy_query
+            ]
+            
+            return render_template('admin_dashboard.html',
+                                 comisiones_hoy=comisiones_hoy,
+                                 comisiones_mes=comisiones_mes_dict,
+                                 **stats)
+        else:
         # Dashboard de usuario normal
         hoy = get_peru_time().date()
         
