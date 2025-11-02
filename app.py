@@ -271,8 +271,12 @@ def get_dashboard_stats_cache(user_id, is_admin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    # OPTIMIZACIÓN ULTRA FLUIDA: Eager load sucursal al cargar usuario
-    return Usuario.query.options(joinedload(Usuario.sucursal)).get(int(user_id))
+    # OPTIMIZACIÓN ULTRA FLUIDA: Eager load sucursal al cargar usuario con manejo de errores
+    try:
+        return Usuario.query.options(joinedload(Usuario.sucursal)).get(int(user_id))
+    except Exception as e:
+        print(f"⚠️ Error al cargar usuario {user_id}: {e}")
+        return None
 
 # OPTIMIZACIÓN ULTRA: Función para limpiar caché
 def clear_cache():
@@ -286,21 +290,31 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    try:
+        if request.method == 'POST':
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '')
+            
+            if not username or not password:
+                flash('Usuario y contraseña son requeridos', 'error')
+                return render_template('login.html')
+            
+            user = Usuario.query.filter_by(username=username).first()
+            
+            if user and check_password_hash(user.password_hash, password):
+                login_user(user)
+                # Limpiar caché al hacer login
+                clear_cache()
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Usuario o contraseña incorrectos', 'error')
         
-        user = Usuario.query.filter_by(username=username).first()
-        
-        if user and check_password_hash(user.password_hash, password):
-            login_user(user)
-            # Limpiar caché al hacer login
-            clear_cache()
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Usuario o contraseña incorrectos', 'error')
-    
-    return render_template('login.html')
+        return render_template('login.html')
+    except Exception as e:
+        print(f"❌ Error en login: {e}")
+        db.session.rollback()
+        flash(f'Error al iniciar sesión: {str(e)}', 'error')
+        return render_template('login.html')
 
 @app.route('/logout')
 @login_required
@@ -311,8 +325,9 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # OPTIMIZACIÓN ULTRA FLUIDA: Redirigir según tipo de usuario
-    if current_user.es_admin:
+    try:
+        # OPTIMIZACIÓN ULTRA FLUIDA: Redirigir según tipo de usuario
+        if current_user.es_admin:
         # Dashboard de administrador con consultas optimizadas
         hoy = get_peru_time().date()
         ahora = get_peru_time()
@@ -375,12 +390,18 @@ def dashboard():
         return render_template('user_dashboard.html',
                              operaciones_hoy=operaciones_hoy,
                              total_comision_hoy=float(comision_hoy))
+    except Exception as e:
+        print(f"❌ Error en dashboard: {e}")
+        db.session.rollback()
+        flash(f'Error al cargar el dashboard: {str(e)}', 'error')
+        return redirect(url_for('login'))
 
 @app.route('/operaciones')
 @login_required
 def operaciones():
-    # OPTIMIZACIÓN ULTRA FLUIDA: Paginación reducida para mayor velocidad
-    page = request.args.get('page', 1, type=int)
+    try:
+        # OPTIMIZACIÓN ULTRA FLUIDA: Paginación reducida para mayor velocidad
+        page = request.args.get('page', 1, type=int)
     per_page = 30  # Reducido de 50 a 30 para mayor velocidad
     
     # Obtener parámetros de filtro
@@ -461,6 +482,11 @@ def operaciones():
                          filtros_aplicados=filtros_aplicados,
                          sucursales=sucursales,
                          medios_pago=medios_pago)
+    except Exception as e:
+        print(f"❌ Error en operaciones: {e}")
+        db.session.rollback()
+        flash(f'Error al cargar operaciones: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
 @login_required
@@ -723,10 +749,36 @@ def api_actualizar_operacion(operacion_id):
         db.session.rollback()
         return jsonify({'success': False, 'message': f'Error al actualizar operación: {str(e)}'}), 500
 
+# OPTIMIZACIÓN ULTRA FLUIDA: Manejadores de error globales
+@app.errorhandler(404)
+def handle_404(e):
+    return "Página no encontrada", 404
+
+@app.errorhandler(500)
+def handle_500(e):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    print(f"❌ Error interno del servidor: {e}")
+    return "Error interno del servidor. Por favor intente más tarde.", 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    print(f"❌ Excepción no manejada: {e}")
+    return f"Error: {str(e)}", 500
+
 # Healthcheck optimizado
 @app.route('/ping')
 def ping():
-    return jsonify({'status': 'ok', 'timestamp': get_peru_time().isoformat()})
+    try:
+        return jsonify({'status': 'ok', 'timestamp': get_peru_time().isoformat()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # Inicialización de la base de datos COMPATIBLE
 def init_db():

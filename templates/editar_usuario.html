@@ -44,36 +44,6 @@
                         </div>
                         
                         <div class="col-md-6 mb-3">
-                            <label for="email" class="form-label">
-                                <i class="fas fa-envelope me-1"></i>
-                                Email
-                            </label>
-                            <input type="email" 
-                                   class="form-control" 
-                                   id="email" 
-                                   name="email" 
-                                   required
-                                   value="{{ usuario.email }}"
-                                   placeholder="juan.perez@empresa.com">
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="nombre_completo" class="form-label">
-                                <i class="fas fa-id-card me-1"></i>
-                                Nombre Completo
-                            </label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="nombre_completo" 
-                                   name="nombre_completo" 
-                                   required
-                                   value="{{ usuario.nombre_completo }}"
-                                   placeholder="Juan Pérez García">
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
                             <label for="password" class="form-label">
                                 <i class="fas fa-lock me-1"></i>
                                 Nueva Contraseña
@@ -120,25 +90,13 @@
                         </div>
                         
                         <div class="col-md-6 mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" 
-                                       type="checkbox" 
-                                       id="activo" 
-                                       name="activo"
-                                       {% if usuario.activo %}checked{% endif %}>
-                                <label class="form-check-label" for="activo">
-                                    <i class="fas fa-check-circle me-1"></i>
-                                    Usuario Activo
-                                </label>
-                            </div>
-                            <div class="form-text">Desmarque para desactivar el usuario</div>
+                            <!-- Campo activo eliminado - no existe en el modelo actual -->
                         </div>
                     </div>
                     
                     <div class="alert alert-warning">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Advertencia:</strong> Al desactivar un usuario, no podrá acceder al sistema 
-                        hasta que se reactive. Los usuarios sin sucursal asignada no podrán registrar operaciones.
+                        <strong>Advertencia:</strong> Los usuarios sin sucursal asignada no podrán registrar operaciones.
                     </div>
                     
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
@@ -162,21 +120,7 @@
 <script>
 // Validación del formulario
 document.getElementById('usuarioForm').addEventListener('submit', function(e) {
-    const email = document.getElementById('email').value.trim();
-    const nombreCompleto = document.getElementById('nombre_completo').value.trim();
     const password = document.getElementById('password').value;
-    
-    if (!email) {
-        e.preventDefault();
-        alert('Por favor ingrese el email');
-        return false;
-    }
-    
-    if (!nombreCompleto) {
-        e.preventDefault();
-        alert('Por favor ingrese el nombre completo');
-        return false;
-    }
     
     if (password && password.length < 6) {
         e.preventDefault();

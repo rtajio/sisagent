@@ -34,12 +34,8 @@
                     <tr>
                         <th>ID</th>
                         <th>Usuario</th>
-                        <th>Nombre Completo</th>
-                        <th>Email</th>
                         <th>Sucursal</th>
                         <th>Rol</th>
-                        <th>Estado</th>
-                        <th>Fecha Creación</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -48,8 +44,6 @@
                     <tr>
                         <td>{{ usuario.id }}</td>
                         <td class="font-weight-bold">{{ usuario.username }}</td>
-                        <td>{{ usuario.nombre_completo }}</td>
-                        <td>{{ usuario.email }}</td>
                         <td>
                             {% if usuario.sucursal %}
                             <span class="badge bg-info">{{ usuario.sucursal.nombre }}</span>
@@ -64,14 +58,6 @@
                             <span class="badge bg-primary">Usuario</span>
                             {% endif %}
                         </td>
-                        <td>
-                            {% if usuario.activo %}
-                            <span class="badge bg-success">Activo</span>
-                            {% else %}
-                            <span class="badge bg-danger">Inactivo</span>
-                            {% endif %}
-                        </td>
-                                                            <td>{{ format_peru_datetime_short(usuario.created_at) }}</td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}" 
