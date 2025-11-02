@@ -368,28 +368,28 @@ def dashboard():
                                  comisiones_mes=comisiones_mes_dict,
                                  **stats)
         else:
-        # Dashboard de usuario normal
-        hoy = get_peru_time().date()
-        
-        # OPTIMIZACIÓN ULTRA FLUIDA: Limitar operaciones del día (últimas 10)
-        operaciones_hoy = Operacion.query.filter_by(
-            sucursal_id=current_user.sucursal_id
-        ).filter(
-            db.func.date(Operacion.hora) == hoy
-        ).order_by(Operacion.hora.desc()).limit(10).all()
-        
-        # OPTIMIZACIÓN ULTRA FLUIDA: Calcular comisión del día con una query
-        comision_hoy = db.session.query(
-            db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
-        ).filter_by(
-            sucursal_id=current_user.sucursal_id
-        ).filter(
-            db.func.date(Operacion.hora) == hoy
-        ).scalar() or 0.0
-        
-        return render_template('user_dashboard.html',
-                             operaciones_hoy=operaciones_hoy,
-                             total_comision_hoy=float(comision_hoy))
+            # Dashboard de usuario normal
+            hoy = get_peru_time().date()
+            
+            # OPTIMIZACIÓN ULTRA FLUIDA: Limitar operaciones del día (últimas 10)
+            operaciones_hoy = Operacion.query.filter_by(
+                sucursal_id=current_user.sucursal_id
+            ).filter(
+                db.func.date(Operacion.hora) == hoy
+            ).order_by(Operacion.hora.desc()).limit(10).all()
+            
+            # OPTIMIZACIÓN ULTRA FLUIDA: Calcular comisión del día con una query
+            comision_hoy = db.session.query(
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+            ).filter_by(
+                sucursal_id=current_user.sucursal_id
+            ).filter(
+                db.func.date(Operacion.hora) == hoy
+            ).scalar() or 0.0
+            
+            return render_template('user_dashboard.html',
+                                 operaciones_hoy=operaciones_hoy,
+                                 total_comision_hoy=float(comision_hoy))
     except Exception as e:
         print(f"❌ Error en dashboard: {e}")
         db.session.rollback()
