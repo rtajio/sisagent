@@ -749,6 +749,119 @@ def api_actualizar_operacion(operacion_id):
         db.session.rollback()
         return jsonify({'success': False, 'message': f'Error al actualizar operación: {str(e)}'}), 500
 
+# Rutas de reportes
+@app.route('/reportes')
+@login_required
+def reportes():
+    if not current_user.es_admin:
+        flash('Acceso denegado. Solo los administradores pueden generar reportes.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener medios de pago y sucursales
+    medios_pago = get_medios_pago_cache()
+    sucursales = get_sucursales_activas_cache()
+    
+    return render_template('reportes.html', sucursales=sucursales, medios_pago=medios_pago)
+
+@app.route('/api/reportes/operaciones')
+@login_required
+def api_reportes_operaciones():
+    try:
+        if not current_user.es_admin:
+            return jsonify({'error': 'Acceso denegado'}), 403
+        
+        # Obtener zona horaria de Perú
+        peru_tz = pytz.timezone('America/Lima')
+        
+        fecha_inicio = request.args.get('fecha_inicio')
+        fecha_fin = request.args.get('fecha_fin')
+        sucursal_id = request.args.get('sucursal_id')
+        medio = request.args.get('medio')
+        
+        query = Operacion.query
+        
+        # Debug: Solo mostrar información esencial en desarrollo
+        if app.debug:
+            print(f"DEBUG REPORTE: Parámetros - fecha_inicio: '{fecha_inicio}', fecha_fin: '{fecha_fin}', sucursal_id: '{sucursal_id}', medio: '{medio}'")
+        
+        # Aplicar filtros de fecha usando timezone específico para evitar problemas de conversión
+        if fecha_inicio:
+            # Convertir fecha_inicio a datetime con timezone de Perú
+            inicio_fecha = datetime.combine(datetime.strptime(fecha_inicio, '%Y-%m-%d').date(), datetime.min.time()).replace(tzinfo=peru_tz)
+            query = query.filter(Operacion.hora >= inicio_fecha)
+        
+        if fecha_fin:
+            # Convertir fecha_fin a datetime con timezone de Perú (hasta el final del día)
+            fin_fecha = datetime.combine(datetime.strptime(fecha_fin, '%Y-%m-%d').date(), datetime.max.time()).replace(tzinfo=peru_tz)
+            query = query.filter(Operacion.hora <= fin_fecha)
+        
+        if sucursal_id and sucursal_id.strip():
+            # Convertir sucursal_id de string a integer
+            try:
+                sucursal_id_int = int(sucursal_id)
+                query = query.filter(Operacion.sucursal_id == sucursal_id_int)
+            except ValueError:
+                # Si no se puede convertir a integer, ignorar el filtro
+                if app.debug:
+                    print(f"DEBUG REPORTE: Error al convertir sucursal_id '{sucursal_id}' a integer")
+        
+        if medio:
+            query = query.filter(Operacion.medio == medio)
+        
+        # OPTIMIZACIÓN: Query con eager loading para evitar N+1 queries - SIN LÍMITE para listar todas las operaciones
+        operaciones = query.options(
+            joinedload(Operacion.usuario).load_only('id', 'username'),
+            joinedload(Operacion.sucursal).load_only('id', 'nombre')
+        ).order_by(Operacion.hora.desc()).all()
+        
+        # OPTIMIZACIÓN: Cache de medios de pago optimizado
+        medios_cache = {mp.nombre_abreviado: mp.nombre_completo for mp in get_medios_pago_cache()}
+        
+        # OPTIMIZACIÓN: Procesamiento en memoria más rápido
+        datos = []
+        total_monto = 0.0
+        total_comision = 0.0
+        
+        for op in operaciones:
+            monto = float(op.monto)
+            comision = float(op.comision)
+            total_monto += monto
+            total_comision += comision
+            
+            # Obtener datos de usuario y sucursal de forma segura (ya cargados con eager loading)
+            usuario_nombre = op.usuario.username if op.usuario else 'Usuario no encontrado'
+            sucursal_nombre = op.sucursal.nombre if op.sucursal else 'Sin sucursal'
+            
+            datos.append({
+                'id': op.id,
+                'fecha': format_peru_date(op.hora),
+                'hora': format_peru_time(op.hora),
+                'monto': monto,
+                'comision': comision,
+                'medio': medios_cache.get(op.medio, op.medio),
+                'usuario': usuario_nombre,
+                'sucursal': sucursal_nombre
+            })
+        
+        return jsonify({
+            'operaciones': datos,
+            'total_operaciones': len(operaciones),
+            'total_monto': total_monto,
+            'total_comision': total_comision
+        })
+    
+    except Exception as e:
+        # En caso de error, devolver respuesta de error válida
+        if app.debug:
+            print(f"ERROR EN REPORTE: {str(e)}")
+        return jsonify({
+            'error': 'Error al generar el reporte',
+            'operaciones': [],
+            'total_operaciones': 0,
+            'total_monto': 0.0,
+            'total_comision': 0.0
+        }), 500
+
 # OPTIMIZACIÓN ULTRA FLUIDA: Manejadores de error globales
 @app.errorhandler(404)
 def handle_404(e):
