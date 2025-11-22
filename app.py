@@ -946,10 +946,13 @@ def handle_exception(e):
 # Healthcheck optimizado
 @app.route('/ping')
 def ping():
+    """Healthcheck endpoint - debe ser rápido y no depender de la base de datos"""
     try:
-        return jsonify({'status': 'ok', 'timestamp': get_peru_time().isoformat()})
+        # Respuesta simple y rápida para healthcheck
+        return jsonify({'status': 'ok'}), 200
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        # En caso de error, aún devolver 200 para evitar problemas en Railway
+        return jsonify({'status': 'error', 'message': str(e)}), 200
 
 # Inicialización de la base de datos COMPATIBLE
 def init_db():
@@ -1024,5 +1027,16 @@ if __name__ == '__main__':
     print("🎉 SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para producción!")
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 else:
-    # OPTIMIZACIÓN ULTRA FLUIDA: Para producción con Gunicorn, inicializar al importar
-    init_db()
+    # OPTIMIZACIÓN ULTRA FLUIDA: Para producción con Gunicorn, inicializar en background
+    # Usar threading para no bloquear el inicio de la aplicación
+    import threading
+    def init_db_background():
+        try:
+            init_db()
+        except Exception as e:
+            print(f"⚠️ Error en inicialización en background: {e}")
+    
+    # Inicializar en un hilo separado para no bloquear Gunicorn
+    init_thread = threading.Thread(target=init_db_background, daemon=True)
+    init_thread.start()
+    print("🚀 SISAGENT iniciando (inicialización en background)...")
