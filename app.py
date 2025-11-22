@@ -85,16 +85,19 @@ else:
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# OPTIMIZACIÓN ULTRA FLUIDA: Configuración SQLAlchemy optimizada
+# OPTIMIZACIÓN ULTRA FLUIDA: Configuración SQLAlchemy optimizada para Railway
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,
     'pool_recycle': 300,
-    'pool_size': 20,
-    'max_overflow': 40,
-    'pool_timeout': 30,
+    'pool_size': 5,  # Reducido para Railway
+    'max_overflow': 10,  # Reducido para Railway
+    'pool_timeout': 20,  # Reducido para Railway
     'echo': False,
     'echo_pool': False,
-    'connect_args': {'connect_timeout': 10}
+    'connect_args': {
+        'connect_timeout': 5,  # Timeout más corto
+        'options': '-c statement_timeout=30000'  # Timeout de 30 segundos para queries
+    }
 }
 
 # OPTIMIZACIÓN ULTRA FLUIDA: Configuración Flask optimizada
@@ -115,15 +118,32 @@ app.config['COMPRESS_MIMETYPES'] = [
 app.config['COMPRESS_LEVEL'] = 9  # Máxima compresión
 app.config['COMPRESS_MIN_SIZE'] = 100  # Comprimir desde 100 bytes
 
-# Inicializar extensiones
-db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+# Inicializar extensiones con manejo de errores
+try:
+    db = SQLAlchemy(app)
+    print("✅ SQLAlchemy inicializado")
+except Exception as e:
+    print(f"⚠️ Error inicializando SQLAlchemy: {e}")
+    raise
+
+try:
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'login'
+    print("✅ LoginManager inicializado")
+except Exception as e:
+    print(f"⚠️ Error inicializando LoginManager: {e}")
+    raise
 
 # OPTIMIZACIÓN ULTRA: Inicializar caché y compresión
-cache = Cache(app)
-Compress(app)
+try:
+    cache = Cache(app)
+    Compress(app)
+    print("✅ Caché y compresión inicializados")
+except Exception as e:
+    print(f"⚠️ Error inicializando caché/compresión: {e}")
+    # Continuar sin caché si hay problemas
+    cache = None
 
 print("✅ Configuración de base de datos completada")
 print("✅ SQLAlchemy y LoginManager configurados")
@@ -947,12 +967,28 @@ def handle_exception(e):
 @app.route('/ping')
 def ping():
     """Healthcheck endpoint - debe ser rápido y no depender de la base de datos"""
+    # Endpoint simple que siempre responde OK para que Railway pase el healthcheck
+    # No depende de base de datos ni ninguna otra funcionalidad
+    return jsonify({'status': 'ok'}), 200
+
+@app.route('/health')
+def health():
+    """Healthcheck más detallado - verifica base de datos"""
     try:
-        # Respuesta simple y rápida para healthcheck
-        return jsonify({'status': 'ok'}), 200
+        # Intentar una query simple a la base de datos
+        db.session.execute(db.text('SELECT 1'))
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected'
+        }), 200
     except Exception as e:
-        # En caso de error, aún devolver 200 para evitar problemas en Railway
-        return jsonify({'status': 'error', 'message': str(e)}), 200
+        # Aún devolver 200 para que la app se considere "viva"
+        # pero indicar que la BD no está lista
+        return jsonify({
+            'status': 'degraded',
+            'database': 'not_ready',
+            'message': str(e)
+        }), 200
 
 # Inicialización de la base de datos COMPATIBLE
 def init_db():
@@ -1027,16 +1063,34 @@ if __name__ == '__main__':
     print("🎉 SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para producción!")
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 else:
-    # OPTIMIZACIÓN ULTRA FLUIDA: Para producción con Gunicorn, inicializar en background
-    # Usar threading para no bloquear el inicio de la aplicación
+    # OPTIMIZACIÓN ULTRA FLUIDA: Para producción con Gunicorn
+    # NO inicializar inmediatamente - dejar que Gunicorn inicie primero
+    # La inicialización se hará en el primer request o en un hook de Gunicorn
     import threading
+    import time
+    
+    _db_initialized = False
+    _init_lock = threading.Lock()
+    
     def init_db_background():
+        """Inicializar base de datos en background después de un delay"""
+        global _db_initialized
+        # Esperar un poco para que la app esté lista
+        time.sleep(5)
         try:
-            init_db()
+            with _init_lock:
+                if not _db_initialized:
+                    print("🔄 Iniciando inicialización de base de datos en background...")
+                    init_db()
+                    _db_initialized = True
+                    print("✅ Inicialización de base de datos completada")
         except Exception as e:
             print(f"⚠️ Error en inicialización en background: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Inicializar en un hilo separado para no bloquear Gunicorn
     init_thread = threading.Thread(target=init_db_background, daemon=True)
     init_thread.start()
-    print("🚀 SISAGENT iniciando (inicialización en background)...")
+    print("🚀 SISAGENT iniciando (inicialización diferida)...")
+    print("✅ Aplicación lista - healthcheck disponible inmediatamente")
