@@ -422,86 +422,86 @@ def operaciones():
     try:
         # OPTIMIZACIÓN ULTRA FLUIDA: Paginación reducida para mayor velocidad
         page = request.args.get('page', 1, type=int)
-    per_page = 30  # Reducido de 50 a 30 para mayor velocidad
-    
-    # Obtener parámetros de filtro
-    fecha = request.args.get('fecha')
-    medio = request.args.get('medio')
-    hora_inicio = request.args.get('hora_inicio')
-    hora_fin = request.args.get('hora_fin')
-    
-    # Query base optimizada con eager loading
-    if current_user.es_admin:
-        query = Operacion.query.options(
-            joinedload(Operacion.usuario).load_only('id', 'username'),
-            joinedload(Operacion.sucursal).load_only('nombre')
-        )
-        if request.args.get('sucursal_id'):
-            query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
-    else:
-        query = Operacion.query.options(
-            joinedload(Operacion.usuario).load_only('id', 'username'),
-            joinedload(Operacion.sucursal).load_only('nombre')
-        ).filter_by(sucursal_id=current_user.sucursal_id)
-    
-    # Obtener fecha actual para comparación
-    hoy = datetime.now(peru_tz).date()
-    
-    # Aplicar filtros optimizados
-    if fecha:
-        fecha_objeto = datetime.strptime(fecha, '%Y-%m-%d').date()
-        if not current_user.es_admin and fecha_objeto != hoy:
-            flash('Solo los administradores pueden consultar operaciones de otros días', 'warning')
-            fecha = None
+        per_page = 30  # Reducido de 50 a 30 para mayor velocidad
         
+        # Obtener parámetros de filtro
+        fecha = request.args.get('fecha')
+        medio = request.args.get('medio')
+        hora_inicio = request.args.get('hora_inicio')
+        hora_fin = request.args.get('hora_fin')
+        
+        # Query base optimizada con eager loading
+        if current_user.es_admin:
+            query = Operacion.query.options(
+                joinedload(Operacion.usuario).load_only('id', 'username'),
+                joinedload(Operacion.sucursal).load_only('nombre')
+            )
+            if request.args.get('sucursal_id'):
+                query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
+        else:
+            query = Operacion.query.options(
+                joinedload(Operacion.usuario).load_only('id', 'username'),
+                joinedload(Operacion.sucursal).load_only('nombre')
+            ).filter_by(sucursal_id=current_user.sucursal_id)
+        
+        # Obtener fecha actual para comparación
+        hoy = datetime.now(peru_tz).date()
+        
+        # Aplicar filtros optimizados
         if fecha:
-            # Usar índice de fecha directamente
-            inicio_dia = datetime.combine(fecha_objeto, datetime.min.time())
-            fin_dia = datetime.combine(fecha_objeto, datetime.max.time())
+            fecha_objeto = datetime.strptime(fecha, '%Y-%m-%d').date()
+            if not current_user.es_admin and fecha_objeto != hoy:
+                flash('Solo los administradores pueden consultar operaciones de otros días', 'warning')
+                fecha = None
+            
+            if fecha:
+                # Usar índice de fecha directamente
+                inicio_dia = datetime.combine(fecha_objeto, datetime.min.time())
+                fin_dia = datetime.combine(fecha_objeto, datetime.max.time())
+                inicio_dia = peru_tz.localize(inicio_dia)
+                fin_dia = peru_tz.localize(fin_dia)
+                query = query.filter(Operacion.hora >= inicio_dia, Operacion.hora <= fin_dia)
+        
+        if not fecha or not current_user.es_admin:
+            inicio_dia = datetime.combine(hoy, datetime.min.time())
+            fin_dia = datetime.combine(hoy, datetime.max.time())
             inicio_dia = peru_tz.localize(inicio_dia)
             fin_dia = peru_tz.localize(fin_dia)
             query = query.filter(Operacion.hora >= inicio_dia, Operacion.hora <= fin_dia)
-    
-    if not fecha or not current_user.es_admin:
-        inicio_dia = datetime.combine(hoy, datetime.min.time())
-        fin_dia = datetime.combine(hoy, datetime.max.time())
-        inicio_dia = peru_tz.localize(inicio_dia)
-        fin_dia = peru_tz.localize(fin_dia)
-        query = query.filter(Operacion.hora >= inicio_dia, Operacion.hora <= fin_dia)
-    
-    if medio:
-        query = query.filter(Operacion.medio == medio)
-    
-    if hora_inicio:
-        query = query.filter(Operacion.hora >= hora_inicio)
-    
-    if hora_fin:
-        query = query.filter(Operacion.hora <= hora_fin)
-    
-    # OPTIMIZACIÓN ULTRA FLUIDA: Paginación con eager loading
-    operaciones_paginated = query.order_by(Operacion.hora.desc()).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
-    
-    # Detectar si hay filtros aplicados
-    filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
-    
-    # OPTIMIZACIÓN ULTRA FLUIDA: Cargar sucursales solo si es admin
-    sucursales = []
-    if current_user.es_admin:
-        sucursales = get_sucursales_activas_cache()
-    
-    # OPTIMIZACIÓN ULTRA FLUIDA: Cargar medios de pago con caché
-    medios_pago = get_medios_pago_cache()
-    
-    return render_template('operaciones.html',
-                         operaciones=operaciones_paginated.items,
-                         pagination=operaciones_paginated,
-                         fecha_actual=fecha or datetime.now(peru_tz).strftime('%Y-%m-%d'),
-                         fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
-                         filtros_aplicados=filtros_aplicados,
-                         sucursales=sucursales,
-                         medios_pago=medios_pago)
+        
+        if medio:
+            query = query.filter(Operacion.medio == medio)
+        
+        if hora_inicio:
+            query = query.filter(Operacion.hora >= hora_inicio)
+        
+        if hora_fin:
+            query = query.filter(Operacion.hora <= hora_fin)
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Paginación con eager loading
+        operaciones_paginated = query.order_by(Operacion.hora.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        
+        # Detectar si hay filtros aplicados
+        filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Cargar sucursales solo si es admin
+        sucursales = []
+        if current_user.es_admin:
+            sucursales = get_sucursales_activas_cache()
+        
+        # OPTIMIZACIÓN ULTRA FLUIDA: Cargar medios de pago con caché
+        medios_pago = get_medios_pago_cache()
+        
+        return render_template('operaciones.html',
+                             operaciones=operaciones_paginated.items,
+                             pagination=operaciones_paginated,
+                             fecha_actual=fecha or datetime.now(peru_tz).strftime('%Y-%m-%d'),
+                             fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
+                             filtros_aplicados=filtros_aplicados,
+                             sucursales=sucursales,
+                             medios_pago=medios_pago)
     except Exception as e:
         print(f"❌ Error en operaciones: {e}")
         db.session.rollback()
