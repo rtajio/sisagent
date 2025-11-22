@@ -500,6 +500,12 @@
             <div class="user-badge">
                 {{ current_user.nombre_completo }}
             </div>
+            {% if not current_user.es_admin %}
+            <div class="commission-badge" id="commission-badge" style="margin-top: 0.75rem; background: linear-gradient(45deg, #4caf50, #388e3c); color: var(--white); padding: 0.5rem 1rem; border-radius: 25px; font-weight: 600; box-shadow: 0 4px 8px rgba(0,0,0,0.2); display: inline-block; font-size: 0.95rem;">
+                <i class="fas fa-dollar-sign me-1"></i>
+                Comisión Turno: <span id="commission-amount">S/ 0.00</span>
+            </div>
+            {% endif %}
         </div>
                     
                     <ul class="nav flex-column">
@@ -1180,6 +1186,49 @@
         
         console.log('✅ Sistema de notificaciones inicializado');
     });
+    
+    // Sistema de actualización de comisión del turno (para usuarios no admin)
+    {% if not current_user.es_admin %}
+    let comisionCache = null;
+    function actualizarComisionTurno() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        fetch('/api/comisiones?tipo=diaria', { signal: controller.signal })
+            .then(response => {
+                clearTimeout(timeoutId);
+                if (!response.ok) throw new Error('Error del servidor');
+                return response.json();
+            })
+            .then(data => {
+                // Solo actualizar si cambió
+                if (comisionCache !== data.total_comision) {
+                    comisionCache = data.total_comision;
+                    
+                    // Actualizar el valor en el sidebar
+                    const comisionElement = document.getElementById('commission-amount');
+                    if (comisionElement) {
+                        comisionElement.textContent = 'S/ ' + data.total_comision.toFixed(2);
+                    }
+                }
+            })
+            .catch(error => {
+                clearTimeout(timeoutId);
+                if (error.name !== 'AbortError') {
+                    console.error('Error al actualizar comisión:', error);
+                }
+            });
+    }
+    
+    // Inicializar actualización de comisión cuando se carga la página
+    document.addEventListener('DOMContentLoaded', function() {
+        // Cargar comisión inicial
+        actualizarComisionTurno();
+        
+        // Actualizar comisión cada 30 segundos
+        setInterval(actualizarComisionTurno, 30000);
+    });
+    {% endif %}
     </script>
     
     {% block scripts %}{% endblock %}

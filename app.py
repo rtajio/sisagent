@@ -862,6 +862,64 @@ def api_reportes_operaciones():
             'total_comision': 0.0
         }), 500
 
+# API para obtener comisiones del turno (para usuarios no admin)
+@app.route('/api/comisiones')
+@login_required
+def api_comisiones():
+    """API para obtener la comisión diaria del usuario"""
+    try:
+        if current_user.es_admin:
+            # Admin puede ver todas las sucursales
+            sucursal_id = request.args.get('sucursal_id')
+            if sucursal_id:
+                sucursal_id = int(sucursal_id)
+            else:
+                return jsonify({'error': 'sucursal_id requerido para admin'}), 400
+        else:
+            # Usuario normal solo ve su sucursal
+            sucursal_id = current_user.sucursal_id
+        
+        tipo = request.args.get('tipo', 'diaria')  # 'diaria' o 'mensual'
+        
+        if tipo == 'diaria':
+            hoy = get_peru_time().date()
+            # Calcular comisión diaria en tiempo real
+            total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
+                Operacion.sucursal_id == sucursal_id,
+                db.func.date(Operacion.hora) == hoy
+            ).scalar() or 0.0
+            
+            return jsonify({
+                'fecha': hoy.isoformat(),
+                'total_comision': float(total_comision)
+            })
+        
+        elif tipo == 'mensual' and current_user.es_admin:
+            ahora = get_peru_time()
+            año = request.args.get('año', ahora.year, type=int)
+            mes = request.args.get('mes', ahora.month, type=int)
+            
+            # Calcular comisión mensual en tiempo real
+            total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
+                Operacion.sucursal_id == sucursal_id,
+                db.func.extract('year', Operacion.hora) == año,
+                db.func.extract('month', Operacion.hora) == mes
+            ).scalar() or 0.0
+            
+            return jsonify({
+                'año': año,
+                'mes': mes,
+                'total_comision': float(total_comision)
+            })
+        
+        else:
+            return jsonify({'error': 'Acceso denegado'}), 403
+            
+    except Exception as e:
+        if app.debug:
+            print(f"❌ Error en api_comisiones: {e}")
+        return jsonify({'error': 'Error al obtener comisiones'}), 500
+
 # OPTIMIZACIÓN ULTRA FLUIDA: Manejadores de error globales
 @app.errorhandler(404)
 def handle_404(e):
