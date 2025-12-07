@@ -6,6 +6,7 @@ VERSIÓN COMPATIBLE ULTRA OPTIMIZADA
 
 import os
 import sys
+import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
@@ -970,6 +971,136 @@ def ping():
     # Endpoint simple que siempre responde OK para que Railway pase el healthcheck
     # No depende de base de datos ni ninguna otra funcionalidad
     return jsonify({'status': 'ok'}), 200
+
+@app.route('/admin/backup', methods=['GET'])
+@login_required
+def generar_backup():
+    """Generar backup de la base de datos (solo admin)"""
+    if not current_user.es_admin:
+        flash('Acceso denegado. Solo administradores pueden generar backups.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    try:
+        from io import BytesIO
+        import zipfile
+        from datetime import datetime
+        
+        # Verificar si estamos en Railway (PostgreSQL) o local (SQLite)
+        database_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        
+        if 'postgresql' in database_url.lower() or 'postgres' in database_url.lower():
+            # Backup de PostgreSQL usando pg_dump
+            import subprocess
+            import os
+            
+            # Extraer información de conexión de DATABASE_URL
+            # Formato: postgresql://user:password@host:port/database
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(database_url)
+                
+                # Crear comando pg_dump
+                pg_dump_cmd = [
+                    'pg_dump',
+                    '-h', parsed.hostname or 'localhost',
+                    '-p', str(parsed.port or 5432),
+                    '-U', parsed.username or 'postgres',
+                    '-d', parsed.path[1:] if parsed.path else 'postgres',
+                    '-F', 'c',  # Formato custom (binario comprimido)
+                    '--no-owner',
+                    '--no-acl'
+                ]
+                
+                # Configurar PGPASSWORD si está disponible
+                env = os.environ.copy()
+                if parsed.password:
+                    env['PGPASSWORD'] = parsed.password
+                
+                # Ejecutar pg_dump
+                result = subprocess.run(
+                    pg_dump_cmd,
+                    capture_output=True,
+                    env=env,
+                    timeout=300  # 5 minutos timeout
+                )
+                
+                if result.returncode != 0:
+                    # Si pg_dump no está disponible, hacer dump con SQLAlchemy
+                    raise Exception("pg_dump no disponible, usando método alternativo")
+                
+                backup_data = result.stdout
+                filename = f"backup_postgresql_{datetime.now().strftime('%Y%m%d_%H%M%S')}.dump"
+                
+            except Exception as e:
+                # Método alternativo: exportar datos con SQLAlchemy
+                flash(f'pg_dump no disponible, usando método alternativo: {str(e)}', 'warning')
+                backup_data = None
+                filename = None
+        else:
+            # Backup de SQLite
+            db_file = database_url.replace('sqlite:///', '')
+            if os.path.exists(db_file):
+                with open(db_file, 'rb') as f:
+                    backup_data = f.read()
+                filename = f"backup_sqlite_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            else:
+                flash('Archivo de base de datos no encontrado', 'error')
+                return redirect(url_for('dashboard'))
+        
+        # Si no se pudo generar backup con pg_dump, usar método SQLAlchemy
+        if backup_data is None:
+            # Exportar todas las tablas a JSON usando SQLAlchemy
+            from sqlalchemy import inspect
+            
+            backup_info = {
+                'fecha': datetime.now().isoformat(),
+                'sistema': 'SISAGENT',
+                'tablas': {}
+            }
+            
+            # Exportar datos de cada tabla
+            inspector = inspect(db.engine)
+            for table_name in inspector.get_table_names():
+                table = db.metadata.tables[table_name]
+                rows = db.session.execute(db.select(table)).fetchall()
+                
+                backup_info['tablas'][table_name] = [
+                    {col: str(getattr(row, col)) for col in row.keys()}
+                    for row in rows
+                ]
+            
+            backup_data = json.dumps(backup_info, indent=2, ensure_ascii=False).encode('utf-8')
+            filename = f"backup_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        # Crear ZIP con el backup
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.writestr(filename, backup_data)
+            # Agregar información del backup
+            info = {
+                'fecha': datetime.now().isoformat(),
+                'sistema': 'SISAGENT',
+                'usuario': current_user.username,
+                'tipo_db': 'PostgreSQL' if 'postgresql' in database_url.lower() else 'SQLite'
+            }
+            zipf.writestr('backup_info.json', json.dumps(info, indent=2))
+        
+        zip_buffer.seek(0)
+        zip_filename = f"sisagent_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        
+        flash('Backup generado exitosamente', 'success')
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=zip_filename
+        )
+        
+    except Exception as e:
+        flash(f'Error al generar backup: {str(e)}', 'error')
+        import traceback
+        traceback.print_exc()
+        return redirect(url_for('dashboard'))
 
 @app.route('/health')
 def health():
