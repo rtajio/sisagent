@@ -88,19 +88,27 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # OPTIMIZACIÓN ULTRA FLUIDA: Configuración SQLAlchemy optimizada para Railway
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,
-    'pool_recycle': 300,
-    'pool_size': 5,  # Reducido para Railway
-    'max_overflow': 10,  # Reducido para Railway
-    'pool_timeout': 20,  # Reducido para Railway
-    'echo': False,
-    'echo_pool': False,
-    'connect_args': {
-        'connect_timeout': 5,  # Timeout más corto
-        'options': '-c statement_timeout=30000'  # Timeout de 30 segundos para queries
+# Solo aplicar opciones de PostgreSQL si estamos usando PostgreSQL
+if os.environ.get('DATABASE_URL') and 'postgresql' in os.environ.get('DATABASE_URL', '').lower():
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+        'pool_size': 5,  # Reducido para Railway
+        'max_overflow': 10,  # Reducido para Railway
+        'pool_timeout': 20,  # Reducido para Railway
+        'echo': False,
+        'echo_pool': False,
+        'connect_args': {
+            'connect_timeout': 5,  # Timeout más corto
+            'options': '-c statement_timeout=30000'  # Timeout de 30 segundos para queries
+        }
     }
-}
+else:
+    # Para SQLite, usar configuración mínima
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'echo': False
+    }
 
 # OPTIMIZACIÓN ULTRA FLUIDA: Configuración Flask optimizada
 app.config['TEMPLATES_AUTO_RELOAD'] = False
