@@ -320,19 +320,40 @@ def login():
                 flash('Usuario y contraseña son requeridos', 'error')
                 return render_template('login.html')
             
+            # DEBUG: Información de login
+            print(f"🔐 Intento de login: usuario='{username}'")
+            
             user = Usuario.query.filter_by(username=username).first()
             
-            if user and check_password_hash(user.password_hash, password):
+            if not user:
+                print(f"❌ Usuario '{username}' no encontrado")
+                flash('Usuario o contraseña incorrectos', 'error')
+                return render_template('login.html')
+            
+            # Verificar contraseña
+            if not user.password_hash:
+                print(f"❌ Usuario '{username}' no tiene password_hash")
+                flash('Error: Usuario sin contraseña configurada', 'error')
+                return render_template('login.html')
+            
+            password_ok = check_password_hash(user.password_hash, password)
+            print(f"🔐 Verificación de contraseña: {'✅ Correcta' if password_ok else '❌ Incorrecta'}")
+            
+            if password_ok:
                 login_user(user)
                 # Limpiar caché al hacer login
                 clear_cache()
+                print(f"✅ Login exitoso para usuario '{username}'")
                 return redirect(url_for('dashboard'))
             else:
+                print(f"❌ Contraseña incorrecta para usuario '{username}'")
                 flash('Usuario o contraseña incorrectos', 'error')
         
         return render_template('login.html')
     except Exception as e:
         print(f"❌ Error en login: {e}")
+        import traceback
+        traceback.print_exc()
         db.session.rollback()
         flash(f'Error al iniciar sesión: {str(e)}', 'error')
         return render_template('login.html')
