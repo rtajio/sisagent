@@ -229,16 +229,24 @@ def get_dashboard_stats_cache(user_id, is_admin):
     ahora = get_peru_time()
     hoy = ahora.date()
     
+    # Calcular rango de tiempo para el día en hora de Perú (00:00:00 a 23:59:59)
+    inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+    fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+    # Ajustar fin_dia para que sea 23:59:59.999999
+    fin_dia = fin_dia.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
     if is_admin:
-        # Estadísticas para admin
+        # Estadísticas para admin - usar rango de tiempo en hora de Perú
         operaciones_hoy = db.session.query(db.func.count(Operacion.id)).filter(
-            db.func.date(Operacion.hora) == hoy
+            Operacion.hora >= inicio_dia,
+            Operacion.hora <= fin_dia
         ).scalar() or 0
         
         total_operaciones = db.session.query(db.func.count(Operacion.id)).scalar() or 0
         
         comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
-            db.func.date(Operacion.hora) == hoy
+            Operacion.hora >= inicio_dia,
+            Operacion.hora <= fin_dia
         ).scalar() or 0
         
         total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).scalar() or 0
@@ -248,10 +256,11 @@ def get_dashboard_stats_cache(user_id, is_admin):
         usuarios_total = db.session.query(db.func.count(Usuario.id)).scalar() or 0
         
     else:
-        # Estadísticas para usuario normal
+        # Estadísticas para usuario normal - usar rango de tiempo en hora de Perú
         operaciones_hoy = db.session.query(db.func.count(Operacion.id)).filter(
             Operacion.usuario_id == user_id,
-            db.func.date(Operacion.hora) == hoy
+            Operacion.hora >= inicio_dia,
+            Operacion.hora <= fin_dia
         ).scalar() or 0
         
         total_operaciones = db.session.query(db.func.count(Operacion.id)).filter(
@@ -260,7 +269,8 @@ def get_dashboard_stats_cache(user_id, is_admin):
         
         comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
             Operacion.usuario_id == user_id,
-            db.func.date(Operacion.hora) == hoy
+            Operacion.hora >= inicio_dia,
+            Operacion.hora <= fin_dia
         ).scalar() or 0
         
         total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
@@ -333,17 +343,23 @@ def dashboard():
 
         if current_user.es_admin:
             # Calcular comisiones por sucursal (día y mes) para admin
-            hoy = get_peru_time().date()
             ahora = get_peru_time()
+            hoy = ahora.date()
             año_actual = ahora.year
             mes_actual = ahora.month
+            
+            # Calcular rango de tiempo para hoy en hora de Perú (00:00:00 a 23:59:59)
+            inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+            fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+            fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
 
             comisiones_hoy_query = db.session.query(
                 Operacion.sucursal_id,
                 Sucursal.nombre,
                 db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
             ).join(Sucursal, Operacion.sucursal_id == Sucursal.id).filter(
-                db.func.date(Operacion.hora) == hoy
+                Operacion.hora >= inicio_hoy,
+                Operacion.hora <= fin_hoy
             ).group_by(Operacion.sucursal_id, Sucursal.nombre).all()
 
             comisiones_mes_query = db.session.query(
@@ -364,12 +380,19 @@ def dashboard():
             return render_template('admin_dashboard.html', **base_ctx)
         else:
             # Para usuarios normales: agregar variables que el template espera
-            hoy = get_peru_time().date()
+            ahora = get_peru_time()
+            hoy = ahora.date()
+            # Calcular rango de tiempo para el día en hora de Perú (00:00:00 a 23:59:59)
+            inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+            fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+            fin_dia = fin_dia.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
             base_ctx['total_comision_hoy'] = stats.get('comision_hoy', 0.0)
-            # Obtener operaciones del día para el usuario
+            # Obtener operaciones del día para el usuario usando rango de tiempo
             operaciones_hoy_list = Operacion.query.filter(
                 Operacion.usuario_id == current_user.id,
-                db.func.date(Operacion.hora) == hoy
+                Operacion.hora >= inicio_dia,
+                Operacion.hora <= fin_dia
             ).order_by(Operacion.hora.desc()).limit(10).all()
             base_ctx['operaciones_hoy'] = operaciones_hoy_list
             return render_template('user_dashboard.html', **base_ctx)
@@ -400,8 +423,14 @@ def operaciones():
     else:
         query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
     
-    # Obtener fecha actual para comparación
-    hoy = datetime.now(peru_tz).date()
+    # Obtener fecha actual para comparación en hora de Perú
+    ahora = get_peru_time()
+    hoy = ahora.date()
+    
+    # Calcular rango de tiempo para hoy en hora de Perú (00:00:00 a 23:59:59)
+    inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+    fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+    fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
     
     # Aplicar filtros
     if fecha:
@@ -411,10 +440,21 @@ def operaciones():
             fecha = None
         
         if fecha:
-            query = query.filter(db.func.date(Operacion.hora) == fecha)
+            # Usar rango de tiempo para la fecha específica en hora de Perú
+            inicio_fecha = datetime.combine(fecha_objeto, datetime.min.time()).replace(tzinfo=peru_tz)
+            fin_fecha = datetime.combine(fecha_objeto, datetime.max.time()).replace(tzinfo=peru_tz)
+            fin_fecha = fin_fecha.replace(hour=23, minute=59, second=59, microsecond=999999)
+            query = query.filter(
+                Operacion.hora >= inicio_fecha,
+                Operacion.hora <= fin_fecha
+            )
     
     if not fecha or not current_user.es_admin:
-        query = query.filter(db.func.date(Operacion.hora) == hoy)
+        # Usar rango de tiempo para hoy en hora de Perú
+        query = query.filter(
+            Operacion.hora >= inicio_hoy,
+            Operacion.hora <= fin_hoy
+        )
     
     if medio:
         query = query.filter(Operacion.medio == medio)
