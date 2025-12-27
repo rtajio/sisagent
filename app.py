@@ -320,16 +320,29 @@ def get_dashboard_stats_cache(user_id, is_admin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    # OPTIMIZACIÓN ULTRA FLUIDA: Eager load sucursal al cargar usuario con manejo de errores
+    # OPTIMIZACIÓN ULTRA FLUIDA: Cargar usuario con manejo de errores
     try:
-        return Usuario.query.options(joinedload(Usuario.sucursal)).get(int(user_id))
-    except Exception as e:
-        print(f"⚠️ Error al cargar usuario {user_id}: {e}")
+        # Intentar cargar con eager load de sucursal
+        usuario = Usuario.query.options(joinedload(Usuario.sucursal)).get(int(user_id))
+        if usuario:
+            return usuario
+    except (AttributeError, Exception) as e:
+        # Si hay error, intentar cargar sin eager load
+        print(f"⚠️ Error al cargar usuario {user_id} con eager load: {e}")
         try:
-            db.session.rollback()  # Limpiar transacción abortada
+            db.session.rollback()
         except:
             pass
-        return None
+        try:
+            # Fallback: cargar sin eager load
+            return Usuario.query.get(int(user_id))
+        except Exception as e2:
+            print(f"⚠️ Error al cargar usuario {user_id} (fallback): {e2}")
+            try:
+                db.session.rollback()
+            except:
+                pass
+            return None
 
 # OPTIMIZACIÓN ULTRA: Función para limpiar caché
 def clear_cache():
