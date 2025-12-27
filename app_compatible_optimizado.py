@@ -564,6 +564,16 @@ def admin_sucursales():
     
     return render_template('admin_sucursales.html', sucursales=sucursales)
 
+@app.route('/reportes')
+@login_required
+def reportes():
+    """Placeholder de reportes para evitar errores de rutas."""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    # Datos mínimos para el template
+    return render_template('reportes.html', sucursales=[], medios_pago=[])
+
 # Healthcheck optimizado
 @app.route('/ping')
 def ping():
