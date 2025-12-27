@@ -298,6 +298,34 @@ def clear_cache():
     """Limpiar todo el caché"""
     cache.clear()
 
+def asegurar_admin_existe():
+    """Asegurar que el usuario admin exista con la contraseña 'vivalavida'"""
+    try:
+        admin = Usuario.query.filter_by(username='admin').first()
+        password_hash = generate_password_hash('vivalavida')
+        
+        if not admin:
+            # Crear admin si no existe
+            admin = Usuario(
+                username='admin',
+                password_hash=password_hash,
+                es_admin=True,
+                es_admin_sucursal=False
+            )
+            db.session.add(admin)
+            db.session.commit()
+            print("✅ Usuario 'admin' creado con contraseña 'vivalavida'")
+        else:
+            # Actualizar contraseña y asegurar que es admin
+            admin.password_hash = password_hash
+            admin.es_admin = True
+            admin.es_admin_sucursal = False
+            db.session.commit()
+            print("✅ Usuario 'admin' actualizado con contraseña 'vivalavida'")
+    except Exception as e:
+        print(f"⚠️  Error al asegurar admin: {e}")
+        db.session.rollback()
+
 # Rutas optimizadas
 @app.route('/')
 def index():
@@ -305,6 +333,12 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Asegurar que el admin exista antes de procesar el login
+    try:
+        asegurar_admin_existe()
+    except:
+        pass
+    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -879,17 +913,8 @@ def init_db():
             # Solo crear tablas si no existen
             db.create_all()
             
-            # Crear usuario admin si no existe
-            admin = Usuario.query.filter_by(username='admin').first()
-            if not admin:
-                admin = Usuario(
-                    username='admin',
-                    password_hash=generate_password_hash('admin123'),
-                    es_admin=True
-                )
-                db.session.add(admin)
-                db.session.commit()
-                print("✅ Usuario admin creado")
+            # Asegurar que el admin exista con la contraseña correcta
+            asegurar_admin_existe()
             
             # Crear sucursal principal si no existe
             sucursal_principal = Sucursal.query.filter_by(nombre='Principal').first()
