@@ -910,12 +910,113 @@ def eliminar_sucursal(sucursal_id):
 @app.route('/reportes')
 @login_required
 def reportes():
-    """Placeholder de reportes para evitar errores de rutas."""
+    """Página de reportes para administradores."""
     if not current_user.es_admin:
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
-    # Datos mínimos para el template
-    return render_template('reportes.html', sucursales=[], medios_pago=[])
+    
+    # Obtener sucursales y medios de pago
+    sucursales = get_sucursales_activas_cache()
+    medios_pago = get_medios_pago_cache()
+    
+    return render_template('reportes.html', sucursales=sucursales, medios_pago=medios_pago)
+
+@app.route('/api/reportes/operaciones')
+@login_required
+def api_reportes_operaciones():
+    """API para generar reportes de operaciones con filtros."""
+    try:
+        if not current_user.es_admin:
+            return jsonify({'error': 'Acceso denegado'}), 403
+        
+        # Obtener parámetros de filtro
+        fecha_inicio = request.args.get('fecha_inicio')
+        fecha_fin = request.args.get('fecha_fin')
+        sucursal_id = request.args.get('sucursal_id')
+        medio = request.args.get('medio')
+        
+        query = Operacion.query
+        
+        # Aplicar filtros de fecha usando rangos de tiempo en hora de Perú
+        if fecha_inicio:
+            fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            inicio_fecha = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
+            query = query.filter(Operacion.hora >= inicio_fecha)
+        
+        if fecha_fin:
+            fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+            fin_fecha = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
+            fin_fecha = fin_fecha.replace(hour=23, minute=59, second=59, microsecond=999999)
+            query = query.filter(Operacion.hora <= fin_fecha)
+        
+        if sucursal_id and sucursal_id.strip():
+            try:
+                sucursal_id_int = int(sucursal_id)
+                query = query.filter(Operacion.sucursal_id == sucursal_id_int)
+            except ValueError:
+                pass  # Ignorar si no se puede convertir
+        
+        if medio:
+            query = query.filter(Operacion.medio == medio)
+        
+        # Cache de medios de pago
+        medios_cache = {mp.nombre_abreviado: mp.nombre_completo for mp in MedioPago.query.filter_by(activo=True).all()}
+        
+        # Obtener operaciones con límite para evitar sobrecarga
+        # Usar joinedload para cargar relaciones de forma eficiente
+        from sqlalchemy.orm import joinedload
+        operaciones = query.options(
+            joinedload(Operacion.usuario).load_only(Usuario.id, Usuario.username, Usuario.nombre_completo),
+            joinedload(Operacion.sucursal).load_only(Sucursal.id, Sucursal.nombre)
+        ).order_by(Operacion.hora.desc()).limit(1000).all()
+        
+        # Procesar datos
+        datos = []
+        total_monto = 0.0
+        total_comision = 0.0
+        
+        for op in operaciones:
+            monto = float(op.monto)
+            comision = float(op.comision)
+            total_monto += monto
+            total_comision += comision
+            
+            # Obtener datos de usuario y sucursal de forma segura
+            usuario_nombre = 'N/A'
+            if hasattr(op, 'usuario') and op.usuario:
+                usuario_nombre = op.usuario.nombre_completo if op.usuario.nombre_completo else op.usuario.username
+            
+            sucursal_nombre = 'Sin sucursal'
+            if hasattr(op, 'sucursal') and op.sucursal:
+                sucursal_nombre = op.sucursal.nombre
+            
+            datos.append({
+                'id': op.id,
+                'fecha': format_peru_date(op.hora),
+                'hora': format_peru_time(op.hora),
+                'monto': monto,
+                'comision': comision,
+                'medio': medios_cache.get(op.medio, op.medio),
+                'usuario': usuario_nombre,
+                'sucursal': sucursal_nombre
+            })
+        
+        return jsonify({
+            'operaciones': datos,
+            'total_operaciones': len(operaciones),
+            'total_monto': total_monto,
+            'total_comision': total_comision
+        })
+    except Exception as e:
+        import traceback
+        error_msg = f"Error al generar reporte: {type(e).__name__}: {str(e)}"
+        print(error_msg)
+        traceback.print_exc()
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return jsonify({'error': str(e)}), 500
 
 # Healthcheck optimizado
 @app.route('/ping')
