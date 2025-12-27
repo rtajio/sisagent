@@ -92,60 +92,6 @@
     </div>
 </div>
 
-<!-- Comisiones por usuario -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
-                    <i class="fas fa-user-chart me-2"></i>
-                    Comisiones por Usuario - Hoy
-                </h6>
-            </div>
-            <div class="card-body">
-                {% if comisiones_usuarios_hoy %}
-                <div class="table-responsive">
-                    <table class="table table-bordered table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Usuario</th>
-                                <th class="text-end">Comisión Hoy</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in comisiones_usuarios_hoy %}
-                            <tr>
-                                <td>
-                                    <i class="fas fa-user me-2"></i>
-                                    {{ item.nombre }}
-                                </td>
-                                <td class="text-end font-weight-bold text-success">
-                                    S/ {{ "%.2f"|format(item.comision) }}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                        <tfoot class="table-light">
-                            <tr>
-                                <th class="text-end">Total:</th>
-                                <th class="text-end text-primary">
-                                    S/ {{ "%.2f"|format(comision_hoy) }}
-                                </th>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-                {% else %}
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    No hay comisiones registradas hoy para los usuarios de esta sucursal.
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Lista de usuarios de la sucursal -->
 <div class="row">
     <div class="col-12">
