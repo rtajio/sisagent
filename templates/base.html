@@ -1181,8 +1181,8 @@
         console.log('✅ Sistema de notificaciones inicializado');
     });
     
-    // Sistema de actualización de comisión del turno (para usuarios no admin)
-    {% if not current_user.es_admin %}
+    // Sistema de actualización de comisión del turno (solo para usuarios autenticados no admin)
+    {% if current_user.is_authenticated and current_user.is_authenticated and (current_user.es_admin is defined) and (not current_user.es_admin) %}
     let comisionCache = null;
     function actualizarComisionTurno() {
         const controller = new AbortController();
