@@ -304,6 +304,23 @@ def clear_cache():
     """Limpiar todo el caché"""
     cache.clear()
 
+# SOLUCIÓN DIRECTA: Asegurar admin en cada request (solo una vez)
+_admin_verificado = False
+_admin_lock = threading.Lock()
+
+@app.before_request
+def asegurar_admin_antes_request():
+    """SOLUCIÓN DIRECTA: Asegurar admin antes de cada request"""
+    global _admin_verificado
+    if not _admin_verificado:
+        with _admin_lock:
+            if not _admin_verificado:
+                try:
+                    asegurar_admin_existe()
+                    _admin_verificado = True
+                except:
+                    pass  # No bloquear si hay error
+
 # Rutas optimizadas
 @app.route('/')
 def index():
