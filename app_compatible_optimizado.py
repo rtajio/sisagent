@@ -363,6 +363,15 @@ def dashboard():
 
             return render_template('admin_dashboard.html', **base_ctx)
         else:
+            # Para usuarios normales: agregar variables que el template espera
+            hoy = get_peru_time().date()
+            base_ctx['total_comision_hoy'] = stats.get('comision_hoy', 0.0)
+            # Obtener operaciones del día para el usuario
+            operaciones_hoy_list = Operacion.query.filter(
+                Operacion.usuario_id == current_user.id,
+                db.func.date(Operacion.hora) == hoy
+            ).order_by(Operacion.hora.desc()).limit(10).all()
+            base_ctx['operaciones_hoy'] = operaciones_hoy_list
             return render_template('user_dashboard.html', **base_ctx)
     except Exception as e:
         import traceback
