@@ -58,6 +58,21 @@
                     </div>
                     
                     <div class="mb-3">
+                        <label for="nombre_completo" class="form-label">
+                            <i class="fas fa-id-card me-1"></i>
+                            Nombre Completo
+                        </label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="nombre_completo" 
+                               name="nombre_completo" 
+                               value="{{ usuario.nombre_completo|default('') }}"
+                               required
+                               placeholder="Juan Pérez García">
+                    </div>
+                    
+                    {% if current_user.es_admin %}
+                    <div class="mb-3">
                         <label for="sucursal_id" class="form-label">
                             <i class="fas fa-building me-1"></i>
                             Sucursal Asignada
@@ -72,6 +87,10 @@
                         </select>
                         <div class="form-text">Asigne una sucursal para que el usuario pueda registrar operaciones</div>
                     </div>
+                    {% else %}
+                    {# Admin de sucursal: campo oculto con su sucursal #}
+                    <input type="hidden" id="sucursal_id" name="sucursal_id" value="{{ current_user.sucursal_id if current_user.sucursal_id else '' }}">
+                    {% endif %}
                     
                     {% if current_user.es_admin %}
                     <div class="row">
