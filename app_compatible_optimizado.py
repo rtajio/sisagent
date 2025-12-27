@@ -810,6 +810,12 @@ def init_db():
             print(f"⚠️ Error en inicialización (continuando): {e}")
             # Continuar aunque haya errores menores
 
+# Asegurar inicialización cuando se importa (Gunicorn/Railway)
+try:
+    init_db()
+except Exception as e:
+    print(f"⚠️ Error al inicializar en import: {e}")
+
 if __name__ == '__main__':
     init_db()
     print("🎉 SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para producción!")
