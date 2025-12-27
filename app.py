@@ -178,7 +178,7 @@ class Sucursal(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     direccion = db.Column(db.String(200))
     activa = db.Column(db.Boolean, default=True)
-    operaciones = db.relationship('Operacion', backref='sucursal', lazy='dynamic')
+    operaciones = db.relationship('Operacion', backref='sucursal', lazy='select')  # Cambiado de 'dynamic' a 'select' para permitir eager loading
 
 class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
@@ -1048,6 +1048,39 @@ def editar_operacion(operacion_id):
     # NUEVA LÓGICA: No se pasan sucursales al template, todos usan su sucursal asignada
     return render_template('editar_operacion.html', operacion=operacion)
 
+@app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_operacion(operacion_id):
+    """Eliminar operación - Solo se puede eliminar operaciones de la misma sucursal"""
+    try:
+        operacion = Operacion.query.get_or_404(operacion_id)
+        
+        # Verificar permisos: solo se puede eliminar operaciones de la misma sucursal
+        if operacion.sucursal_id != current_user.sucursal_id:
+            flash('No tienes permisos para eliminar operaciones de otras sucursales', 'error')
+            return redirect(url_for('operaciones'))
+        
+        # Admin de sucursal puede eliminar todas las operaciones de su sucursal
+        # Usuario normal solo puede eliminar sus propias operaciones
+        if not current_user.es_admin and not current_user.es_admin_de_sucursal() and operacion.usuario_id != current_user.id:
+            flash('No tienes permisos para eliminar esta operación', 'error')
+            return redirect(url_for('operaciones'))
+        
+        # Eliminar operación
+        db.session.delete(operacion)
+        db.session.commit()
+        
+        # Limpiar caché después de cambios
+        clear_cache()
+        
+        flash('Operación eliminada exitosamente', 'success')
+        return redirect(url_for('operaciones'))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar operación: {str(e)}', 'error')
+        return redirect(url_for('operaciones'))
+
 # Rutas de administración optimizadas
 @app.route('/admin/usuarios')
 @login_required
@@ -1312,22 +1345,26 @@ def admin_sucursales():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    # OPTIMIZACIÓN ULTRA: Cargar sucursales con eager loading de relaciones para evitar lazy load errors
-    sucursales = Sucursal.query.options(
-        joinedload(Sucursal.usuarios).load_only(Usuario.id),
-        joinedload(Sucursal.operaciones).load_only(Operacion.id)
-    ).filter_by(activa=True).all()
-    
-    # Contar usuarios y operaciones de forma optimizada
-    for sucursal in sucursales:
-        # Los usuarios y operaciones ya están cargados con eager loading
-        # Usar len() en lugar de .count() para evitar queries adicionales
-        if not hasattr(sucursal, '_usuarios_count'):
-            sucursal._usuarios_count = len([u for u in sucursal.usuarios])
-        if not hasattr(sucursal, '_operaciones_count'):
-            sucursal._operaciones_count = len([o for o in sucursal.operaciones])
-    
-    return render_template('admin_sucursales.html', sucursales=sucursales)
+    try:
+        # OPTIMIZACIÓN ULTRA: Cargar sucursales y pre-calcular conteos usando consultas directas
+        # NO usar eager loading con operaciones porque puede causar problemas
+        sucursales = Sucursal.query.filter_by(activa=True).all()
+        
+        # Pre-calcular conteos usando consultas directas para evitar problemas de lazy loading
+        for sucursal in sucursales:
+            # Contar usuarios directamente desde la base de datos
+            sucursal._usuarios_count = db.session.query(db.func.count(Usuario.id)).filter_by(sucursal_id=sucursal.id).scalar() or 0
+            # Contar operaciones directamente desde la base de datos
+            sucursal._operaciones_count = db.session.query(db.func.count(Operacion.id)).filter_by(sucursal_id=sucursal.id).scalar() or 0
+        
+        return render_template('admin_sucursales.html', sucursales=sucursales)
+    except Exception as e:
+        print(f"❌ Error en admin_sucursales: {e}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        flash('Error al cargar sucursales', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
 @login_required
