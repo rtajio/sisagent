@@ -529,6 +529,12 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_medios' %}active{% endif %}" href="{{ url_for('admin_medios') }}">
+                                <i class="fas fa-credit-card me-2"></i>
+                                Medios de Pago
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}" href="{{ url_for('reportes') }}">
                                 <i class="fas fa-chart-bar me-2"></i>
                                 Reportes
