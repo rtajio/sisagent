@@ -18,6 +18,7 @@
                     <tr>
                         <th>ID</th>
                         <th>Usuario</th>
+                        <th>Nombre</th>
                         <th>Admin</th>
                         <th>Sucursal</th>
                         <th>Acciones</th>
@@ -28,6 +29,7 @@
                     <tr>
                         <td>{{ usuario.id }}</td>
                         <td>{{ usuario.username }}</td>
+                        <td>{{ usuario.nombre_completo|default(usuario.username) }}</td>
                         <td>
                             {% if usuario.es_admin %}
                             <span class="badge bg-success">Admin</span>

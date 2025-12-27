@@ -134,7 +134,9 @@ class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
+    nombre_completo = db.Column(db.String(100), nullable=True)  # Nombre completo del usuario
     es_admin = db.Column(db.Boolean, default=False)
+    es_admin_sucursal = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
     # Relación con sucursal para evitar errores en templates
     sucursal = db.relationship('Sucursal', backref='usuarios', lazy='joined')
@@ -573,11 +575,14 @@ def editar_usuario(usuario_id):
     if request.method == 'POST':
         nuevo_username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
+        nombre_completo = request.form.get('nombre_completo', '').strip()
         sucursal_id = request.form.get('sucursal_id')
         if nuevo_username:
             usuario.username = nuevo_username
         if password:
             usuario.password_hash = generate_password_hash(password)
+        if nombre_completo:
+            usuario.nombre_completo = nombre_completo
         if sucursal_id:
             usuario.sucursal_id = int(sucursal_id)
         usuario.es_admin = 'es_admin' in request.form
