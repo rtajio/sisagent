@@ -1491,6 +1491,7 @@ else:
     # OPTIMIZACIÓN ULTRA FLUIDA: Para producción con Gunicorn
     # NO inicializar inmediatamente - dejar que Gunicorn inicie primero
     # La inicialización se hará en el primer request o en un hook de Gunicorn
+    import threading
     import time
     
     _db_initialized = False
