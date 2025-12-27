@@ -136,6 +136,8 @@ class Usuario(UserMixin, db.Model):
     password_hash = db.Column(db.String(120), nullable=False)
     es_admin = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
+    # Relación con sucursal para evitar errores en templates
+    sucursal = db.relationship('Sucursal', backref='usuarios', lazy='joined')
     operaciones = db.relationship('Operacion', backref='usuario', lazy='dynamic')
 
 class Operacion(db.Model):
