@@ -408,28 +408,23 @@ function enfocarMonto() {
 
 // Enfocar el campo de monto al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
-    enfocarMonto();
-    
-    // Interceptar el envío del formulario para limpiar y enfocar después
-    const formRegistro = document.querySelector('form[action="{{ url_for('registrar_operacion') }}"]');
-    if (formRegistro) {
-        formRegistro.addEventListener('submit', function(e) {
-            // Guardar en localStorage que se está registrando una operación
-            localStorage.setItem('operacion_registrada', 'true');
-        });
-    }
-    
-    // Si se acaba de registrar una operación, enfocar el campo
-    if (localStorage.getItem('operacion_registrada') === 'true') {
-        localStorage.removeItem('operacion_registrada');
-        // Esperar un poco más para que la página se recargue completamente
-        setTimeout(enfocarMonto, 500);
-    }
-    
-    // También enfocar si hay mensajes flash de éxito
+    // Verificar si hay mensajes flash de éxito (operación registrada)
     const alerts = document.querySelectorAll('.alert-success');
-    if (alerts.length > 0) {
-        setTimeout(enfocarMonto, 300);
+    const hayOperacionRegistrada = Array.from(alerts).some(alert => 
+        alert.textContent.includes('registrada') || alert.textContent.includes('Operación')
+    );
+    
+    if (hayOperacionRegistrada) {
+        // Si se acaba de registrar una operación, limpiar el formulario y enfocar
+        const formRegistro = document.querySelector('form[action="{{ url_for('registrar_operacion') }}"]');
+        if (formRegistro) {
+            formRegistro.reset();
+        }
+        // Enfocar después de un pequeño delay para que la página se renderice
+        setTimeout(enfocarMonto, 400);
+    } else {
+        // Si no hay operación recién registrada, solo enfocar normalmente
+        enfocarMonto();
     }
 });
 </script>
