@@ -563,6 +563,97 @@ def admin_usuarios():
                          usuarios=usuarios_paginated.items,
                          pagination=usuarios_paginated)
 
+@app.route('/admin/usuarios/<int:usuario_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_usuario(usuario_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('admin_usuarios'))
+    usuario = Usuario.query.get_or_404(usuario_id)
+    if request.method == 'POST':
+        nuevo_username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        sucursal_id = request.form.get('sucursal_id')
+        if nuevo_username:
+            usuario.username = nuevo_username
+        if password:
+            usuario.password_hash = generate_password_hash(password)
+        if sucursal_id:
+            usuario.sucursal_id = int(sucursal_id)
+        usuario.es_admin = 'es_admin' in request.form
+        db.session.commit()
+        flash('Usuario actualizado', 'success')
+        return redirect(url_for('admin_usuarios'))
+    sucursales = Sucursal.query.filter_by(activa=True).all()
+    return render_template('editar_usuario.html', usuario=usuario, sucursales=sucursales)
+
+# Rutas mínimas para medios de pago (compatibilidad)
+@app.route('/admin/medios')
+@login_required
+def admin_medios():
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medios = MedioPago.query.order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    return render_template('admin_medios.html', medios=medios)
+
+@app.route('/admin/medios/<int:medio_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    if request.method == 'POST':
+        abreviado = request.form.get('nombre_abreviado', '').strip()
+        completo = request.form.get('nombre_completo', '').strip()
+        if abreviado and completo:
+            medio.nombre_abreviado = abreviado
+            medio.nombre_completo = completo
+            db.session.commit()
+            flash('Medio actualizado', 'success')
+            return redirect(url_for('admin_medios'))
+    return render_template('editar_medio.html', medio=medio)
+
+@app.route('/admin/medios/<int:medio_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    db.session.delete(medio)
+    db.session.commit()
+    flash('Medio eliminado', 'success')
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/activar', methods=['POST'])
+@login_required
+def activar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    medio.activo = not medio.activo
+    db.session.commit()
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/subir', methods=['POST'])
+@login_required
+def subir_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/bajar', methods=['POST'])
+@login_required
+def bajar_medio(medio_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('admin_medios'))
+
 @app.route('/admin/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
 @login_required
 def eliminar_usuario(usuario_id):
@@ -593,6 +684,58 @@ def admin_sucursales():
         s._operaciones_count = Operacion.query.filter_by(sucursal_id=s.id).count()
     
     return render_template('admin_sucursales.html', sucursales=sucursales)
+
+@app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
+@login_required
+def crear_sucursal():
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        direccion = request.form.get('direccion', '').strip()
+        if not nombre:
+            flash('El nombre es requerido', 'error')
+            return redirect(url_for('crear_sucursal'))
+        if Sucursal.query.filter_by(nombre=nombre).first():
+            flash('Ya existe una sucursal con ese nombre', 'warning')
+            return redirect(url_for('crear_sucursal'))
+        suc = Sucursal(nombre=nombre, direccion=direccion, activa=True)
+        db.session.add(suc)
+        db.session.commit()
+        flash('Sucursal creada', 'success')
+        return redirect(url_for('admin_sucursales'))
+    return render_template('crear_sucursal.html')
+
+@app.route('/admin/sucursales/<int:sucursal_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_sucursal(sucursal_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    suc = Sucursal.query.get_or_404(sucursal_id)
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        direccion = request.form.get('direccion', '').strip()
+        if nombre:
+            suc.nombre = nombre
+        suc.direccion = direccion
+        db.session.commit()
+        flash('Sucursal actualizada', 'success')
+        return redirect(url_for('admin_sucursales'))
+    return render_template('editar_sucursal.html', sucursal=suc)
+
+@app.route('/admin/sucursales/<int:sucursal_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_sucursal(sucursal_id):
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    suc = Sucursal.query.get_or_404(sucursal_id)
+    db.session.delete(suc)
+    db.session.commit()
+    flash('Sucursal eliminada', 'success')
+    return redirect(url_for('admin_sucursales'))
 
 @app.route('/reportes')
 @login_required
