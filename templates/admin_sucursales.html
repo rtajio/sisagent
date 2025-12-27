@@ -56,10 +56,10 @@
                             {% endif %}
                         </td>
                         <td>
-                            <span class="badge bg-info">{{ sucursal._usuarios_count if hasattr(sucursal, '_usuarios_count') else 0 }}</span>
+                            <span class="badge bg-info">{{ sucursal._usuarios_count if hasattr(sucursal, '_usuarios_count') else (sucursal.usuarios|length if sucursal.usuarios else 0) }}</span>
                         </td>
                         <td>
-                            <span class="badge bg-primary">{{ sucursal._operaciones_count if hasattr(sucursal, '_operaciones_count') else 0 }}</span>
+                            <span class="badge bg-primary">{{ sucursal._operaciones_count if hasattr(sucursal, '_operaciones_count') else (sucursal.operaciones|length if sucursal.operaciones else 0) }}</span>
                         </td>
                                                             <td>{{ format_peru_datetime_short(sucursal.created_at) }}</td>
                         <td>

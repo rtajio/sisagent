@@ -179,8 +179,6 @@ class Sucursal(db.Model):
     direccion = db.Column(db.String(200))
     activa = db.Column(db.Boolean, default=True)
     operaciones = db.relationship('Operacion', backref='sucursal', lazy='dynamic')
-    # Relación explícita con usuarios para evitar problemas de lazy loading
-    usuarios = db.relationship('Usuario', backref='sucursal_rel', lazy='dynamic', foreign_keys='Usuario.sucursal_id')
 
 class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
@@ -465,6 +463,86 @@ def asegurar_admin_existe():
         db.session.rollback()  # CRÍTICO: Hacer rollback para limpiar la transacción
         import traceback
         traceback.print_exc()
+
+# Función para asegurar que admin1 existe
+def asegurar_admin1_existe():
+    """Asegurar que el usuario admin1 existe con privilegios de administrador"""
+    try:
+        from sqlalchemy import text
+        
+        username = 'admin1'
+        password = 'admin1'
+        password_hash = generate_password_hash(password)
+        email = f'{username}@sisagent.com'
+        nombre_completo = 'Administrador 1'
+        
+        admin1 = Usuario.query.filter_by(username=username).first()
+        
+        if not admin1:
+            print(f"🔧 ADMIN1 NO EXISTE - CREANDO...")
+            # Usar SQL directo para manejar campos que pueden no estar en el modelo
+            try:
+                db.session.execute(
+                    text("""
+                        INSERT INTO usuario (username, password_hash, email, nombre_completo, es_admin, es_admin_sucursal, activo)
+                        VALUES (:username, :password_hash, :email, :nombre_completo, 1, 0, 1)
+                    """),
+                    {
+                        'username': username,
+                        'password_hash': password_hash,
+                        'email': email,
+                        'nombre_completo': nombre_completo
+                    }
+                )
+                db.session.commit()
+                print(f"✅ ADMIN1 CREADO - Usuario: {username}, Contraseña: {password}")
+            except Exception as e:
+                print(f"⚠️  Error al crear admin1 con SQL directo: {e}")
+                db.session.rollback()
+                # Intentar con el modelo si falla SQL directo
+                try:
+                    admin1 = Usuario(
+                        username=username,
+                        password_hash=password_hash,
+                        es_admin=True,
+                        es_admin_sucursal=False
+                    )
+                    db.session.add(admin1)
+                    db.session.commit()
+                    print(f"✅ ADMIN1 CREADO (método alternativo) - Usuario: {username}, Contraseña: {password}")
+                except Exception as e2:
+                    print(f"❌ Error al crear admin1: {e2}")
+                    db.session.rollback()
+        else:
+            # Actualizar contraseña y privilegios si ya existe
+            print(f"🔧 ACTUALIZANDO ADMIN1 EXISTENTE...")
+            try:
+                db.session.execute(
+                    text("""
+                        UPDATE usuario 
+                        SET password_hash = :password_hash,
+                            es_admin = 1,
+                            es_admin_sucursal = 0
+                        WHERE username = :username
+                    """),
+                    {'password_hash': password_hash, 'username': username}
+                )
+                db.session.commit()
+                print(f"✅ ADMIN1 ACTUALIZADO - Usuario: {username}, Contraseña: {password}")
+            except Exception as e:
+                print(f"⚠️  Error al actualizar admin1: {e}")
+                db.session.rollback()
+                # Intentar con el modelo
+                admin1.password_hash = password_hash
+                admin1.es_admin = True
+                if hasattr(admin1, 'es_admin_sucursal'):
+                    admin1.es_admin_sucursal = False
+                db.session.commit()
+                print(f"✅ ADMIN1 ACTUALIZADO (método alternativo)")
+    except Exception as e:
+        print(f"⚠️  Error al asegurar admin1: {e}")
+        db.session.rollback()
+        # No bloquear el inicio si falla
 
 # SOLUCIÓN DIRECTA: Asegurar admin en cada request (solo una vez)
 _admin_verificado = False
@@ -826,7 +904,6 @@ def operaciones():
         # OPTIMIZACIÓN ULTRA FLUIDA: Cargar medios de pago con caché
         medios_pago = get_medios_pago_cache()
         
-        # SOLUCIÓN DIRECTA: Pasar funciones de formato explícitamente
         return render_template('operaciones.html',
                              operaciones=operaciones_paginated.items,
                              pagination=operaciones_paginated,
@@ -834,11 +911,7 @@ def operaciones():
                              fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
                              filtros_aplicados=filtros_aplicados,
                              sucursales=sucursales,
-                             medios_pago=medios_pago,
-                             format_peru_time=format_peru_time,
-                             format_peru_date=format_peru_date,
-                             format_peru_datetime=format_peru_datetime,
-                             format_peru_datetime_short=format_peru_datetime_short)
+                             medios_pago=medios_pago)
     except Exception as e:
         print(f"❌ Error en operaciones: {e}")
         db.session.rollback()
@@ -1226,25 +1299,22 @@ def admin_sucursales():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    try:
-        # SOLUCIÓN ROBUSTA: Usar consultas directas en lugar de relaciones lazy
-        sucursales = Sucursal.query.filter_by(activa=True).all()
-        
-        # Pre-calcular conteos usando consultas directas para evitar problemas de sesión
-        for sucursal in sucursales:
-            # Contar usuarios directamente desde la base de datos
-            sucursal._usuarios_count = db.session.query(db.func.count(Usuario.id)).filter_by(sucursal_id=sucursal.id).scalar() or 0
-            # Contar operaciones directamente desde la base de datos
-            sucursal._operaciones_count = db.session.query(db.func.count(Operacion.id)).filter_by(sucursal_id=sucursal.id).scalar() or 0
-        
-        return render_template('admin_sucursales.html', sucursales=sucursales)
-    except Exception as e:
-        print(f"❌ Error en admin_sucursales: {e}")
-        import traceback
-        traceback.print_exc()
-        db.session.rollback()
-        flash('Error al cargar sucursales', 'error')
-        return redirect(url_for('dashboard'))
+    # OPTIMIZACIÓN ULTRA: Cargar sucursales con eager loading de relaciones para evitar lazy load errors
+    sucursales = Sucursal.query.options(
+        joinedload(Sucursal.usuarios).load_only(Usuario.id),
+        joinedload(Sucursal.operaciones).load_only(Operacion.id)
+    ).filter_by(activa=True).all()
+    
+    # Contar usuarios y operaciones de forma optimizada
+    for sucursal in sucursales:
+        # Los usuarios y operaciones ya están cargados con eager loading
+        # Usar len() en lugar de .count() para evitar queries adicionales
+        if not hasattr(sucursal, '_usuarios_count'):
+            sucursal._usuarios_count = len([u for u in sucursal.usuarios])
+        if not hasattr(sucursal, '_operaciones_count'):
+            sucursal._operaciones_count = len([o for o in sucursal.operaciones])
+    
+    return render_template('admin_sucursales.html', sucursales=sucursales)
 
 @app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
 @login_required
