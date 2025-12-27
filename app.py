@@ -826,6 +826,7 @@ def operaciones():
         # OPTIMIZACIÓN ULTRA FLUIDA: Cargar medios de pago con caché
         medios_pago = get_medios_pago_cache()
         
+        # SOLUCIÓN DIRECTA: Pasar funciones de formato explícitamente
         return render_template('operaciones.html',
                              operaciones=operaciones_paginated.items,
                              pagination=operaciones_paginated,
@@ -833,7 +834,11 @@ def operaciones():
                              fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
                              filtros_aplicados=filtros_aplicados,
                              sucursales=sucursales,
-                             medios_pago=medios_pago)
+                             medios_pago=medios_pago,
+                             format_peru_time=format_peru_time,
+                             format_peru_date=format_peru_date,
+                             format_peru_datetime=format_peru_datetime,
+                             format_peru_datetime_short=format_peru_datetime_short)
     except Exception as e:
         print(f"❌ Error en operaciones: {e}")
         db.session.rollback()
