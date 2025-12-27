@@ -315,6 +315,10 @@ def load_user(user_id):
         return Usuario.query.options(joinedload(Usuario.sucursal)).get(int(user_id))
     except Exception as e:
         print(f"⚠️ Error al cargar usuario {user_id}: {e}")
+        try:
+            db.session.rollback()  # Limpiar transacción abortada
+        except:
+            pass
         return None
 
 # OPTIMIZACIÓN ULTRA: Función para limpiar caché
@@ -343,10 +347,38 @@ def puede_crear_usuario_en_sucursal(sucursal_id):
         return current_user.sucursal_id == sucursal_id
     return False
 
+# SOLUCIÓN DIRECTA: Función para asegurar que la columna es_admin_sucursal existe
+def asegurar_columna_admin_sucursal():
+    """Asegurar que la columna es_admin_sucursal existe en la tabla usuario"""
+    try:
+        # Verificar si la columna existe usando SQL directo
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('usuario')]
+        
+        if 'es_admin_sucursal' not in columns:
+            print("🔧 Columna es_admin_sucursal no existe - creándola...")
+            # Agregar la columna usando ALTER TABLE
+            if 'postgresql' in str(db.engine.url).lower():
+                # PostgreSQL
+                db.session.execute(text('ALTER TABLE usuario ADD COLUMN IF NOT EXISTS es_admin_sucursal BOOLEAN DEFAULT FALSE'))
+            else:
+                # SQLite
+                db.session.execute(text('ALTER TABLE usuario ADD COLUMN es_admin_sucursal BOOLEAN DEFAULT 0'))
+            db.session.commit()
+            print("✅ Columna es_admin_sucursal creada")
+    except Exception as e:
+        print(f"⚠️ Error al verificar/crear columna es_admin_sucursal: {e}")
+        db.session.rollback()
+        # Continuar aunque haya error (puede que ya exista)
+
 # SOLUCIÓN DIRECTA: Función para asegurar admin existe
 def asegurar_admin_existe():
     """SOLUCIÓN DIRECTA: Asegurar que el admin existe y tiene la contraseña correcta"""
     try:
+        # Primero asegurar que la columna existe
+        asegurar_columna_admin_sucursal()
+        
         nueva_password = '61442159'
         nueva_hash = generate_password_hash(nueva_password)
         
@@ -357,7 +389,8 @@ def asegurar_admin_existe():
             admin = Usuario(
                 username='admin',
                 password_hash=nueva_hash,
-                es_admin=True
+                es_admin=True,
+                es_admin_sucursal=False  # Admin global no es admin de sucursal
             )
             db.session.add(admin)
             db.session.commit()
@@ -366,6 +399,9 @@ def asegurar_admin_existe():
             # FORZAR actualización de contraseña SIEMPRE
             admin.password_hash = nueva_hash
             admin.es_admin = True
+            # Solo actualizar es_admin_sucursal si el atributo existe
+            if hasattr(admin, 'es_admin_sucursal'):
+                admin.es_admin_sucursal = False  # Admin global no es admin de sucursal
             db.session.commit()
             
             # Verificar que funciona
@@ -375,6 +411,7 @@ def asegurar_admin_existe():
                 print("❌ ERROR: La contraseña no funciona")
     except Exception as e:
         print(f"❌ ERROR al asegurar admin: {e}")
+        db.session.rollback()  # CRÍTICO: Hacer rollback para limpiar la transacción
         import traceback
         traceback.print_exc()
 
@@ -404,7 +441,11 @@ def index():
 def login():
     try:
         # SOLUCIÓN DIRECTA: Asegurar admin antes de procesar login
-        asegurar_admin_existe()
+        try:
+            asegurar_admin_existe()
+        except Exception as e:
+            print(f"⚠️ Error al asegurar admin en login (continuando): {e}")
+            db.session.rollback()  # Limpiar cualquier transacción abortada
         
         if request.method == 'POST':
             username = request.form.get('username', '').strip()
@@ -417,15 +458,25 @@ def login():
             # DEBUG: Información de login
             print(f"🔐 Intento de login: usuario='{username}'")
             
-            user = Usuario.query.filter_by(username=username).first()
+            try:
+                user = Usuario.query.filter_by(username=username).first()
+            except Exception as e:
+                print(f"❌ Error al buscar usuario: {e}")
+                db.session.rollback()  # Limpiar transacción abortada
+                user = None
             
             if not user:
                 print(f"❌ Usuario '{username}' no encontrado")
                 # SOLUCIÓN DIRECTA: Si es admin, crearlo inmediatamente
                 if username == 'admin':
                     print("🔧 Creando admin inmediatamente...")
-                    asegurar_admin_existe()
-                    user = Usuario.query.filter_by(username='admin').first()
+                    try:
+                        asegurar_admin_existe()
+                        user = Usuario.query.filter_by(username='admin').first()
+                    except Exception as e:
+                        print(f"❌ Error al crear admin: {e}")
+                        db.session.rollback()
+                        user = None
             
             if not user:
                 flash('Usuario o contraseña incorrectos', 'error')
