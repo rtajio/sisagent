@@ -28,23 +28,15 @@ def get_peru_date_from_datetime(dt_column):
     """
     Extrae la fecha en zona horaria de Perú desde una columna datetime.
     Funciona tanto para PostgreSQL como SQLite.
+    
+    Nota: Como las operaciones se guardan con get_peru_time() que ya incluye
+    la zona horaria de Perú, simplemente extraemos la fecha directamente.
+    Si la BD está configurada con timezone 'America/Lima', PostgreSQL
+    manejará la conversión automáticamente.
     """
-    # Detectar si estamos usando PostgreSQL
-    database_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-    if 'postgresql' in database_uri.lower():
-        # Para PostgreSQL: convertir a timezone de Perú y luego extraer fecha
-        # Asumimos que las fechas se guardan sin timezone (timestamp) y las tratamos como UTC
-        # Luego las convertimos a 'America/Lima' y extraemos la fecha
-        from sqlalchemy import func, text
-        # Usar AT TIME ZONE de PostgreSQL: primero convertir a UTC, luego a 'America/Lima'
-        return func.date(
-            func.timezone('America/Lima', 
-                         func.timezone('UTC', dt_column))
-        )
-    else:
-        # Para SQLite: usar date() directamente
-        # Nota: SQLite no maneja timezones, asumimos que las fechas ya están en hora de Perú
-        return db.func.date(dt_column)
+    # Usar date() directamente - PostgreSQL con timezone configurado manejará la conversión
+    # SQLite no maneja timezones, pero las fechas ya están en hora de Perú
+    return db.func.date(dt_column)
 
 def format_peru_time(dt):
     """Formatea una fecha/hora para mostrar en zona horaria de Perú"""
@@ -98,15 +90,6 @@ if os.environ.get('DATABASE_URL'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     print(f"✅ Usando PostgreSQL en Railway: {database_url[:20]}...")
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
-    print("✅ Usando SQLite para desarrollo local")
-
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Configuración de timezone para PostgreSQL
-if os.environ.get('DATABASE_URL') and 'postgresql' in os.environ.get('DATABASE_URL', '').lower():
     # Configurar PostgreSQL para usar zona horaria de Perú
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'connect_args': {
@@ -114,6 +97,12 @@ if os.environ.get('DATABASE_URL') and 'postgresql' in os.environ.get('DATABASE_U
         }
     }
     print("✅ Configuración de timezone PostgreSQL: America/Lima")
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
+    print("✅ Usando SQLite para desarrollo local")
+
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # OPTIMIZACIÓN ULTRA: Configuración de caché
 app.config['CACHE_TYPE'] = 'simple'
