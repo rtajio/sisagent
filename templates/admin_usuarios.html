@@ -53,7 +53,9 @@
                         </td>
                         <td>
                             {% if usuario.es_admin %}
-                            <span class="badge bg-danger">Administrador</span>
+                            <span class="badge bg-danger">Administrador Global</span>
+                            {% elif usuario.es_admin_sucursal %}
+                            <span class="badge bg-warning">Admin de Sucursal</span>
                             {% else %}
                             <span class="badge bg-primary">Usuario</span>
                             {% endif %}

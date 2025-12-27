@@ -54,34 +54,9 @@
                             <div class="form-text">Nombre de usuario único para el sistema</div>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
-                            <label for="email" class="form-label">
-                                <i class="fas fa-envelope me-1"></i>
-                                Email
-                            </label>
-                            <input type="email" 
-                                   class="form-control" 
-                                   id="email" 
-                                   name="email" 
-                                   required
-                                   placeholder="juan.perez@empresa.com">
-                        </div>
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="nombre_completo" class="form-label">
-                                <i class="fas fa-id-card me-1"></i>
-                                Nombre Completo
-                            </label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="nombre_completo" 
-                                   name="nombre_completo" 
-                                   required
-                                   placeholder="Juan Pérez García">
-                        </div>
-                        
                         <div class="col-md-6 mb-3">
                             <label for="password" class="form-label">
                                 <i class="fas fa-lock me-1"></i>
@@ -95,6 +70,19 @@
                                    placeholder="Contraseña segura">
                             <div class="form-text">Mínimo 6 caracteres</div>
                         </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="password_confirm" class="form-label">
+                                <i class="fas fa-lock me-1"></i>
+                                Confirmar Contraseña
+                            </label>
+                            <input type="password" 
+                                   class="form-control" 
+                                   id="password_confirm" 
+                                   name="password_confirm" 
+                                   required
+                                   placeholder="Repita la contraseña">
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -102,15 +90,28 @@
                             <i class="fas fa-building me-1"></i>
                             Sucursal Asignada
                         </label>
-                        <select class="form-select" id="sucursal_id" name="sucursal_id">
-                            <option value="">Sin sucursal asignada</option>
-                            {% for sucursal in sucursales %}
-                            <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
-                            {% endfor %}
+                        <select class="form-select" id="sucursal_id" name="sucursal_id" {% if not current_user.es_admin and current_user.es_admin_sucursal %}disabled{% endif %}>
+                            {% if not current_user.es_admin and current_user.es_admin_sucursal %}
+                                <option value="{{ current_user.sucursal_id }}" selected>{{ current_user.sucursal.nombre }}</option>
+                            {% else %}
+                                <option value="">Sin sucursal asignada</option>
+                                {% for sucursal in sucursales %}
+                                <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
+                                {% endfor %}
+                            {% endif %}
                         </select>
-                        <div class="form-text">Asigne una sucursal para que el usuario pueda registrar operaciones</div>
+                        {% if not current_user.es_admin and current_user.es_admin_sucursal %}
+                            <input type="hidden" name="sucursal_id" value="{{ current_user.sucursal_id }}">
+                            <div class="form-text text-info">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Como administrador de sucursal, solo puedes crear usuarios para tu sucursal: <strong>{{ current_user.sucursal.nombre }}</strong>
+                            </div>
+                        {% else %}
+                            <div class="form-text">Asigne una sucursal para que el usuario pueda registrar operaciones</div>
+                        {% endif %}
                     </div>
                     
+                    {% if current_user.es_admin %}
                     <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input" 
@@ -119,11 +120,28 @@
                                    name="es_admin">
                             <label class="form-check-label" for="es_admin">
                                 <i class="fas fa-shield-alt me-1"></i>
-                                Privilegios de Administrador
+                                Administrador Global
                             </label>
                         </div>
-                        <div class="form-text">Marque esta opción para dar acceso completo al sistema</div>
+                        <div class="form-text">Marque esta opción para dar acceso completo al sistema (todas las sucursales)</div>
                     </div>
+                    {% endif %}
+                    
+                    {% if current_user.es_admin %}
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" 
+                                   type="checkbox" 
+                                   id="es_admin_sucursal" 
+                                   name="es_admin_sucursal">
+                            <label class="form-check-label" for="es_admin_sucursal">
+                                <i class="fas fa-user-shield me-1"></i>
+                                Administrador de Sucursal
+                            </label>
+                        </div>
+                        <div class="form-text">Marque esta opción para dar privilegios de administrador solo para la sucursal asignada</div>
+                    </div>
+                    {% endif %}
                     
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
