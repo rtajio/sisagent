@@ -405,6 +405,8 @@ def asegurar_admin_existe():
             print(f"✅ ADMIN CREADO - Usuario: admin, Contraseña: {nueva_password}")
         else:
             # FORZAR actualización de contraseña SIEMPRE
+            print(f"🔧 ACTUALIZANDO ADMIN EXISTENTE...")
+            print(f"   Hash anterior: {admin.password_hash[:50] if admin.password_hash else 'None'}...")
             admin.password_hash = nueva_hash
             admin.es_admin = True
             # Solo actualizar es_admin_sucursal si el atributo existe
@@ -412,11 +414,24 @@ def asegurar_admin_existe():
                 admin.es_admin_sucursal = False  # Admin global no es admin de sucursal
             db.session.commit()
             
+            # Refrescar el objeto desde la base de datos para asegurar que tenemos los datos actualizados
+            db.session.refresh(admin)
+            
             # Verificar que funciona
-            if check_password_hash(admin.password_hash, nueva_password):
+            print(f"   Hash nuevo: {admin.password_hash[:50] if admin.password_hash else 'None'}...")
+            if admin.password_hash and check_password_hash(admin.password_hash, nueva_password):
                 print(f"✅ ADMIN VERIFICADO - Usuario: admin, Contraseña: {nueva_password}")
             else:
-                print("❌ ERROR: La contraseña no funciona")
+                print("❌ ERROR: La contraseña no funciona después de actualizar")
+                # Intentar una vez más
+                print("🔧 Reintentando actualización...")
+                admin.password_hash = generate_password_hash(nueva_password)
+                db.session.commit()
+                db.session.refresh(admin)
+                if admin.password_hash and check_password_hash(admin.password_hash, nueva_password):
+                    print(f"✅ ADMIN VERIFICADO (segundo intento) - Usuario: admin, Contraseña: {nueva_password}")
+                else:
+                    print("❌ ERROR CRÍTICO: No se pudo establecer la contraseña correctamente")
     except Exception as e:
         print(f"❌ ERROR al asegurar admin: {e}")
         db.session.rollback()  # CRÍTICO: Hacer rollback para limpiar la transacción
@@ -494,17 +509,40 @@ def login():
             if not user.password_hash:
                 print(f"❌ Usuario '{username}' no tiene password_hash - actualizando...")
                 asegurar_admin_existe()
+                db.session.refresh(user)  # Refrescar el objeto desde la BD
                 user = Usuario.query.filter_by(username=username).first()
             
-            password_ok = check_password_hash(user.password_hash, password)
-            print(f"🔐 Verificación de contraseña: {'✅ Correcta' if password_ok else '❌ Incorrecta'}")
+            # DEBUG: Información detallada
+            print(f"🔍 DEBUG Login - Usuario: {user.username}, Hash: {user.password_hash[:50] if user.password_hash else 'None'}...")
+            print(f"🔍 DEBUG Login - Contraseña recibida: '{password}'")
+            
+            password_ok = False
+            if user.password_hash:
+                password_ok = check_password_hash(user.password_hash, password)
+                print(f"🔐 Verificación de contraseña: {'✅ Correcta' if password_ok else '❌ Incorrecta'}")
+            else:
+                print("❌ ERROR: Usuario no tiene password_hash después de actualizar")
             
             # SOLUCIÓN DIRECTA: Si la contraseña no funciona y es admin, forzar actualización
             if not password_ok and username == 'admin':
                 print("🔧 Forzando actualización de contraseña del admin...")
-                asegurar_admin_existe()
-                user = Usuario.query.filter_by(username='admin').first()
-                password_ok = check_password_hash(user.password_hash, password)
+                try:
+                    asegurar_admin_existe()
+                    # Refrescar el objeto desde la base de datos
+                    db.session.refresh(user)
+                    user = Usuario.query.filter_by(username='admin').first()
+                    if user and user.password_hash:
+                        password_ok = check_password_hash(user.password_hash, password)
+                        print(f"🔐 Verificación después de actualizar: {'✅ Correcta' if password_ok else '❌ Incorrecta'}")
+                        if password_ok:
+                            print(f"✅ Hash actualizado correctamente: {user.password_hash[:50]}...")
+                    else:
+                        print("❌ ERROR: No se pudo actualizar el admin")
+                except Exception as e:
+                    print(f"❌ Error al forzar actualización: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    db.session.rollback()
             
             if password_ok:
                 login_user(user)
