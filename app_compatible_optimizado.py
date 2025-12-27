@@ -282,18 +282,24 @@ def logout():
 @login_required
 def dashboard():
     """Redirige al dashboard según rol usando templates existentes"""
-    stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
-    base_ctx = {
-        'total_sucursales': stats.get('sucursales_activas', 0),
-        'total_usuarios': stats.get('usuarios_total', 0),
-        'comisiones_hoy': [],
-        'comisiones_mes': {},
-        **stats,
-    }
-    if current_user.es_admin:
-        return render_template('admin_dashboard.html', **base_ctx)
-    else:
-        return render_template('user_dashboard.html', **base_ctx)
+    try:
+        stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
+        base_ctx = {
+            'total_sucursales': stats.get('sucursales_activas', 0),
+            'total_usuarios': stats.get('usuarios_total', 0),
+            'comisiones_hoy': [],
+            'comisiones_mes': {},
+            **stats,
+        }
+        if current_user.es_admin:
+            return render_template('admin_dashboard.html', **base_ctx)
+        else:
+            return render_template('user_dashboard.html', **base_ctx)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # Respuesta explícita para depurar en producción
+        return f"Error en dashboard: {str(e)}", 500
 
 @app.route('/operaciones')
 @login_required
