@@ -105,6 +105,16 @@ login_manager.login_view = 'login'
 cache = Cache(app)
 Compress(app)
 
+# Context processor para exponer funciones de formato en templates
+@app.context_processor
+def inject_format_functions():
+    return {
+        'format_peru_time': format_peru_time,
+        'format_peru_date': format_peru_date,
+        'format_peru_datetime': format_peru_datetime,
+        'format_peru_datetime_short': format_peru_datetime_short,
+    }
+
 print("✅ Configuración de base de datos completada")
 print("✅ SQLAlchemy y LoginManager configurados")
 print("✅ Caché y compresión configurados")
@@ -273,10 +283,17 @@ def logout():
 def dashboard():
     """Redirige al dashboard según rol usando templates existentes"""
     stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
+    base_ctx = {
+        'total_sucursales': stats.get('sucursales_activas', 0),
+        'total_usuarios': stats.get('usuarios_total', 0),
+        'comisiones_hoy': [],
+        'comisiones_mes': {},
+        **stats,
+    }
     if current_user.es_admin:
-        return render_template('admin_dashboard.html', **stats)
+        return render_template('admin_dashboard.html', **base_ctx)
     else:
-        return render_template('user_dashboard.html', **stats)
+        return render_template('user_dashboard.html', **base_ctx)
 
 @app.route('/operaciones')
 @login_required
@@ -348,6 +365,24 @@ def operaciones():
                          filtros_aplicados=filtros_aplicados,
                          sucursales=sucursales,
                          medios_pago=medios_pago)
+
+@app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_operacion(operacion_id):
+    """Eliminar operación; admin puede todas, usuario solo las suyas o de su sucursal."""
+    operacion = Operacion.query.get_or_404(operacion_id)
+    if not current_user.es_admin:
+        # Restringir a sucursal y, si no es admin de sucursal, a su propio registro
+        if operacion.sucursal_id != current_user.sucursal_id:
+            flash('No tienes permisos para eliminar esta operación', 'error')
+            return redirect(url_for('operaciones'))
+        if not current_user.es_admin_de_sucursal() and operacion.usuario_id != current_user.id:
+            flash('No tienes permisos para eliminar esta operación', 'error')
+            return redirect(url_for('operaciones'))
+    db.session.delete(operacion)
+    db.session.commit()
+    flash('Operación eliminada', 'success')
+    return redirect(url_for('operaciones'))
 
 @app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
 @login_required
@@ -505,6 +540,22 @@ def admin_usuarios():
 @app.route('/admin/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
 @login_required
 def eliminar_usuario(usuario_id):
+    """Eliminar usuario: solo admin global; protege admin/admin1."""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('admin_usuarios'))
+    usuario = Usuario.query.get_or_404(usuario_id)
+    if usuario.username in ('admin', 'admin1'):
+        flash('No se puede eliminar este usuario', 'warning')
+        return redirect(url_for('admin_usuarios'))
+    db.session.delete(usuario)
+    db.session.commit()
+    flash('Usuario eliminado', 'success')
+    return redirect(url_for('admin_usuarios'))
+
+@app.route('/admin/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_usuario(usuario_id):
     """Eliminar usuario: solo admin global; evita borrar admins principales."""
     if not current_user.es_admin:
         flash('Acceso denegado', 'error')
@@ -525,8 +576,12 @@ def admin_sucursales():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    # OPTIMIZACIÓN ULTRA: Usar caché para sucursales
+    # Evitar eager-load sobre relaciones lazy='dynamic'
     sucursales = get_sucursales_activas_cache()
+    # Precalcular conteos con len() sobre dynamic (hace count en BD)
+    for s in sucursales:
+        s._usuarios_count = s.usuarios.count() if hasattr(s, 'usuarios') else 0
+        s._operaciones_count = s.operaciones.count() if hasattr(s, 'operaciones') else 0
     
     return render_template('admin_sucursales.html', sucursales=sucursales)
 
