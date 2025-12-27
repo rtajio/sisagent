@@ -11,6 +11,7 @@ from decimal import Decimal
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_login import current_user as flask_current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_caching import Cache
 from flask_compress import Compress
@@ -80,13 +81,6 @@ if os.environ.get('DATABASE_URL'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     print(f"✅ Usando PostgreSQL en Railway: {database_url[:20]}...")
-    # Configurar PostgreSQL para usar zona horaria de Perú
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'connect_args': {
-            'options': "-c timezone='America/Lima'"
-        }
-    }
-    print("✅ Configuración de timezone PostgreSQL: America/Lima")
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
     print("✅ Usando SQLite para desarrollo local")
@@ -125,6 +119,36 @@ def inject_format_functions():
         'format_peru_datetime': format_peru_datetime,
         'format_peru_datetime_short': format_peru_datetime_short,
     }
+
+# Manejo global de errores para debugging
+@app.errorhandler(Exception)
+def handle_error(e):
+    import traceback
+    error_msg = f"Error: {type(e).__name__}: {str(e)}"
+    print("=" * 80)
+    print("ERROR EN LA APLICACIÓN:")
+    print(error_msg)
+    print("=" * 80)
+    traceback.print_exc()
+    print("=" * 80)
+    
+    # Intentar rollback de la sesión si hay error de BD
+    try:
+        db.session.rollback()
+    except:
+        pass
+    
+    # Si el usuario está autenticado, redirigir al dashboard con mensaje de error
+    try:
+        if flask_current_user.is_authenticated:
+            flash(f'Error: {str(e)}', 'error')
+            return redirect(url_for('dashboard'))
+    except:
+        pass
+    
+    # Si no está autenticado, redirigir al login
+    flash(f'Error: {str(e)}', 'error')
+    return redirect(url_for('login'))
 
 print("✅ Configuración de base de datos completada")
 print("✅ SQLAlchemy y LoginManager configurados")
