@@ -391,5 +391,46 @@ function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
 function cancelarEdicion(id, monto, comision, medio, usuarioOriginal) {
     location.reload();
 }
+
+// Función para enfocar el campo de monto
+function enfocarMonto() {
+    const campoMonto = document.getElementById('monto');
+    if (campoMonto) {
+        // Scroll suave hasta el campo
+        campoMonto.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Pequeño delay para asegurar que el scroll se complete
+        setTimeout(function() {
+            campoMonto.focus();
+            campoMonto.select();
+        }, 200);
+    }
+}
+
+// Enfocar el campo de monto al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    enfocarMonto();
+    
+    // Interceptar el envío del formulario para limpiar y enfocar después
+    const formRegistro = document.querySelector('form[action="{{ url_for('registrar_operacion') }}"]');
+    if (formRegistro) {
+        formRegistro.addEventListener('submit', function(e) {
+            // Guardar en localStorage que se está registrando una operación
+            localStorage.setItem('operacion_registrada', 'true');
+        });
+    }
+    
+    // Si se acaba de registrar una operación, enfocar el campo
+    if (localStorage.getItem('operacion_registrada') === 'true') {
+        localStorage.removeItem('operacion_registrada');
+        // Esperar un poco más para que la página se recargue completamente
+        setTimeout(enfocarMonto, 500);
+    }
+    
+    // También enfocar si hay mensajes flash de éxito
+    const alerts = document.querySelectorAll('.alert-success');
+    if (alerts.length > 0) {
+        setTimeout(enfocarMonto, 300);
+    }
+});
 </script>
 {% endblock %} 
