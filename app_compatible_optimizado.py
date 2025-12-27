@@ -271,10 +271,12 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # OPTIMIZACIÓN ULTRA: Usar caché para estadísticas
+    """Redirige al dashboard según rol usando templates existentes"""
     stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
-    
-    return render_template('dashboard.html', **stats)
+    if current_user.es_admin:
+        return render_template('admin_dashboard.html', **stats)
+    else:
+        return render_template('user_dashboard.html', **stats)
 
 @app.route('/operaciones')
 @login_required
@@ -346,6 +348,19 @@ def operaciones():
                          filtros_aplicados=filtros_aplicados,
                          sucursales=sucursales,
                          medios_pago=medios_pago)
+
+@app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_operacion(operacion_id):
+    """Eliminar operación: permitido solo a admin, restringido a sucursal."""
+    operacion = Operacion.query.get_or_404(operacion_id)
+    if not current_user.es_admin and operacion.sucursal_id != current_user.sucursal_id:
+        flash('No tienes permisos para eliminar esta operación', 'error')
+        return redirect(url_for('operaciones'))
+    db.session.delete(operacion)
+    db.session.commit()
+    flash('Operación eliminada', 'success')
+    return redirect(url_for('operaciones'))
 
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
 @login_required
@@ -486,6 +501,22 @@ def admin_usuarios():
     return render_template('admin_usuarios.html', 
                          usuarios=usuarios_paginated.items,
                          pagination=usuarios_paginated)
+
+@app.route('/admin/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_usuario(usuario_id):
+    """Eliminar usuario: solo admin global; evita borrar admins principales."""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('admin_usuarios'))
+    usuario = Usuario.query.get_or_404(usuario_id)
+    if usuario.username in ('admin', 'admin1'):
+        flash('No se puede eliminar este usuario', 'warning')
+        return redirect(url_for('admin_usuarios'))
+    db.session.delete(usuario)
+    db.session.commit()
+    flash('Usuario eliminado', 'success')
+    return redirect(url_for('admin_usuarios'))
 
 @app.route('/admin/sucursales')
 @login_required

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Usuarios{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h4"><i class="fas fa-users me-2"></i> Usuarios</h1>
+</div>
+
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Listado</h6>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Usuario</th>
+                        <th>Admin</th>
+                        <th>Sucursal</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for usuario in usuarios %}
+                    <tr>
+                        <td>{{ usuario.id }}</td>
+                        <td>{{ usuario.username }}</td>
+                        <td>
+                            {% if usuario.es_admin %}
+                            <span class="badge bg-success">Admin</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Usuario</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ usuario.sucursal.nombre if usuario.sucursal else 'Sin sucursal' }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a class="btn btn-outline-warning" href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% if current_user.es_admin and usuario.username not in ['admin', 'admin1'] %}
+                                <form method="POST" action="{{ url_for('eliminar_usuario', usuario_id=usuario.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar usuario {{ usuario.username }}?');">
+                                    <button type="submit" class="btn btn-outline-danger">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if pagination.pages > 1 %}
+        <nav>
+            <ul class="pagination">
+                {% if pagination.has_prev %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin_usuarios', page=pagination.prev_num) }}">Anterior</a></li>
+                {% endif %}
+                <li class="page-item disabled"><a class="page-link">Página {{ pagination.page }} de {{ pagination.pages }}</a></li>
+                {% if pagination.has_next %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin_usuarios', page=pagination.next_num) }}">Siguiente</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+{% endblock %}
+
