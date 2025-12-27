@@ -674,21 +674,18 @@ def eliminar_usuario(usuario_id):
 @app.route('/admin/sucursales')
 @login_required
 def admin_sucursales():
-    try:
-        if not current_user.es_admin:
-            flash('Acceso denegado', 'error')
-            return redirect(url_for('dashboard'))
-        
-        sucursales = Sucursal.query.filter_by(activa=True).all()
-        for s in sucursales:
-            s._usuarios_count = Usuario.query.filter_by(sucursal_id=s.id).count()
-            s._operaciones_count = Operacion.query.filter_by(sucursal_id=s.id).count()
-        
-        return render_template('admin_sucursales.html', sucursales=sucursales)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return f"Error en sucursales: {e}", 500
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    sucursales = Sucursal.query.filter_by(activa=True).all()
+    for s in sucursales:
+        # backref usuarios viene como lista (lazy='joined'), usar len
+        s._usuarios_count = len(s.usuarios) if hasattr(s, 'usuarios') else 0
+        # operaciones es lazy='dynamic', usar count()
+        s._operaciones_count = Operacion.query.filter_by(sucursal_id=s.id).count()
+    
+    return render_template('admin_sucursales.html', sucursales=sucursales)
 
 @app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
 @login_required
