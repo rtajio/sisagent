@@ -384,18 +384,6 @@ def eliminar_operacion(operacion_id):
     flash('Operación eliminada', 'success')
     return redirect(url_for('operaciones'))
 
-@app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
-@login_required
-def eliminar_operacion(operacion_id):
-    """Eliminar operación: permitido solo a admin, restringido a sucursal."""
-    operacion = Operacion.query.get_or_404(operacion_id)
-    if not current_user.es_admin and operacion.sucursal_id != current_user.sucursal_id:
-        flash('No tienes permisos para eliminar esta operación', 'error')
-        return redirect(url_for('operaciones'))
-    db.session.delete(operacion)
-    db.session.commit()
-    flash('Operación eliminada', 'success')
-    return redirect(url_for('operaciones'))
 
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
 @login_required
