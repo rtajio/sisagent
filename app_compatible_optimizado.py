@@ -679,19 +679,38 @@ def admin_sucursales():
         return redirect(url_for('dashboard'))
     
     try:
+        # Consulta segura de sucursales
         sucursales = Sucursal.query.filter_by(activa=True).all()
+        
+        # Pre-calcular conteos de forma segura
         for s in sucursales:
-            # Usar consultas directas para evitar problemas con backref
-            s._usuarios_count = Usuario.query.filter_by(sucursal_id=s.id).count()
-            s._operaciones_count = Operacion.query.filter_by(sucursal_id=s.id).count()
+            try:
+                s._usuarios_count = db.session.query(db.func.count(Usuario.id)).filter(
+                    Usuario.sucursal_id == s.id
+                ).scalar() or 0
+            except Exception as e:
+                print(f"Error contando usuarios para sucursal {s.id}: {e}")
+                s._usuarios_count = 0
+            
+            try:
+                s._operaciones_count = db.session.query(db.func.count(Operacion.id)).filter(
+                    Operacion.sucursal_id == s.id
+                ).scalar() or 0
+            except Exception as e:
+                print(f"Error contando operaciones para sucursal {s.id}: {e}")
+                s._operaciones_count = 0
         
         return render_template('admin_sucursales.html', sucursales=sucursales)
     except Exception as e:
         import traceback
-        print(f"ERROR en admin_sucursales: {e}")
+        error_msg = f"ERROR en admin_sucursales: {type(e).__name__}: {str(e)}"
+        print(error_msg)
         traceback.print_exc()
-        db.session.rollback()
-        flash('Error al cargar sucursales', 'error')
+        try:
+            db.session.rollback()
+        except:
+            pass
+        flash(f'Error al cargar sucursales: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
 @app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
