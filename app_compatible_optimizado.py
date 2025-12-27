@@ -635,6 +635,29 @@ def operaciones():
     # OPTIMIZACIÓN ULTRA: Cargar medios de pago con caché
     medios_pago = get_medios_pago_cache()
     
+    # Calcular comisión del día para sucursal específica si es admin global
+    comision_dia = 0.0
+    sucursal_nombre = None
+    if current_user.es_admin and request.args.get('sucursal_id'):
+        try:
+            sucursal_id = int(request.args.get('sucursal_id'))
+            sucursal = Sucursal.query.get(sucursal_id)
+            if sucursal:
+                sucursal_nombre = sucursal.nombre
+                # Calcular comisión del día para esta sucursal
+                comision_dia_query = db.session.query(
+                    db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+                ).filter(
+                    Operacion.sucursal_id == sucursal_id,
+                    Operacion.hora >= inicio_hoy,
+                    Operacion.hora <= fin_hoy
+                ).scalar() or 0.0
+                comision_dia = float(comision_dia_query)
+        except (ValueError, TypeError) as e:
+            print(f"Error al procesar sucursal_id: {e}")
+            comision_dia = 0.0
+            sucursal_nombre = None
+    
     return render_template('operaciones.html',
                          operaciones=operaciones_paginated.items,
                          pagination=operaciones_paginated,
@@ -642,7 +665,9 @@ def operaciones():
                          fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
                          filtros_aplicados=filtros_aplicados,
                          sucursales=sucursales,
-                         medios_pago=medios_pago)
+                         medios_pago=medios_pago,
+                         comision_dia=comision_dia,
+                         sucursal_nombre=sucursal_nombre)
 
 @app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
 @login_required
