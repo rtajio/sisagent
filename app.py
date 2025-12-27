@@ -1849,6 +1849,9 @@ def init_db():
                     print(f"⚠️ Error al crear tablas (continuando): {e}")
             
             # Crear o actualizar usuario admin (FORZAR ACTUALIZACIÓN)
+            asegurar_admin_existe()
+            asegurar_admin1_existe()  # También asegurar admin1
+            
             admin = Usuario.query.filter_by(username='admin').first()
             if not admin:
                 admin = Usuario(
