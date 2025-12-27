@@ -1038,16 +1038,40 @@ def crear_sucursal():
         direccion = request.form.get('direccion', '').strip()
         if not nombre:
             flash('El nombre es requerido', 'error')
-            return redirect(url_for('crear_sucursal'))
+            medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+            return render_template('crear_sucursal.html', medios=medios)
         if Sucursal.query.filter_by(nombre=nombre).first():
             flash('Ya existe una sucursal con ese nombre', 'warning')
-            return redirect(url_for('crear_sucursal'))
+            medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+            return render_template('crear_sucursal.html', medios=medios)
         suc = Sucursal(nombre=nombre, direccion=direccion, activa=True)
         db.session.add(suc)
+        db.session.flush()  # Para obtener el ID de la sucursal
+        
+        # Manejar medios de pago seleccionados
+        medios_seleccionados = request.form.getlist('medios')
+        medios_seleccionados = [int(m) for m in medios_seleccionados if m]
+        
+        # Obtener todos los medios de pago activos
+        todos_medios = MedioPago.query.filter_by(activo=True).all()
+        
+        # Crear relaciones con medios de pago seleccionados
+        for medio in todos_medios:
+            if medio.id in medios_seleccionados:
+                medio_sucursal = MedioSucursal(
+                    sucursal_id=suc.id,
+                    medio_pago_id=medio.id,
+                    activo=True
+                )
+                db.session.add(medio_sucursal)
+        
         db.session.commit()
         flash('Sucursal creada', 'success')
         return redirect(url_for('admin_sucursales'))
-    return render_template('crear_sucursal.html')
+    
+    # Obtener todos los medios de pago activos para el formulario
+    medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    return render_template('crear_sucursal.html', medios=medios)
 
 @app.route('/admin/sucursales/<int:sucursal_id>/editar', methods=['GET', 'POST'])
 @login_required
