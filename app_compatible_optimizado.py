@@ -1275,6 +1275,83 @@ def api_reportes_operaciones():
         return jsonify({'error': str(e)}), 500
 
 # Healthcheck optimizado
+@app.route('/api/dashboard/comisiones')
+@login_required
+def api_dashboard_comisiones():
+    """API para obtener comisiones actualizadas del dashboard"""
+    try:
+        if not current_user.es_admin:
+            return jsonify({'error': 'Acceso denegado'}), 403
+        
+        ahora = get_peru_time()
+        hoy = ahora.date()
+        año_actual = ahora.year
+        mes_actual = ahora.month
+        
+        # Calcular rango de tiempo para hoy en hora de Perú (00:00:00 a 23:59:59)
+        inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+        fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Calcular rango de tiempo para el mes (desde el primer día del mes hasta hoy)
+        inicio_mes = datetime.combine(datetime(año_actual, mes_actual, 1).date(), datetime.min.time()).replace(tzinfo=peru_tz)
+        
+        # Obtener todas las sucursales activas
+        sucursales_activas = Sucursal.query.filter_by(activa=True).all()
+        
+        # Obtener comisiones del día por sucursal
+        comisiones_hoy_query = db.session.query(
+            Operacion.sucursal_id,
+            db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+        ).filter(
+            Operacion.hora >= inicio_hoy,
+            Operacion.hora <= fin_hoy
+        ).group_by(Operacion.sucursal_id).all()
+        
+        comisiones_hoy_dict = {suc_id: float(total) for suc_id, total in comisiones_hoy_query}
+        
+        # Obtener comisiones del mes por sucursal
+        comisiones_mes_query = db.session.query(
+            Operacion.sucursal_id,
+            db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+        ).filter(
+            Operacion.hora >= inicio_mes,
+            Operacion.hora <= fin_hoy
+        ).group_by(Operacion.sucursal_id).all()
+        
+        comisiones_mes_dict = {suc_id: float(total) for suc_id, total in comisiones_mes_query}
+        
+        # Crear lista con todas las sucursales
+        comisiones_list = []
+        total_comision_hoy = 0.0
+        
+        for sucursal in sucursales_activas:
+            comision_hoy = comisiones_hoy_dict.get(sucursal.id, 0.0)
+            comision_mes = comisiones_mes_dict.get(sucursal.id, 0.0)
+            total_comision_hoy += comision_hoy
+            
+            comisiones_list.append({
+                'id': sucursal.id,
+                'nombre': sucursal.nombre,
+                'comision_hoy': comision_hoy,
+                'comision_mes': comision_mes
+            })
+        
+        return jsonify({
+            'success': True,
+            'comisiones_hoy': comisiones_list,
+            'total_comision_hoy': total_comision_hoy,
+            'timestamp': ahora.isoformat()
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return jsonify({'error': str(e), 'success': False}), 500
+
 @app.route('/ping')
 def ping():
     return jsonify({'status': 'ok', 'timestamp': get_peru_time().isoformat()})

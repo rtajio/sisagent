@@ -98,16 +98,20 @@
 <div class="row">
     <div class="col-12">
         <div class="card shadow mb-4">
-            <div class="card-header py-3">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #4e73df, #224abe);">
                 <h6 class="m-0 font-weight-bold text-white">
                     <i class="fas fa-chart-bar me-2"></i>
                     Comisiones por Sucursal - Hoy
                 </h6>
+                <span class="text-white small" id="ultima-actualizacion">
+                    <i class="fas fa-sync-alt me-1"></i>
+                    Última actualización: <span id="hora-actualizacion">--:--:--</span>
+                </span>
             </div>
-            <div class="card-body">
+            <div class="card-body" id="comisiones-container">
                 {% if comisiones_hoy %}
                 <div class="table-responsive">
-                    <table class="table table-bordered" width="100%" cellspacing="0">
+                    <table class="table table-bordered" width="100%" cellspacing="0" id="tabla-comisiones">
                         <thead>
                             <tr>
                                 <th>N°</th>
@@ -117,7 +121,7 @@
                                 <th>Acciones</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tbody-comisiones">
                             {% for sucursal_id, sucursal_nombre, total in comisiones_hoy %}
                             <tr>
                                 <td>{{ loop.index }}</td>
@@ -136,7 +140,7 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="text-center py-4">
+                <div class="text-center py-4" id="sin-comisiones">
                     <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
                     <p class="text-muted">No hay comisiones registradas hoy</p>
                 </div>
@@ -176,6 +180,103 @@ function updateTime() {
 // OPTIMIZACIÓN ULTRA FLUIDA: Actualizar hora cada minuto (no cada segundo)
 updateTime();
 setInterval(updateTime, 60000); // Cada minuto
+
+// Función para formatear hora en formato HH:MM:SS
+function formatearHora(fecha) {
+    const horas = String(fecha.getHours()).padStart(2, '0');
+    const minutos = String(fecha.getMinutes()).padStart(2, '0');
+    const segundos = String(fecha.getSeconds()).padStart(2, '0');
+    return `${horas}:${minutos}:${segundos}`;
+}
+
+// Función para actualizar las comisiones
+function actualizarComisiones() {
+    fetch('/api/dashboard/comisiones')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Actualizar la hora de última actualización
+                const horaEl = document.getElementById('hora-actualizacion');
+                if (horaEl) {
+                    horaEl.textContent = formatearHora(new Date());
+                }
+                
+                // Actualizar la tabla de comisiones
+                const tbody = document.getElementById('tbody-comisiones');
+                const sinComisiones = document.getElementById('sin-comisiones');
+                
+                if (data.comisiones_hoy && data.comisiones_hoy.length > 0) {
+                    // Ocultar mensaje de sin comisiones si existe
+                    if (sinComisiones) {
+                        sinComisiones.style.display = 'none';
+                    }
+                    
+                    // Mostrar tabla si está oculta
+                    const tabla = document.getElementById('tabla-comisiones');
+                    if (tabla && tabla.parentElement) {
+                        tabla.parentElement.style.display = 'block';
+                    }
+                    
+                    // Actualizar contenido de la tabla
+                    if (tbody) {
+                        tbody.innerHTML = '';
+                        data.comisiones_hoy.forEach((item, index) => {
+                            const row = tbody.insertRow();
+                            row.innerHTML = `
+                                <td>${index + 1}</td>
+                                <td>${item.nombre}</td>
+                                <td class="font-weight-bold text-success">S/ ${parseFloat(item.comision_hoy).toFixed(2)}</td>
+                                <td class="font-weight-bold text-primary">S/ ${parseFloat(item.comision_mes).toFixed(2)}</td>
+                                <td>
+                                    <a href="/operaciones?sucursal_id=${item.id}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i>
+                                        Ver Operaciones
+                                    </a>
+                                </td>
+                            `;
+                        });
+                    }
+                } else {
+                    // Mostrar mensaje de sin comisiones
+                    if (sinComisiones) {
+                        sinComisiones.style.display = 'block';
+                    }
+                    if (tbody) {
+                        tbody.innerHTML = '';
+                    }
+                }
+                
+                // Actualizar total de comisión hoy
+                const totalHoyEl = document.querySelector('.col-xl-3.col-md-6:has(.text-info) .h5');
+                if (totalHoyEl && data.total_comision_hoy !== undefined) {
+                    totalHoyEl.textContent = `S/ ${parseFloat(data.total_comision_hoy).toFixed(2)}`;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error al actualizar comisiones:', error);
+        });
+}
+
+// Actualizar comisiones cada 10 segundos
+document.addEventListener('DOMContentLoaded', function() {
+    // Actualizar inmediatamente al cargar
+    actualizarComisiones();
+    
+    // Actualizar cada 10 segundos
+    setInterval(actualizarComisiones, 10000);
+    
+    // Actualizar hora de última actualización cada segundo
+    const horaEl = document.getElementById('hora-actualizacion');
+    if (horaEl) {
+        setInterval(function() {
+            // Solo actualizar si no se está actualizando desde el servidor
+            if (!horaEl.dataset.updating) {
+                horaEl.textContent = formatearHora(new Date());
+            }
+        }, 1000);
+    }
+});
 
 // OPTIMIZACIÓN ULTRA FLUIDA: Lazy loading de tablas
 if ('IntersectionObserver' in window) {
