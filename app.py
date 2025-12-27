@@ -7,6 +7,7 @@ VERSIÓN COMPATIBLE ULTRA OPTIMIZADA
 import os
 import sys
 import json
+import threading
 from datetime import datetime, timedelta
 from decimal import Decimal
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
