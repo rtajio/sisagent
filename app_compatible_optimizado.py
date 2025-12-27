@@ -24,19 +24,9 @@ def get_peru_time():
     """Obtiene la hora actual en zona horaria de Perú"""
     return datetime.now(peru_tz)
 
-def get_peru_date_from_datetime(dt_column):
-    """
-    Extrae la fecha en zona horaria de Perú desde una columna datetime.
-    Funciona tanto para PostgreSQL como SQLite.
-    
-    Nota: Como las operaciones se guardan con get_peru_time() que ya incluye
-    la zona horaria de Perú, simplemente extraemos la fecha directamente.
-    Si la BD está configurada con timezone 'America/Lima', PostgreSQL
-    manejará la conversión automáticamente.
-    """
-    # Usar date() directamente - PostgreSQL con timezone configurado manejará la conversión
-    # SQLite no maneja timezones, pero las fechas ya están en hora de Perú
-    return db.func.date(dt_column)
+# Función removida - usar db.func.date() directamente en las consultas
+# Las operaciones se guardan con get_peru_time() que ya incluye la zona horaria de Perú
+# PostgreSQL está configurado con timezone 'America/Lima' en las conexiones
 
 def format_peru_time(dt):
     """Formatea una fecha/hora para mostrar en zona horaria de Perú"""
@@ -218,13 +208,13 @@ def get_dashboard_stats_cache(user_id, is_admin):
     if is_admin:
         # Estadísticas para admin
         operaciones_hoy = db.session.query(db.func.count(Operacion.id)).filter(
-            get_peru_date_from_datetime(Operacion.hora) == hoy
+            db.func.date(Operacion.hora) == hoy
         ).scalar() or 0
         
         total_operaciones = db.session.query(db.func.count(Operacion.id)).scalar() or 0
         
         comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
-            get_peru_date_from_datetime(Operacion.hora) == hoy
+            db.func.date(Operacion.hora) == hoy
         ).scalar() or 0
         
         total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).scalar() or 0
@@ -237,7 +227,7 @@ def get_dashboard_stats_cache(user_id, is_admin):
         # Estadísticas para usuario normal
         operaciones_hoy = db.session.query(db.func.count(Operacion.id)).filter(
             Operacion.usuario_id == user_id,
-            get_peru_date_from_datetime(Operacion.hora) == hoy
+            db.func.date(Operacion.hora) == hoy
         ).scalar() or 0
         
         total_operaciones = db.session.query(db.func.count(Operacion.id)).filter(
@@ -246,7 +236,7 @@ def get_dashboard_stats_cache(user_id, is_admin):
         
         comision_hoy = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
             Operacion.usuario_id == user_id,
-            get_peru_date_from_datetime(Operacion.hora) == hoy
+            db.func.date(Operacion.hora) == hoy
         ).scalar() or 0
         
         total_comision = db.session.query(db.func.coalesce(db.func.sum(Operacion.comision), 0.0)).filter(
@@ -329,7 +319,7 @@ def dashboard():
                 Sucursal.nombre,
                 db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
             ).join(Sucursal, Operacion.sucursal_id == Sucursal.id).filter(
-                get_peru_date_from_datetime(Operacion.hora) == hoy
+                db.func.date(Operacion.hora) == hoy
             ).group_by(Operacion.sucursal_id, Sucursal.nombre).all()
 
             comisiones_mes_query = db.session.query(
@@ -388,12 +378,10 @@ def operaciones():
             fecha = None
         
         if fecha:
-            # Usar función helper para extraer fecha en zona horaria de Perú
-            query = query.filter(get_peru_date_from_datetime(Operacion.hora) == fecha)
+            query = query.filter(db.func.date(Operacion.hora) == fecha)
     
     if not fecha or not current_user.es_admin:
-        # Usar función helper para extraer fecha en zona horaria de Perú
-        query = query.filter(get_peru_date_from_datetime(Operacion.hora) == hoy)
+        query = query.filter(db.func.date(Operacion.hora) == hoy)
     
     if medio:
         query = query.filter(Operacion.medio == medio)
