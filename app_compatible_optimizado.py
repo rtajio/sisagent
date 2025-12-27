@@ -543,13 +543,18 @@ def operaciones():
     hora_inicio = request.args.get('hora_inicio')
     hora_fin = request.args.get('hora_fin')
     
-    # Query base optimizada
+    # Query base optimizada según el rol del usuario
     if current_user.es_admin:
+        # Admin global: puede ver todas las operaciones
         query = Operacion.query
         if request.args.get('sucursal_id'):
             query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
-    else:
+    elif current_user.es_admin_de_sucursal():
+        # Admin de sucursal: puede ver operaciones de su sucursal
         query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
+    else:
+        # Usuario normal: solo puede ver sus propias operaciones
+        query = Operacion.query.filter_by(usuario_id=current_user.id)
     
     # Obtener fecha actual para comparación en hora de Perú
     ahora = get_peru_time()
@@ -563,7 +568,7 @@ def operaciones():
     # Aplicar filtros
     if fecha:
         fecha_objeto = datetime.strptime(fecha, '%Y-%m-%d').date()
-        if not current_user.es_admin and fecha_objeto != hoy:
+        if not current_user.es_admin_o_admin_sucursal() and fecha_objeto != hoy:
             flash('Solo los administradores pueden consultar operaciones de otros días', 'warning')
             fecha = None
         
@@ -576,10 +581,6 @@ def operaciones():
                 Operacion.hora >= inicio_fecha,
                 Operacion.hora <= fin_fecha
             )
-    
-    # Si es admin de sucursal, filtrar automáticamente por su sucursal
-    if current_user.es_admin_de_sucursal() and not current_user.es_admin:
-        query = query.filter(Operacion.sucursal_id == current_user.sucursal_id)
     
     if not fecha or not current_user.es_admin_o_admin_sucursal():
         # Usar rango de tiempo para hoy en hora de Perú
