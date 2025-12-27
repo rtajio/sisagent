@@ -1137,7 +1137,7 @@ def init_db():
                 else:
                     print(f"⚠️ Error al crear tablas (continuando): {e}")
             
-            # Crear o actualizar usuario admin
+            # Crear o actualizar usuario admin (FORZAR ACTUALIZACIÓN)
             admin = Usuario.query.filter_by(username='admin').first()
             if not admin:
                 admin = Usuario(
@@ -1145,15 +1145,30 @@ def init_db():
                     password_hash=generate_password_hash('61442159'),
                     es_admin=True
                 )
+                # Campos adicionales si existen
+                if hasattr(admin, 'activo'):
+                    admin.activo = True
+                if hasattr(admin, 'nombre_completo'):
+                    admin.nombre_completo = 'Administrador'
+                if hasattr(admin, 'email'):
+                    admin.email = 'admin@sisagent.com'
                 db.session.add(admin)
                 db.session.commit()
                 print("✅ Usuario admin creado")
             else:
-                # Actualizar contraseña del admin si ya existe
-                admin.password_hash = generate_password_hash('61442159')
+                # FORZAR actualización de contraseña del admin
+                nueva_hash = generate_password_hash('61442159')
+                admin.password_hash = nueva_hash
                 admin.es_admin = True  # Asegurar que sea admin
+                # Asegurar que esté activo
+                if hasattr(admin, 'activo'):
+                    admin.activo = True
                 db.session.commit()
-                print("✅ Contraseña del admin actualizada")
+                # Verificar que la contraseña funciona
+                if check_password_hash(admin.password_hash, '61442159'):
+                    print("✅ Contraseña del admin actualizada y verificada")
+                else:
+                    print("⚠️ Contraseña actualizada pero verificación falló")
             
             # Crear sucursal principal si no existe
             sucursal_principal = Sucursal.query.filter_by(nombre='Principal').first()
