@@ -386,30 +386,47 @@ def dashboard():
             inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
             fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
             fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            # Calcular rango de tiempo para el mes (desde el primer día del mes hasta hoy)
+            inicio_mes = datetime.combine(datetime(año_actual, mes_actual, 1).date(), datetime.min.time()).replace(tzinfo=peru_tz)
 
+            # Obtener todas las sucursales activas
+            sucursales_activas = Sucursal.query.filter_by(activa=True).all()
+            
+            # Obtener comisiones del día por sucursal
             comisiones_hoy_query = db.session.query(
                 Operacion.sucursal_id,
-                Sucursal.nombre,
                 db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
-            ).join(Sucursal, Operacion.sucursal_id == Sucursal.id).filter(
+            ).filter(
                 Operacion.hora >= inicio_hoy,
                 Operacion.hora <= fin_hoy
-            ).group_by(Operacion.sucursal_id, Sucursal.nombre).all()
+            ).group_by(Operacion.sucursal_id).all()
+            
+            comisiones_hoy_dict = {suc_id: float(total) for suc_id, total in comisiones_hoy_query}
 
+            # Obtener comisiones del mes por sucursal
             comisiones_mes_query = db.session.query(
                 Operacion.sucursal_id,
                 db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
             ).filter(
-                db.func.extract('year', Operacion.hora) == año_actual,
-                db.func.extract('month', Operacion.hora) == mes_actual
+                Operacion.hora >= inicio_mes,
+                Operacion.hora <= fin_hoy
             ).group_by(Operacion.sucursal_id).all()
+            
+            comisiones_mes_dict = {suc_id: float(total) for suc_id, total in comisiones_mes_query}
 
-            base_ctx['comisiones_hoy'] = [
-                (suc_id, nombre, float(total)) for suc_id, nombre, total in comisiones_hoy_query
-            ]
-            base_ctx['comisiones_mes'] = {
-                suc_id: float(total) for suc_id, total in comisiones_mes_query
-            }
+            # Crear lista con todas las sucursales, incluso si no tienen comisiones
+            comisiones_hoy_list = []
+            comisiones_mes_dict_final = {}
+            
+            for sucursal in sucursales_activas:
+                comision_hoy = comisiones_hoy_dict.get(sucursal.id, 0.0)
+                comision_mes = comisiones_mes_dict.get(sucursal.id, 0.0)
+                comisiones_hoy_list.append((sucursal.id, sucursal.nombre, comision_hoy))
+                comisiones_mes_dict_final[sucursal.id] = comision_mes
+
+            base_ctx['comisiones_hoy'] = comisiones_hoy_list
+            base_ctx['comisiones_mes'] = comisiones_mes_dict_final
 
             return render_template('admin_dashboard.html', **base_ctx)
         else:
