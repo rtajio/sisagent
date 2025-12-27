@@ -1137,7 +1137,7 @@ def init_db():
                 else:
                     print(f"⚠️ Error al crear tablas (continuando): {e}")
             
-            # Crear usuario admin si no existe
+            # Crear o actualizar usuario admin
             admin = Usuario.query.filter_by(username='admin').first()
             if not admin:
                 admin = Usuario(
@@ -1148,6 +1148,12 @@ def init_db():
                 db.session.add(admin)
                 db.session.commit()
                 print("✅ Usuario admin creado")
+            else:
+                # Actualizar contraseña del admin si ya existe
+                admin.password_hash = generate_password_hash('61442159')
+                admin.es_admin = True  # Asegurar que sea admin
+                db.session.commit()
+                print("✅ Contraseña del admin actualizada")
             
             # Crear sucursal principal si no existe
             sucursal_principal = Sucursal.query.filter_by(nombre='Principal').first()
