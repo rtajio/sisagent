@@ -160,6 +160,17 @@ print("✅ SQLAlchemy y LoginManager configurados")
 print("✅ Caché y compresión configurados")
 print("✅ Configuración de zona horaria completada")
 
+# Context processor para hacer disponibles las funciones de formato en templates
+@app.context_processor
+def inject_format_functions():
+    """Inyectar funciones de formato en el contexto de templates"""
+    return {
+        'format_peru_time': format_peru_time,
+        'format_peru_date': format_peru_date,
+        'format_peru_datetime': format_peru_datetime,
+        'format_peru_datetime_short': format_peru_datetime_short
+    }
+
 # Modelos de base de datos COMPATIBLES con la estructura existente
 class Sucursal(db.Model):
     __tablename__ = 'sucursal'
@@ -1132,6 +1143,75 @@ def crear_usuario():
     
     return render_template('crear_usuario.html', sucursales=sucursales)
 
+@app.route('/admin/usuarios/<int:usuario_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_usuario(usuario_id):
+    """Editar usuario existente - Admins de sucursal solo pueden editar usuarios de su sucursal"""
+    if not es_admin_o_admin_sucursal():
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    usuario = Usuario.query.get_or_404(usuario_id)
+    
+    # Si es admin de sucursal, solo puede editar usuarios de su sucursal
+    if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        if usuario.sucursal_id != current_user.sucursal_id:
+            flash('No tienes permisos para editar este usuario', 'error')
+            return redirect(url_for('admin_usuarios'))
+        # Los admins de sucursal no pueden editar el campo es_admin_sucursal
+        if request.method == 'POST' and 'es_admin_sucursal' in request.form:
+            flash('No tienes permisos para cambiar el rol de administrador de sucursal', 'error')
+            return redirect(url_for('editar_usuario', usuario_id=usuario_id))
+    
+    if request.method == 'POST':
+        nuevo_username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        sucursal_id = request.form.get('sucursal_id')
+        es_admin = 'es_admin' in request.form
+        es_admin_sucursal = 'es_admin_sucursal' in request.form if current_user.es_admin else False
+        
+        # Validaciones
+        if not nuevo_username:
+            flash('El nombre de usuario es requerido', 'error')
+            return redirect(url_for('editar_usuario', usuario_id=usuario_id))
+        
+        # Verificar si el nuevo username ya existe (excluyendo el usuario actual)
+        if nuevo_username != usuario.username:
+            usuario_existente = Usuario.query.filter_by(username=nuevo_username).first()
+            if usuario_existente and usuario_existente.id != usuario.id:
+                flash('El nombre de usuario ya existe', 'error')
+                return redirect(url_for('editar_usuario', usuario_id=usuario_id))
+        
+        # Actualizar campos
+        usuario.username = nuevo_username
+        if password:
+            usuario.password_hash = generate_password_hash(password)
+        
+        # Solo admin global puede cambiar estos campos
+        if current_user.es_admin:
+            usuario.es_admin = es_admin
+            if hasattr(usuario, 'es_admin_sucursal'):
+                usuario.es_admin_sucursal = es_admin_sucursal
+            if sucursal_id:
+                usuario.sucursal_id = int(sucursal_id) if sucursal_id else None
+        elif current_user.es_admin_de_sucursal():
+            # Admin de sucursal solo puede cambiar la sucursal si es de su sucursal
+            if sucursal_id and int(sucursal_id) == current_user.sucursal_id:
+                usuario.sucursal_id = int(sucursal_id)
+        
+        db.session.commit()
+        clear_cache()
+        flash('Usuario modificado exitosamente', 'success')
+        return redirect(url_for('admin_usuarios'))
+    
+    # Obtener sucursales disponibles según permisos
+    if current_user.es_admin:
+        sucursales = get_sucursales_activas_cache()
+    else:
+        sucursales = [current_user.sucursal] if current_user.sucursal else []
+    
+    return render_template('editar_usuario.html', usuario=usuario, sucursales=sucursales)
+
 @app.route('/admin/sucursales')
 @login_required
 def admin_sucursales():
@@ -1139,8 +1219,20 @@ def admin_sucursales():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    # OPTIMIZACIÓN ULTRA: Usar caché para sucursales
-    sucursales = get_sucursales_activas_cache()
+    # OPTIMIZACIÓN ULTRA: Cargar sucursales con eager loading de relaciones para evitar lazy load errors
+    sucursales = Sucursal.query.options(
+        joinedload(Sucursal.usuarios).load_only(Usuario.id),
+        joinedload(Sucursal.operaciones).load_only(Operacion.id)
+    ).filter_by(activa=True).all()
+    
+    # Contar usuarios y operaciones de forma optimizada
+    for sucursal in sucursales:
+        # Los usuarios y operaciones ya están cargados con eager loading
+        # Usar len() en lugar de .count() para evitar queries adicionales
+        if not hasattr(sucursal, '_usuarios_count'):
+            sucursal._usuarios_count = len([u for u in sucursal.usuarios])
+        if not hasattr(sucursal, '_operaciones_count'):
+            sucursal._operaciones_count = len([o for o in sucursal.operaciones])
     
     return render_template('admin_sucursales.html', sucursales=sucursales)
 
