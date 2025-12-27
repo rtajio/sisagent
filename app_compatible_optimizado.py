@@ -678,14 +678,21 @@ def admin_sucursales():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    sucursales = Sucursal.query.filter_by(activa=True).all()
-    for s in sucursales:
-        # backref usuarios viene como lista (lazy='joined'), usar len
-        s._usuarios_count = len(s.usuarios) if hasattr(s, 'usuarios') else 0
-        # operaciones es lazy='dynamic', usar count()
-        s._operaciones_count = Operacion.query.filter_by(sucursal_id=s.id).count()
-    
-    return render_template('admin_sucursales.html', sucursales=sucursales)
+    try:
+        sucursales = Sucursal.query.filter_by(activa=True).all()
+        for s in sucursales:
+            # Usar consultas directas para evitar problemas con backref
+            s._usuarios_count = Usuario.query.filter_by(sucursal_id=s.id).count()
+            s._operaciones_count = Operacion.query.filter_by(sucursal_id=s.id).count()
+        
+        return render_template('admin_sucursales.html', sucursales=sucursales)
+    except Exception as e:
+        import traceback
+        print(f"ERROR en admin_sucursales: {e}")
+        traceback.print_exc()
+        db.session.rollback()
+        flash('Error al cargar sucursales', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
 @login_required
