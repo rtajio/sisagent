@@ -740,22 +740,22 @@ def operaciones():
         if current_user.es_admin:
             # Admin global puede ver todas las sucursales
             query = Operacion.query.options(
-                joinedload(Operacion.usuario).load_only('id', 'username'),
-                joinedload(Operacion.sucursal).load_only('nombre')
+                joinedload(Operacion.usuario).load_only(Usuario.id, Usuario.username),
+                joinedload(Operacion.sucursal).load_only(Sucursal.nombre)
             )
             if request.args.get('sucursal_id'):
                 query = query.filter_by(sucursal_id=request.args.get('sucursal_id'))
         elif current_user.es_admin_de_sucursal():
             # Admin de sucursal solo ve operaciones de su sucursal
             query = Operacion.query.options(
-                joinedload(Operacion.usuario).load_only('id', 'username'),
-                joinedload(Operacion.sucursal).load_only('nombre')
+                joinedload(Operacion.usuario).load_only(Usuario.id, Usuario.username),
+                joinedload(Operacion.sucursal).load_only(Sucursal.nombre)
             ).filter_by(sucursal_id=current_user.sucursal_id)
         else:
             # Usuario normal solo ve sus propias operaciones de su sucursal
             query = Operacion.query.options(
-                joinedload(Operacion.usuario).load_only('id', 'username'),
-                joinedload(Operacion.sucursal).load_only('nombre')
+                joinedload(Operacion.usuario).load_only(Usuario.id, Usuario.username),
+                joinedload(Operacion.sucursal).load_only(Sucursal.nombre)
             ).filter_by(sucursal_id=current_user.sucursal_id, usuario_id=current_user.id)
         
         # Obtener fecha actual para comparación
@@ -955,7 +955,7 @@ def admin_usuarios():
     # OPTIMIZACIÓN ULTRA FLUIDA: Paginación optimizada con eager loading
     page = request.args.get('page', 1, type=int)
     query = Usuario.query.options(
-        joinedload(Usuario.sucursal).load_only('nombre')
+        joinedload(Usuario.sucursal).load_only(Sucursal.nombre)
     )
     
     # Si es admin de sucursal, solo mostrar usuarios de su sucursal
@@ -1144,6 +1144,43 @@ def admin_sucursales():
     
     return render_template('admin_sucursales.html', sucursales=sucursales)
 
+@app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
+@login_required
+def crear_sucursal():
+    """Crear nueva sucursal - Solo admin global"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        direccion = request.form.get('direccion', '').strip()
+        
+        if not nombre:
+            flash('El nombre de la sucursal es requerido', 'error')
+            return redirect(url_for('crear_sucursal'))
+        
+        # Verificar si ya existe una sucursal con ese nombre
+        if Sucursal.query.filter_by(nombre=nombre).first():
+            flash('Ya existe una sucursal con ese nombre', 'warning')
+            return redirect(url_for('crear_sucursal'))
+        
+        sucursal = Sucursal(
+            nombre=nombre,
+            direccion=direccion,
+            activa=True
+        )
+        db.session.add(sucursal)
+        db.session.commit()
+        
+        # Limpiar caché
+        clear_cache()
+        
+        flash('Sucursal creada exitosamente', 'success')
+        return redirect(url_for('admin_sucursales'))
+    
+    return render_template('crear_sucursal.html')
+
 # OPTIMIZACIÓN ULTRA FLUIDA: API para actualizar operaciones (edición inline)
 @app.route('/api/operaciones/<int:operacion_id>', methods=['PUT'])
 @login_required
@@ -1152,7 +1189,7 @@ def api_actualizar_operacion(operacion_id):
     try:
         # OPTIMIZACIÓN ULTRA FLUIDA: Eager load relacionado
         operacion = Operacion.query.options(
-            joinedload(Operacion.sucursal).load_only('id', 'nombre')
+            joinedload(Operacion.sucursal).load_only(Sucursal.id, Sucursal.nombre)
         ).get_or_404(operacion_id)
         
         # Verificar permisos optimizado
@@ -1317,8 +1354,8 @@ def api_reportes_operaciones():
         
         # OPTIMIZACIÓN: Query con eager loading para evitar N+1 queries - SIN LÍMITE para listar todas las operaciones
         operaciones = query.options(
-            joinedload(Operacion.usuario).load_only('id', 'username'),
-            joinedload(Operacion.sucursal).load_only('id', 'nombre')
+            joinedload(Operacion.usuario).load_only(Usuario.id, Usuario.username),
+            joinedload(Operacion.sucursal).load_only(Sucursal.id, Sucursal.nombre)
         ).order_by(Operacion.hora.desc()).all()
         
         # OPTIMIZACIÓN: Cache de medios de pago optimizado
@@ -1359,10 +1396,13 @@ def api_reportes_operaciones():
     
     except Exception as e:
         # En caso de error, devolver respuesta de error válida
-        if app.debug:
-            print(f"ERROR EN REPORTE: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ ERROR EN REPORTE: {str(e)}")
+        print(f"📋 Traceback completo:\n{error_trace}")
+        db.session.rollback()  # Limpiar transacción en caso de error
         return jsonify({
-            'error': 'Error al generar el reporte',
+            'error': f'Error al generar el reporte: {str(e)}',
             'operaciones': [],
             'total_operaciones': 0,
             'total_monto': 0.0,
