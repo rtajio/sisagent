@@ -179,6 +179,8 @@ class Sucursal(db.Model):
     direccion = db.Column(db.String(200))
     activa = db.Column(db.Boolean, default=True)
     operaciones = db.relationship('Operacion', backref='sucursal', lazy='dynamic')
+    # Relación explícita con usuarios para evitar problemas de lazy loading
+    usuarios = db.relationship('Usuario', backref='sucursal_rel', lazy='dynamic', foreign_keys='Usuario.sucursal_id')
 
 class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
@@ -1219,22 +1221,25 @@ def admin_sucursales():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    # OPTIMIZACIÓN ULTRA: Cargar sucursales con eager loading de relaciones para evitar lazy load errors
-    sucursales = Sucursal.query.options(
-        joinedload(Sucursal.usuarios).load_only(Usuario.id),
-        joinedload(Sucursal.operaciones).load_only(Operacion.id)
-    ).filter_by(activa=True).all()
-    
-    # Contar usuarios y operaciones de forma optimizada
-    for sucursal in sucursales:
-        # Los usuarios y operaciones ya están cargados con eager loading
-        # Usar len() en lugar de .count() para evitar queries adicionales
-        if not hasattr(sucursal, '_usuarios_count'):
-            sucursal._usuarios_count = len([u for u in sucursal.usuarios])
-        if not hasattr(sucursal, '_operaciones_count'):
-            sucursal._operaciones_count = len([o for o in sucursal.operaciones])
-    
-    return render_template('admin_sucursales.html', sucursales=sucursales)
+    try:
+        # SOLUCIÓN ROBUSTA: Usar consultas directas en lugar de relaciones lazy
+        sucursales = Sucursal.query.filter_by(activa=True).all()
+        
+        # Pre-calcular conteos usando consultas directas para evitar problemas de sesión
+        for sucursal in sucursales:
+            # Contar usuarios directamente desde la base de datos
+            sucursal._usuarios_count = db.session.query(db.func.count(Usuario.id)).filter_by(sucursal_id=sucursal.id).scalar() or 0
+            # Contar operaciones directamente desde la base de datos
+            sucursal._operaciones_count = db.session.query(db.func.count(Operacion.id)).filter_by(sucursal_id=sucursal.id).scalar() or 0
+        
+        return render_template('admin_sucursales.html', sucursales=sucursales)
+    except Exception as e:
+        print(f"❌ Error en admin_sucursales: {e}")
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        flash('Error al cargar sucursales', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/admin/sucursales/crear', methods=['GET', 'POST'])
 @login_required
