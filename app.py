@@ -180,6 +180,8 @@ class Usuario(UserMixin, db.Model):
     # OPTIMIZACIÓN ULTRA FLUIDA: Solo campos que existen en la BD real
     # NOTA: No incluir hora_creacion, created_at, email, nombre_completo si no existen en la BD
     operaciones = db.relationship('Operacion', backref='usuario', lazy='dynamic')
+    # Relación con Sucursal
+    sucursal = db.relationship('Sucursal', backref='usuarios', lazy='joined')
     
     def es_admin_completo(self):
         """Verificar si es admin global"""
