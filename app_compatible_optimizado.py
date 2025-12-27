@@ -403,7 +403,7 @@ def logout():
 def dashboard():
     """Redirige al dashboard según rol usando templates existentes"""
     try:
-    stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
+        stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
         base_ctx = {
             'total_sucursales': stats.get('sucursales_activas', 0),
             'total_usuarios': stats.get('usuarios_total', 0),
@@ -1102,8 +1102,8 @@ def admin_sucursales():
             except Exception as e:
                 print(f"Error contando operaciones para sucursal {s.id}: {e}")
                 s._operaciones_count = 0
-    
-    return render_template('admin_sucursales.html', sucursales=sucursales)
+        
+        return render_template('admin_sucursales.html', sucursales=sucursales)
     except Exception as e:
         import traceback
         error_msg = f"ERROR en admin_sucursales: {type(e).__name__}: {str(e)}"
