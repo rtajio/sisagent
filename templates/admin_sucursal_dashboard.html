@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Administrador de Sucursal - SISAGENT{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-tachometer-alt me-2"></i>
+        Dashboard Administrador de Sucursal
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <span class="text-muted">
+                <i class="fas fa-building me-1"></i>
+                {{ sucursal.nombre if sucursal else 'Sin sucursal' }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Estadísticas de la sucursal -->
+<div class="row mb-4">
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Comisión Hoy
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            S/ {{ "%.2f"|format(comision_hoy) }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Comisión del Mes
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            S/ {{ "%.2f"|format(comision_mes) }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Usuarios en Sucursal
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ usuarios_sucursal|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-users fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Comisiones por usuario -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-user-chart me-2"></i>
+                    Comisiones por Usuario - Hoy
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if comisiones_usuarios_hoy %}
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Usuario</th>
+                                <th class="text-end">Comisión Hoy</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in comisiones_usuarios_hoy %}
+                            <tr>
+                                <td>
+                                    <i class="fas fa-user me-2"></i>
+                                    {{ item.nombre }}
+                                </td>
+                                <td class="text-end font-weight-bold text-success">
+                                    S/ {{ "%.2f"|format(item.comision) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th class="text-end">Total:</th>
+                                <th class="text-end text-primary">
+                                    S/ {{ "%.2f"|format(comision_hoy) }}
+                                </th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    No hay comisiones registradas hoy para los usuarios de esta sucursal.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de usuarios de la sucursal -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-users me-2"></i>
+                    Usuarios de la Sucursal
+                </h6>
+                <a href="{{ url_for('crear_usuario') }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-user-plus me-1"></i>
+                    Crear Usuario
+                </a>
+            </div>
+            <div class="card-body">
+                {% if usuarios_sucursal %}
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Usuario</th>
+                                <th>Rol</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usuario in usuarios_sucursal %}
+                            <tr>
+                                <td>{{ usuario.nombre_completo or usuario.username }}</td>
+                                <td>{{ usuario.username }}</td>
+                                <td>
+                                    {% if usuario.es_admin %}
+                                        <span class="badge bg-danger">Admin Global</span>
+                                    {% elif usuario.es_admin_sucursal %}
+                                        <span class="badge bg-warning">Admin Sucursal</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Usuario</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    No hay usuarios asignados a esta sucursal.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

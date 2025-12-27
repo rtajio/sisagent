@@ -176,6 +176,22 @@ class Usuario(UserMixin, db.Model):
     # Relación con sucursal para evitar errores en templates
     sucursal = db.relationship('Sucursal', backref='usuarios', lazy='joined')
     operaciones = db.relationship('Operacion', backref='usuario', lazy='dynamic')
+    
+    def es_admin_de_sucursal(self):
+        """Verifica si el usuario es administrador de una sucursal"""
+        return self.es_admin_sucursal and self.sucursal_id is not None
+    
+    def es_admin_o_admin_sucursal(self):
+        """Verifica si el usuario es admin global o admin de sucursal"""
+        return self.es_admin or self.es_admin_de_sucursal()
+    
+    def puede_crear_usuario_en_sucursal(self, sucursal_id):
+        """Verifica si el usuario puede crear usuarios en una sucursal específica"""
+        if self.es_admin:
+            return True
+        if self.es_admin_de_sucursal():
+            return self.sucursal_id == sucursal_id
+        return False
 
 class Operacion(db.Model):
     __tablename__ = 'operacion'
@@ -376,7 +392,7 @@ def dashboard():
         }
 
         if current_user.es_admin:
-            # Calcular comisiones por sucursal (día y mes) para admin
+            # Calcular comisiones por sucursal (día y mes) para admin global
             ahora = get_peru_time()
             hoy = ahora.date()
             año_actual = ahora.year
@@ -429,6 +445,67 @@ def dashboard():
             base_ctx['comisiones_mes'] = comisiones_mes_dict_final
 
             return render_template('admin_dashboard.html', **base_ctx)
+        elif current_user.es_admin_de_sucursal():
+            # Dashboard para administrador de sucursal
+            ahora = get_peru_time()
+            hoy = ahora.date()
+            año_actual = ahora.year
+            mes_actual = ahora.month
+            
+            # Calcular rango de tiempo para hoy en hora de Perú (00:00:00 a 23:59:59)
+            inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+            fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+            fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            # Calcular rango de tiempo para el mes (desde el primer día del mes hasta hoy)
+            inicio_mes = datetime.combine(datetime(año_actual, mes_actual, 1).date(), datetime.min.time()).replace(tzinfo=peru_tz)
+            
+            sucursal_id = current_user.sucursal_id
+            
+            # Obtener comisiones del día para la sucursal
+            comision_hoy = db.session.query(
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+            ).filter(
+                Operacion.sucursal_id == sucursal_id,
+                Operacion.hora >= inicio_hoy,
+                Operacion.hora <= fin_hoy
+            ).scalar() or 0.0
+            
+            # Obtener comisiones del mes para la sucursal
+            comision_mes = db.session.query(
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+            ).filter(
+                Operacion.sucursal_id == sucursal_id,
+                Operacion.hora >= inicio_mes,
+                Operacion.hora <= fin_hoy
+            ).scalar() or 0.0
+            
+            # Obtener usuarios de la sucursal
+            usuarios_sucursal = Usuario.query.filter_by(sucursal_id=sucursal_id).all()
+            
+            # Calcular comisiones por usuario del día
+            comisiones_usuarios_hoy = []
+            for usuario in usuarios_sucursal:
+                comision_usuario_hoy = db.session.query(
+                    db.func.coalesce(db.func.sum(Operacion.comision), 0.0)
+                ).filter(
+                    Operacion.usuario_id == usuario.id,
+                    Operacion.hora >= inicio_hoy,
+                    Operacion.hora <= fin_hoy
+                ).scalar() or 0.0
+                comisiones_usuarios_hoy.append({
+                    'usuario_id': usuario.id,
+                    'nombre': usuario.nombre_completo or usuario.username,
+                    'comision': float(comision_usuario_hoy)
+                })
+            
+            base_ctx['comision_hoy'] = float(comision_hoy)
+            base_ctx['comision_mes'] = float(comision_mes)
+            base_ctx['usuarios_sucursal'] = usuarios_sucursal
+            base_ctx['comisiones_usuarios_hoy'] = comisiones_usuarios_hoy
+            base_ctx['sucursal'] = current_user.sucursal
+            
+            return render_template('admin_sucursal_dashboard.html', **base_ctx)
         else:
             # Para usuarios normales: agregar variables que el template espera
             ahora = get_peru_time()
@@ -500,7 +577,11 @@ def operaciones():
                 Operacion.hora <= fin_fecha
             )
     
-    if not fecha or not current_user.es_admin:
+    # Si es admin de sucursal, filtrar automáticamente por su sucursal
+    if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        query = query.filter(Operacion.sucursal_id == current_user.sucursal_id)
+    
+    if not fecha or not current_user.es_admin_o_admin_sucursal():
         # Usar rango de tiempo para hoy en hora de Perú
         query = query.filter(
             Operacion.hora >= inicio_hoy,
@@ -524,7 +605,7 @@ def operaciones():
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
-    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
+    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin global
     sucursales = []
     if current_user.es_admin:
         sucursales = get_sucursales_activas_cache()
@@ -688,13 +769,19 @@ def editar_operacion(operacion_id):
 @app.route('/admin/usuarios')
 @login_required
 def admin_usuarios():
-    if not current_user.es_admin:
+    if not current_user.es_admin_o_admin_sucursal():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
     # OPTIMIZACIÓN ULTRA: Paginación para usuarios
     page = request.args.get('page', 1, type=int)
-    usuarios_paginated = Usuario.query.paginate(
+    query = Usuario.query
+    
+    # Si es admin de sucursal, filtrar solo usuarios de su sucursal
+    if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        query = query.filter_by(sucursal_id=current_user.sucursal_id)
+    
+    usuarios_paginated = query.paginate(
         page=page, per_page=20, error_out=False
     )
     
@@ -702,31 +789,102 @@ def admin_usuarios():
                          usuarios=usuarios_paginated.items,
                          pagination=usuarios_paginated)
 
+@app.route('/admin/usuarios/crear', methods=['GET', 'POST'])
+@login_required
+def crear_usuario():
+    if not current_user.es_admin_o_admin_sucursal():
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        nombre_completo = request.form.get('nombre_completo', '').strip()
+        
+        # Si es admin de sucursal, asignar automáticamente a su sucursal
+        if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+            sucursal_id = current_user.sucursal_id
+            es_admin = False
+            es_admin_sucursal = False
+        else:
+            # Admin global puede asignar sucursal y roles
+            sucursal_id = request.form.get('sucursal_id')
+            sucursal_id = int(sucursal_id) if sucursal_id else None
+            es_admin = 'es_admin' in request.form
+            es_admin_sucursal = 'es_admin_sucursal' in request.form
+        
+        # Verificar si el usuario ya existe
+        if Usuario.query.filter_by(username=username).first():
+            flash('El nombre de usuario ya existe', 'error')
+            sucursales = Sucursal.query.filter_by(activa=True).all() if current_user.es_admin else []
+            return render_template('crear_usuario.html', sucursales=sucursales)
+        
+        nuevo_usuario = Usuario(
+            username=username,
+            password_hash=generate_password_hash(password),
+            nombre_completo=nombre_completo,
+            sucursal_id=sucursal_id,
+            es_admin=es_admin,
+            es_admin_sucursal=es_admin_sucursal
+        )
+        
+        db.session.add(nuevo_usuario)
+        db.session.commit()
+        flash('Usuario creado exitosamente', 'success')
+        return redirect(url_for('admin_usuarios'))
+    
+    # Obtener sucursales disponibles
+    if current_user.es_admin:
+        sucursales = Sucursal.query.filter_by(activa=True).all()
+    else:
+        # Admin de sucursal solo puede ver su sucursal
+        sucursales = [current_user.sucursal] if current_user.sucursal else []
+    
+    return render_template('crear_usuario.html', sucursales=sucursales)
+
 @app.route('/admin/usuarios/<int:usuario_id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_usuario(usuario_id):
-    if not current_user.es_admin:
+    if not current_user.es_admin_o_admin_sucursal():
         flash('Acceso denegado', 'error')
         return redirect(url_for('admin_usuarios'))
+    
     usuario = Usuario.query.get_or_404(usuario_id)
+    
+    # Si es admin de sucursal, solo puede editar usuarios de su sucursal
+    if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        if usuario.sucursal_id != current_user.sucursal_id:
+            flash('No tienes permisos para editar este usuario', 'error')
+            return redirect(url_for('admin_usuarios'))
+    
     if request.method == 'POST':
         nuevo_username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         nombre_completo = request.form.get('nombre_completo', '').strip()
-        sucursal_id = request.form.get('sucursal_id')
+        
         if nuevo_username:
             usuario.username = nuevo_username
         if password:
             usuario.password_hash = generate_password_hash(password)
         if nombre_completo:
             usuario.nombre_completo = nombre_completo
-        if sucursal_id:
-            usuario.sucursal_id = int(sucursal_id)
-        usuario.es_admin = 'es_admin' in request.form
+        
+        # Solo admin global puede cambiar sucursal y roles
+        if current_user.es_admin:
+            sucursal_id = request.form.get('sucursal_id')
+            if sucursal_id:
+                usuario.sucursal_id = int(sucursal_id)
+            usuario.es_admin = 'es_admin' in request.form
+            usuario.es_admin_sucursal = 'es_admin_sucursal' in request.form
+        else:
+            # Admin de sucursal solo puede asegurar que el usuario esté en su sucursal
+            usuario.sucursal_id = current_user.sucursal_id
+        
         db.session.commit()
         flash('Usuario actualizado', 'success')
         return redirect(url_for('admin_usuarios'))
-    sucursales = Sucursal.query.filter_by(activa=True).all()
+    
+    sucursales = Sucursal.query.filter_by(activa=True).all() if current_user.es_admin else [current_user.sucursal] if current_user.sucursal else []
     return render_template('editar_usuario.html', usuario=usuario, sucursales=sucursales)
 
 # Rutas mínimas para medios de pago (compatibilidad)
@@ -911,12 +1069,17 @@ def eliminar_sucursal(sucursal_id):
 @login_required
 def reportes():
     """Página de reportes para administradores."""
-    if not current_user.es_admin:
+    if not current_user.es_admin_o_admin_sucursal():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
     # Obtener sucursales y medios de pago
-    sucursales = get_sucursales_activas_cache()
+    if current_user.es_admin:
+        sucursales = get_sucursales_activas_cache()
+    else:
+        # Admin de sucursal solo ve su sucursal
+        sucursales = [current_user.sucursal] if current_user.sucursal else []
+    
     medios_pago = get_medios_pago_cache()
     
     return render_template('reportes.html', sucursales=sucursales, medios_pago=medios_pago)
@@ -926,7 +1089,7 @@ def reportes():
 def api_reportes_operaciones():
     """API para generar reportes de operaciones con filtros."""
     try:
-        if not current_user.es_admin:
+        if not current_user.es_admin_o_admin_sucursal():
             return jsonify({'error': 'Acceso denegado'}), 403
         
         # Obtener parámetros de filtro
@@ -936,6 +1099,10 @@ def api_reportes_operaciones():
         medio = request.args.get('medio')
         
         query = Operacion.query
+        
+        # Si es admin de sucursal, filtrar automáticamente por su sucursal
+        if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+            query = query.filter(Operacion.sucursal_id == current_user.sucursal_id)
         
         # Aplicar filtros de fecha usando rangos de tiempo en hora de Perú
         if fecha_inicio:
