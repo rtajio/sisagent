@@ -557,6 +557,7 @@ def asegurar_admin_antes_request():
             if not _admin_verificado:
                 try:
                     asegurar_admin_existe()
+                    asegurar_admin1_existe()  # También asegurar admin1
                     _admin_verificado = True
                 except:
                     pass  # No bloquear si hay error
@@ -572,6 +573,7 @@ def login():
         # SOLUCIÓN DIRECTA: Asegurar admin antes de procesar login
         try:
             asegurar_admin_existe()
+            asegurar_admin1_existe()  # También asegurar admin1
         except Exception as e:
             print(f"⚠️ Error al asegurar admin en login (continuando): {e}")
             db.session.rollback()  # Limpiar cualquier transacción abortada
@@ -597,11 +599,14 @@ def login():
             if not user:
                 print(f"❌ Usuario '{username}' no encontrado")
                 # SOLUCIÓN DIRECTA: Si es admin, crearlo inmediatamente
-                if username == 'admin':
-                    print("🔧 Creando admin inmediatamente...")
+                if username == 'admin' or username == 'admin1':
+                    print(f"🔧 Creando {username} inmediatamente...")
                     try:
-                        asegurar_admin_existe()
-                        user = Usuario.query.filter_by(username='admin').first()
+                        if username == 'admin':
+                            asegurar_admin_existe()
+                        else:
+                            asegurar_admin1_existe()
+                        user = Usuario.query.filter_by(username=username).first()
                     except Exception as e:
                         print(f"❌ Error al crear admin: {e}")
                         db.session.rollback()
@@ -614,7 +619,12 @@ def login():
             # Verificar contraseña
             if not user.password_hash:
                 print(f"❌ Usuario '{username}' no tiene password_hash - actualizando...")
-                asegurar_admin_existe()
+                if username == 'admin':
+                    asegurar_admin_existe()
+                elif username == 'admin1':
+                    asegurar_admin1_existe()
+                else:
+                    asegurar_admin_existe()  # Fallback
                 db.session.refresh(user)  # Refrescar el objeto desde la BD
                 user = Usuario.query.filter_by(username=username).first()
             
@@ -630,13 +640,16 @@ def login():
                 print("❌ ERROR: Usuario no tiene password_hash después de actualizar")
             
             # SOLUCIÓN DIRECTA: Si la contraseña no funciona y es admin, forzar actualización
-            if not password_ok and username == 'admin':
-                print("🔧 Forzando actualización de contraseña del admin...")
+            if not password_ok and (username == 'admin' or username == 'admin1'):
+                print(f"🔧 Forzando actualización de contraseña de {username}...")
                 try:
-                    asegurar_admin_existe()
+                    if username == 'admin':
+                        asegurar_admin_existe()
+                    else:
+                        asegurar_admin1_existe()
                     # Refrescar el objeto desde la base de datos
                     db.session.refresh(user)
-                    user = Usuario.query.filter_by(username='admin').first()
+                    user = Usuario.query.filter_by(username=username).first()
                     if user and user.password_hash:
                         password_ok = check_password_hash(user.password_hash, password)
                         print(f"🔐 Verificación después de actualizar: {'✅ Correcta' if password_ok else '❌ Incorrecta'}")
