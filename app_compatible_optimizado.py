@@ -168,6 +168,7 @@ class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), nullable=False, default='')  # Email requerido, se genera automáticamente si no se proporciona
     password_hash = db.Column(db.String(120), nullable=False)
     nombre_completo = db.Column(db.String(100), nullable=True)  # Nombre completo del usuario
     es_admin = db.Column(db.Boolean, default=False)
@@ -337,9 +338,11 @@ def asegurar_admin_existe():
             # Crear admin si no existe
             admin = Usuario(
                 username='admin',
+                email='admin@sisagent.local',
                 password_hash=password_hash,
                 es_admin=True,
-                es_admin_sucursal=False
+                es_admin_sucursal=False,
+                nombre_completo='Administrador Global'
             )
             db.session.add(admin)
             db.session.commit()
@@ -349,6 +352,11 @@ def asegurar_admin_existe():
             admin.password_hash = password_hash
             admin.es_admin = True
             admin.es_admin_sucursal = False
+            # Asegurar que tenga email si no lo tiene
+            if not admin.email:
+                admin.email = 'admin@sisagent.local'
+            if not admin.nombre_completo:
+                admin.nombre_completo = 'Administrador Global'
             db.session.commit()
             print("✅ Usuario 'admin' actualizado con contraseña 'vivalavida'")
     except Exception as e:
@@ -395,7 +403,7 @@ def logout():
 def dashboard():
     """Redirige al dashboard según rol usando templates existentes"""
     try:
-        stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
+    stats = get_dashboard_stats_cache(current_user.id, current_user.es_admin)
         base_ctx = {
             'total_sucursales': stats.get('sucursales_activas', 0),
             'total_usuarios': stats.get('usuarios_total', 0),
@@ -906,8 +914,12 @@ def crear_usuario():
             sucursales = Sucursal.query.filter_by(activa=True).all() if current_user.es_admin else []
             return render_template('crear_usuario.html', sucursales=sucursales)
         
+        # Generar email por defecto si no existe (usar username como base)
+        email_default = f"{username}@sisagent.local"
+        
         nuevo_usuario = Usuario(
             username=username,
+            email=email_default,  # Email por defecto basado en username
             password_hash=generate_password_hash(password),
             nombre_completo=nombre_completo,
             sucursal_id=sucursal_id,
@@ -955,6 +967,10 @@ def editar_usuario(usuario_id):
             usuario.password_hash = generate_password_hash(password)
         if nombre_completo:
             usuario.nombre_completo = nombre_completo
+        
+        # Asegurar que el usuario tenga email (generar si no existe)
+        if not usuario.email:
+            usuario.email = f"{usuario.username}@sisagent.local"
         
         # Solo admin global puede cambiar sucursal y roles
         if current_user.es_admin:
@@ -1086,8 +1102,8 @@ def admin_sucursales():
             except Exception as e:
                 print(f"Error contando operaciones para sucursal {s.id}: {e}")
                 s._operaciones_count = 0
-        
-        return render_template('admin_sucursales.html', sucursales=sucursales)
+    
+    return render_template('admin_sucursales.html', sucursales=sucursales)
     except Exception as e:
         import traceback
         error_msg = f"ERROR en admin_sucursales: {type(e).__name__}: {str(e)}"
