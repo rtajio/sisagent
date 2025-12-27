@@ -11,7 +11,6 @@ from decimal import Decimal
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_login import current_user as flask_current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_caching import Cache
 from flask_compress import Compress
@@ -140,7 +139,8 @@ def handle_error(e):
     
     # Si el usuario está autenticado, redirigir al dashboard con mensaje de error
     try:
-        if flask_current_user.is_authenticated:
+        from flask_login import current_user
+        if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
             flash(f'Error: {str(e)}', 'error')
             return redirect(url_for('dashboard'))
     except:
