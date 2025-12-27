@@ -1262,9 +1262,17 @@ def api_reportes_operaciones():
         
         query = Operacion.query
         
-        # Si es admin de sucursal, filtrar automáticamente por su sucursal
+        # Si es admin de sucursal, filtrar automáticamente por su sucursal (ignorar parámetro sucursal_id)
         if current_user.es_admin_de_sucursal() and not current_user.es_admin:
-            query = query.filter(Operacion.sucursal_id == current_user.sucursal_id)
+            if current_user.sucursal_id:
+                query = query.filter(Operacion.sucursal_id == current_user.sucursal_id)
+        elif sucursal_id and sucursal_id.strip():
+            # Solo aplicar filtro de sucursal si es admin global
+            try:
+                sucursal_id_int = int(sucursal_id)
+                query = query.filter(Operacion.sucursal_id == sucursal_id_int)
+            except ValueError:
+                pass  # Ignorar si no se puede convertir
         
         # Aplicar filtros de fecha usando rangos de tiempo en hora de Perú
         if fecha_inicio:
@@ -1277,13 +1285,6 @@ def api_reportes_operaciones():
             fin_fecha = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
             fin_fecha = fin_fecha.replace(hour=23, minute=59, second=59, microsecond=999999)
             query = query.filter(Operacion.hora <= fin_fecha)
-        
-        if sucursal_id and sucursal_id.strip():
-            try:
-                sucursal_id_int = int(sucursal_id)
-                query = query.filter(Operacion.sucursal_id == sucursal_id_int)
-            except ValueError:
-                pass  # Ignorar si no se puede convertir
         
         if medio:
             query = query.filter(Operacion.medio == medio)

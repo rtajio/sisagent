@@ -541,6 +541,33 @@
                             </a>
                         </li>
                         
+                        {% elif current_user.es_admin_sucursal %}
+                        {# Menú para administrador de sucursal #}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
+                                <i class="fas fa-list me-2"></i>
+                                Operaciones
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_usuarios' %}active{% endif %}" href="{{ url_for('admin_usuarios') }}">
+                                <i class="fas fa-users me-2"></i>
+                                Usuarios
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'reportes' %}active{% endif %}" href="{{ url_for('reportes') }}">
+                                <i class="fas fa-chart-bar me-2"></i>
+                                Reportes
+                            </a>
+                        </li>
+                        
                         {% else %}
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
