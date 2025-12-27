@@ -71,19 +71,39 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Medios de Pago Activos</label>
+                        <label class="form-label">
+                            <i class="fas fa-credit-card me-1"></i>
+                            Medios de Pago Habilitados
+                        </label>
                         <div class="row g-2">
-                            {% for medio in medios %}
-                            <div class="col-md-4">
-                                <div class="form-switch d-flex align-items-center mb-2">
-                                    <input type="checkbox" class="form-check-input switch-medio" name="medios" id="medio{{ medio.id }}" value="{{ medio.id }}" autocomplete="off" {% if medio.id in medios_activos %}checked{% endif %} style="width:2.5em;height:1.5em;">
-                                    <label class="ms-2" for="medio{{ medio.id }}">
-                                        <span class="fw-bold">{{ medio.nombre_abreviado }}</span>
-                                        <span class="text-muted small">({{ medio.nombre_completo }})</span>
-                                    </label>
+                            {% if medios %}
+                                {% for medio in medios %}
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch">
+                                        <input type="checkbox" 
+                                               class="form-check-input" 
+                                               name="medios" 
+                                               id="medio{{ medio.id }}" 
+                                               value="{{ medio.id }}"
+                                               {% if medio.id in medios_activos %}checked{% endif %}>
+                                        <label class="form-check-label" for="medio{{ medio.id }}">
+                                            <span class="fw-bold">{{ medio.nombre_abreviado }}</span>
+                                            <span class="text-muted small">({{ medio.nombre_completo }})</span>
+                                        </label>
+                                    </div>
                                 </div>
-                            </div>
-                            {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <div class="col-12">
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        No hay medios de pago disponibles. Cree medios de pago desde el menú "Medios de Pago".
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-text">
+                            Seleccione los medios de pago que estarán disponibles para esta sucursal.
                         </div>
                     </div>
                     
@@ -129,31 +149,6 @@ document.getElementById('sucursalForm').addEventListener('submit', function(e) {
     }
 });
 
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.switch-medio').forEach(function(switchInput) {
-        switchInput.addEventListener('change', function() {
-            const medioId = this.value;
-            const activo = this.checked;
-            fetch(`/admin/sucursales/{{ sucursal.id }}/toggle_medio`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `medio_id=${medioId}&activo=${activo}`
-            })
-            .then(resp => resp.json())
-            .then(data => {
-                if (data.success) {
-                    // Cambia el color del switch
-                    if (data.activo) {
-                        this.classList.add('is-valid');
-                        this.classList.remove('is-invalid');
-                    } else {
-                        this.classList.remove('is-valid');
-                        this.classList.add('is-invalid');
-                    }
-                }
-            }.bind(this));
-        });
-    });
-});
+// Los cambios se guardan al enviar el formulario
 </script>
 {% endblock %} 

@@ -211,6 +211,19 @@ class MedioPago(db.Model):
     activo = db.Column(db.Boolean, default=True)
     orden = db.Column(db.Integer, default=0)
 
+class MedioSucursal(db.Model):
+    """Tabla intermedia para la relación many-to-many entre Sucursal y MedioPago"""
+    __tablename__ = 'medio_sucursal'
+    id = db.Column(db.Integer, primary_key=True)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False, index=True)
+    medio_pago_id = db.Column(db.Integer, db.ForeignKey('medio_pago.id'), nullable=False, index=True)
+    activo = db.Column(db.Boolean, default=True, index=True)
+    sucursal = db.relationship('Sucursal', backref='medios_sucursal')
+    medio_pago = db.relationship('MedioPago', backref='sucursales_medio')
+    
+    # Evitar duplicados
+    __table_args__ = (db.UniqueConstraint('sucursal_id', 'medio_pago_id', name='uq_sucursal_medio'),)
+
 class ComisionDiaria(db.Model):
     __tablename__ = 'comision_diaria'
     id = db.Column(db.Integer, primary_key=True)
@@ -1046,13 +1059,64 @@ def editar_sucursal(sucursal_id):
     if request.method == 'POST':
         nombre = request.form.get('nombre', '').strip()
         direccion = request.form.get('direccion', '').strip()
+        activa = 'activa' in request.form
+        
         if nombre:
             suc.nombre = nombre
         suc.direccion = direccion
+        suc.activa = activa
+        
+        # Manejar medios de pago seleccionados
+        medios_seleccionados = request.form.getlist('medios')
+        medios_seleccionados = [int(m) for m in medios_seleccionados if m]
+        
+        # Obtener todos los medios de pago activos
+        todos_medios = MedioPago.query.filter_by(activo=True).all()
+        
+        # Actualizar la relación con medios de pago
+        for medio in todos_medios:
+            medio_sucursal = MedioSucursal.query.filter_by(
+                sucursal_id=suc.id,
+                medio_pago_id=medio.id
+            ).first()
+            
+            if medio.id in medios_seleccionados:
+                # Debe estar activo
+                if not medio_sucursal:
+                    # Crear nueva relación
+                    medio_sucursal = MedioSucursal(
+                        sucursal_id=suc.id,
+                        medio_pago_id=medio.id,
+                        activo=True
+                    )
+                    db.session.add(medio_sucursal)
+                else:
+                    # Activar si estaba desactivado
+                    medio_sucursal.activo = True
+            else:
+                # Debe estar desactivado
+                if medio_sucursal:
+                    medio_sucursal.activo = False
+                # Si no existe, no crear (solo desactivar si existe)
+        
         db.session.commit()
         flash('Sucursal actualizada', 'success')
         return redirect(url_for('admin_sucursales'))
-    return render_template('editar_sucursal.html', sucursal=suc)
+    
+    # Obtener medios de pago activos para esta sucursal
+    medios_activos = db.session.query(MedioSucursal.medio_pago_id).filter_by(
+        sucursal_id=suc.id,
+        activo=True
+    ).all()
+    medios_activos_ids = [m[0] for m in medios_activos]
+    
+    # Obtener todos los medios de pago activos
+    medios = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    
+    return render_template('editar_sucursal.html', 
+                         sucursal=suc, 
+                         medios=medios, 
+                         medios_activos=medios_activos_ids)
 
 @app.route('/admin/sucursales/<int:sucursal_id>/eliminar', methods=['POST'])
 @login_required
