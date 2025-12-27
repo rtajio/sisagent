@@ -970,6 +970,109 @@ def admin_usuarios():
                          usuarios=usuarios_paginated.items,
                          pagination=usuarios_paginated)
 
+# Rutas de administración de medios de pago
+@app.route('/admin/medios', methods=['GET', 'POST'])
+@login_required
+def admin_medios():
+    """Administrar medios de pago - Solo admin global"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        nombre_abreviado = request.form.get('nombre_abreviado', '').strip()
+        nombre_completo = request.form.get('nombre_completo', '').strip()
+        if nombre_abreviado and nombre_completo:
+            if not MedioPago.query.filter_by(nombre_abreviado=nombre_abreviado).first():
+                medio = MedioPago(
+                    nombre_abreviado=nombre_abreviado,
+                    nombre_completo=nombre_completo,
+                    activo=True,
+                    orden=0
+                )
+                db.session.add(medio)
+                db.session.commit()
+                flash('Medio de pago agregado', 'success')
+            else:
+                flash('Ese nombre abreviado ya existe', 'warning')
+        return redirect(url_for('admin_medios'))
+    
+    medios = MedioPago.query.order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    return render_template('admin_medios.html', medios=medios)
+
+@app.route('/admin/medios/<int:medio_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_medio(medio_id):
+    """Eliminar medio de pago - Solo admin global"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    db.session.delete(medio)
+    db.session.commit()
+    flash('Medio de pago eliminado', 'success')
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_medio(medio_id):
+    """Editar medio de pago - Solo admin global"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    if request.method == 'POST':
+        nombre_abreviado = request.form.get('nombre_abreviado', '').strip()
+        nombre_completo = request.form.get('nombre_completo', '').strip()
+        if nombre_abreviado and nombre_completo:
+            medio.nombre_abreviado = nombre_abreviado
+            medio.nombre_completo = nombre_completo
+            db.session.commit()
+            flash('Medio de pago editado', 'success')
+        return redirect(url_for('admin_medios'))
+    return render_template('editar_medio.html', medio=medio)
+
+@app.route('/admin/medios/<int:medio_id>/activar', methods=['POST'])
+@login_required
+def activar_medio(medio_id):
+    """Activar/Desactivar medio de pago - Solo admin global"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    medio.activo = not medio.activo
+    db.session.commit()
+    flash('Estado de medio actualizado', 'success')
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/subir', methods=['POST'])
+@login_required
+def subir_medio(medio_id):
+    """Subir orden de medio de pago - Solo admin global"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    anterior = MedioPago.query.filter(MedioPago.orden < medio.orden).order_by(MedioPago.orden.desc()).first()
+    if anterior:
+        medio.orden, anterior.orden = anterior.orden, medio.orden
+        db.session.commit()
+    return redirect(url_for('admin_medios'))
+
+@app.route('/admin/medios/<int:medio_id>/bajar', methods=['POST'])
+@login_required
+def bajar_medio(medio_id):
+    """Bajar orden de medio de pago - Solo admin global"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+    medio = MedioPago.query.get_or_404(medio_id)
+    siguiente = MedioPago.query.filter(MedioPago.orden > medio.orden).order_by(MedioPago.orden.asc()).first()
+    if siguiente:
+        medio.orden, siguiente.orden = siguiente.orden, medio.orden
+        db.session.commit()
+    return redirect(url_for('admin_medios'))
+
 @app.route('/admin/usuarios/crear', methods=['GET', 'POST'])
 @login_required
 def crear_usuario():
