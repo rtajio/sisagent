@@ -1291,13 +1291,13 @@ def api_reportes_operaciones():
         # Cache de medios de pago
         medios_cache = {mp.nombre_abreviado: mp.nombre_completo for mp in MedioPago.query.filter_by(activo=True).all()}
         
-        # Obtener operaciones con límite para evitar sobrecarga
+        # Obtener todas las operaciones sin límite (según filtros aplicados)
         # Usar joinedload para cargar relaciones de forma eficiente
         from sqlalchemy.orm import joinedload
         operaciones = query.options(
             joinedload(Operacion.usuario).load_only(Usuario.id, Usuario.username, Usuario.nombre_completo),
             joinedload(Operacion.sucursal).load_only(Sucursal.id, Sucursal.nombre)
-        ).order_by(Operacion.hora.desc()).limit(1000).all()
+        ).order_by(Operacion.hora.desc()).all()
         
         # Procesar datos
         datos = []
