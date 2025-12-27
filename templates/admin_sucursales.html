@@ -55,10 +55,10 @@
                             {% endif %}
                         </td>
                         <td>
-                            <span class="badge bg-info">{{ sucursal._usuarios_count if hasattr(sucursal, '_usuarios_count') else 0 }}</span>
+                            <span class="badge bg-info">{{ sucursal._usuarios_count|default(0) }}</span>
                         </td>
                         <td>
-                            <span class="badge bg-primary">{{ sucursal._operaciones_count if hasattr(sucursal, '_operaciones_count') else 0 }}</span>
+                            <span class="badge bg-primary">{{ sucursal._operaciones_count|default(0) }}</span>
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
