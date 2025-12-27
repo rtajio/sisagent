@@ -585,12 +585,10 @@ def admin_sucursales():
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     
-    # Evitar eager-load sobre relaciones lazy='dynamic'
-    sucursales = get_sucursales_activas_cache()
-    # Precalcular conteos con len() sobre dynamic (hace count en BD)
+    sucursales = Sucursal.query.filter_by(activa=True).all()
     for s in sucursales:
-        s._usuarios_count = s.usuarios.count() if hasattr(s, 'usuarios') else 0
-        s._operaciones_count = s.operaciones.count() if hasattr(s, 'operaciones') else 0
+        s._usuarios_count = Usuario.query.filter_by(sucursal_id=s.id).count()
+        s._operaciones_count = Operacion.query.filter_by(sucursal_id=s.id).count()
     
     return render_template('admin_sucursales.html', sucursales=sucursales)
 
