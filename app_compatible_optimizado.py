@@ -541,21 +541,6 @@ def eliminar_usuario(usuario_id):
     flash('Usuario eliminado', 'success')
     return redirect(url_for('admin_usuarios'))
 
-@app.route('/admin/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
-@login_required
-def eliminar_usuario(usuario_id):
-    """Eliminar usuario: solo admin global; evita borrar admins principales."""
-    if not current_user.es_admin:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('admin_usuarios'))
-    usuario = Usuario.query.get_or_404(usuario_id)
-    if usuario.username in ('admin', 'admin1'):
-        flash('No se puede eliminar este usuario', 'warning')
-        return redirect(url_for('admin_usuarios'))
-    db.session.delete(usuario)
-    db.session.commit()
-    flash('Usuario eliminado', 'success')
-    return redirect(url_for('admin_usuarios'))
 
 @app.route('/admin/sucursales')
 @login_required
