@@ -320,7 +320,14 @@ function guardarCambios(id, usuarioOriginal) {
     })
     .then(resp => {
         clearTimeout(timeoutId);
-        if (!resp.ok) throw new Error('Error del servidor');
+        if (!resp.ok) {
+            // Intentar obtener el mensaje de error del servidor
+            return resp.json().then(data => {
+                throw new Error(data.message || data.error || 'Error del servidor');
+            }).catch(() => {
+                throw new Error(`Error del servidor: ${resp.status} ${resp.statusText}`);
+            });
+        }
         return resp.json();
     })
     .then(data => {
@@ -329,7 +336,8 @@ function guardarCambios(id, usuarioOriginal) {
             // Actualizar la fila inmediatamente sin recargar
             actualizarFila(id, data.monto, data.comision, data.medio, usuarioOriginal);
         } else {
-            showNotification('Error al actualizar la operación', 'error');
+            const errorMsg = data.message || 'Error al actualizar la operación';
+            showNotification(errorMsg, 'error');
             btnSave.disabled = false;
             btnSave.innerHTML = originalHTML;
         }
@@ -339,7 +347,9 @@ function guardarCambios(id, usuarioOriginal) {
         if (err.name === 'AbortError') {
             showNotification('Tiempo de espera agotado. Por favor intente nuevamente.', 'error');
         } else {
-            showNotification('Error de red al actualizar la operación', 'error');
+            const errorMsg = err.message || 'Error de red al actualizar la operación';
+            showNotification(errorMsg, 'error');
+            console.error('Error al actualizar operación:', err);
         }
         btnSave.disabled = false;
         btnSave.innerHTML = originalHTML;

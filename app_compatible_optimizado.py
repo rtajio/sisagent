@@ -773,6 +773,79 @@ def editar_operacion(operacion_id):
         return redirect(url_for('operaciones'))
     
     # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
+
+@app.route('/api/operaciones/<int:operacion_id>', methods=['PUT'])
+@login_required
+def api_actualizar_operacion(operacion_id):
+    """API para actualizar operaciones (edición inline)"""
+    try:
+        # Obtener la operación
+        operacion = Operacion.query.get_or_404(operacion_id)
+        
+        # Verificar permisos
+        if not current_user.es_admin:
+            # Si no es admin, verificar que sea el dueño o admin de sucursal
+            if operacion.usuario_id != current_user.id:
+                if not current_user.es_admin_de_sucursal() or operacion.sucursal_id != current_user.sucursal_id:
+                    return jsonify({'success': False, 'message': 'No tienes permisos para editar esta operación'}), 403
+        
+        # Obtener datos del JSON
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'No se recibieron datos'}), 400
+        
+        monto = data.get('monto')
+        comision = data.get('comision')
+        medio = data.get('medio')
+        
+        # Validar datos
+        if monto is None or comision is None or not medio:
+            return jsonify({'success': False, 'message': 'Todos los campos son requeridos'}), 400
+        
+        try:
+            monto = float(monto)
+            comision = float(comision)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Monto y comisión deben ser números válidos'}), 400
+        
+        if monto <= 0:
+            return jsonify({'success': False, 'message': 'El monto debe ser mayor a 0'}), 400
+        
+        if comision < 0:
+            return jsonify({'success': False, 'message': 'La comisión no puede ser negativa'}), 400
+        
+        # Validar medio de pago
+        medio_valido = MedioPago.query.filter_by(nombre_abreviado=medio, activo=True).first()
+        if not medio_valido:
+            return jsonify({'success': False, 'message': 'Medio de pago no válido'}), 400
+        
+        # Actualizar operación
+        operacion.monto = monto
+        operacion.comision = comision
+        operacion.medio = medio
+        
+        db.session.commit()
+        
+        # Limpiar caché después de cambios
+        clear_cache()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Operación actualizada exitosamente',
+            'monto': float(monto),
+            'comision': float(comision),
+            'medio': medio
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return jsonify({'success': False, 'message': f'Error al actualizar la operación: {str(e)}'}), 500
+    
+    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
     sucursales = []
     if current_user.es_admin:
         sucursales = get_sucursales_activas_cache()
