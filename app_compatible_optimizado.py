@@ -291,7 +291,37 @@ def dashboard():
             'comisiones_mes': {},
             **stats,
         }
+
         if current_user.es_admin:
+            # Calcular comisiones por sucursal (día y mes) para admin
+            hoy = get_peru_time().date()
+            ahora = get_peru_time()
+            año_actual = ahora.year
+            mes_actual = ahora.month
+
+            comisiones_hoy_query = db.session.query(
+                Operacion.sucursal_id,
+                Sucursal.nombre,
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+            ).join(Sucursal, Operacion.sucursal_id == Sucursal.id).filter(
+                db.func.date(Operacion.hora) == hoy
+            ).group_by(Operacion.sucursal_id, Sucursal.nombre).all()
+
+            comisiones_mes_query = db.session.query(
+                Operacion.sucursal_id,
+                db.func.coalesce(db.func.sum(Operacion.comision), 0.0).label('total')
+            ).filter(
+                db.func.extract('year', Operacion.hora) == año_actual,
+                db.func.extract('month', Operacion.hora) == mes_actual
+            ).group_by(Operacion.sucursal_id).all()
+
+            base_ctx['comisiones_hoy'] = [
+                (suc_id, nombre, float(total)) for suc_id, nombre, total in comisiones_hoy_query
+            ]
+            base_ctx['comisiones_mes'] = {
+                suc_id: float(total) for suc_id, total in comisiones_mes_query
+            }
+
             return render_template('admin_dashboard.html', **base_ctx)
         else:
             return render_template('user_dashboard.html', **base_ctx)
