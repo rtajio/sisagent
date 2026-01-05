@@ -3,6 +3,27 @@
 {% block title %}Operaciones - SISAGENT{% endblock %}
 
 {% block content %}
+<style>
+/* Estilos mejorados para el foco del botón REGISTRAR OPERACIÓN */
+#btnRegistrar:focus {
+    outline: 4px solid #ffc107 !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+    transform: scale(1.02);
+    transition: all 0.2s ease-in-out;
+}
+
+#btnRegistrar:focus:not(:active) {
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+}
+
+#btnRegistrar:focus-visible {
+    outline: 4px solid #ffc107 !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+}
+</style>
 <div class="container-fluid">
     <!-- Mostrar comisión del día si se accede desde dashboard admin -->
     {% if request.args.get('sucursal_id') and current_user.es_admin %}
