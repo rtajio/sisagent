@@ -54,21 +54,29 @@
                         </td>
                         <td>{{ usuario.sucursal.nombre if usuario.sucursal else 'Sin sucursal' }}</td>
                         {% endif %}
-                        <!-- Indicador de sesión -->
+                        <!-- Indicador de sesión en tiempo real -->
                         <td class="text-center">
                             {% if usuario.id == current_user.id %}
-                            <span class="badge" style="background:var(--success); font-size:.7rem;">
-                                <i class="fas fa-circle me-1"></i>Tú
-                            </span>
-                            {% elif usuario.session_token %}
                             <span class="badge sesion-badge-{{ usuario.id }}"
-                                  style="background:var(--info); font-size:.7rem;"
-                                  title="Puede tener sesión activa">
-                                <i class="fas fa-circle me-1"></i>Activo
+                                  style="background:var(--success); font-size:.7rem;">
+                                <i class="fas fa-circle me-1"></i>En línea
+                            </span>
+                            {% elif usuario.esta_en_linea() %}
+                            <span class="badge sesion-badge-{{ usuario.id }}"
+                                  style="background:var(--success); font-size:.7rem;"
+                                  title="Activo hace menos de 10 minutos">
+                                <i class="fas fa-circle me-1"></i>En línea
+                            </span>
+                            {% elif usuario.ultimo_acceso %}
+                            <span class="badge sesion-badge-{{ usuario.id }}"
+                                  style="background:var(--text-muted); font-size:.7rem;"
+                                  title="Último acceso: {{ format_peru_datetime_short(usuario.ultimo_acceso) }}">
+                                <i class="fas fa-clock me-1"></i>{{ format_peru_datetime_short(usuario.ultimo_acceso) }}
                             </span>
                             {% else %}
-                            <span class="badge" style="background:var(--text-muted); font-size:.7rem;">
-                                <i class="fas fa-circle me-1"></i>Sin sesión
+                            <span class="badge sesion-badge-{{ usuario.id }}"
+                                  style="background:var(--bg-inset); color:var(--text-muted); font-size:.7rem;">
+                                <i class="fas fa-minus me-1"></i>Sin acceso
                             </span>
                             {% endif %}
                         </td>

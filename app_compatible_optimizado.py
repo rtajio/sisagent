@@ -210,13 +210,23 @@ class Usuario(UserMixin, db.Model):
     es_admin_sucursal = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
     # Token de sesión: se regenera al cambiar contraseña o al forzar cierre de sesión
-    session_token = db.Column(db.String(36), nullable=True)
+    session_token  = db.Column(db.String(36), nullable=True)
+    # Último acceso: se actualiza en cada request autenticado (para presencia en tiempo real)
+    ultimo_acceso  = db.Column(db.DateTime, nullable=True)
     sucursal = db.relationship('Sucursal', backref='usuarios', lazy='joined')
     operaciones = db.relationship('Operacion', backref='usuario', lazy='dynamic')
 
     def regenerate_session_token(self):
         """Genera un nuevo token, invalidando todas las sesiones activas."""
         self.session_token = str(uuid.uuid4())
+
+    def esta_en_linea(self):
+        """True si el usuario tuvo actividad en los últimos 10 minutos."""
+        if self.ultimo_acceso is None:
+            return False
+        ahora = get_peru_time().replace(tzinfo=None)
+        delta = ahora - _to_peru(self.ultimo_acceso).replace(tzinfo=None)
+        return delta.total_seconds() < 600  # 10 minutos
 
     def es_admin_de_sucursal(self):
         return self.es_admin_sucursal and self.sucursal_id is not None
@@ -366,6 +376,21 @@ def load_user(user_id):
         if session.get('_user_session_token') != user.session_token:
             return None  # Token inválido → fuerza logout
     return user
+
+@app.before_request
+def actualizar_ultimo_acceso():
+    """Actualiza el timestamp de último acceso del usuario autenticado."""
+    if current_user and current_user.is_authenticated:
+        # Solo actualizar si han pasado más de 60 s desde la última actualización
+        # (evita escrituras en DB en cada recurso estático / polling)
+        ahora = get_peru_time().replace(tzinfo=None)
+        ultimo = current_user.ultimo_acceso
+        if ultimo is None or (ahora - _to_peru(ultimo).replace(tzinfo=None)).total_seconds() > 60:
+            try:
+                current_user.ultimo_acceso = ahora
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
 # OPTIMIZACIÓN ULTRA: Función para limpiar caché
 def clear_cache():
@@ -1984,7 +2009,7 @@ def init_db():
             # Solo crear tablas si no existen
             db.create_all()
 
-            # Migración: agregar columna session_token si no existe
+            # Migración: agregar columnas nuevas si no existen
             try:
                 from sqlalchemy import text
                 with db.engine.connect() as _conn:
@@ -1992,12 +2017,20 @@ def init_db():
                         # PostgreSQL soporta IF NOT EXISTS
                         _conn.execute(text(
                             "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS session_token VARCHAR(36)"))
-                    else:
-                        # SQLite no soporta IF NOT EXISTS en ALTER TABLE
                         _conn.execute(text(
-                            "ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)"))
+                            "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS ultimo_acceso TIMESTAMP"))
+                    else:
+                        # SQLite: ejecutar por separado, ignorar error si ya existe
+                        for col_sql in [
+                            "ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)",
+                            "ALTER TABLE usuario ADD COLUMN ultimo_acceso TIMESTAMP",
+                        ]:
+                            try:
+                                _conn.execute(text(col_sql))
+                            except Exception:
+                                pass
                     _conn.commit()
-                print("[OK] Columna session_token verificada/agregada")
+                print("[OK] Columnas session_token / ultimo_acceso verificadas")
             except Exception:
                 pass  # La columna ya existe (SQLite lanza error si duplicada)
 
