@@ -1993,6 +1993,7 @@ def init_db():
     """Inicializar la base de datos con datos básicos"""
     with app.app_context():
         try:
+            print("[*] Iniciando init_db()...")
             # Solo crear tablas si no existen
             db.create_all()
 
@@ -2100,7 +2101,12 @@ def init_db():
 try:
     init_db()
 except Exception as e:
+    import traceback
     print(f"[!!] Error al inicializar en import: {e}")
+    print("[!!] Traceback completo:")
+    traceback.print_exc()
+    # NO levantamos la excepción - permite que la app cargue aunque init_db falle
+    # Las rutas se registran ANTES de init_db(), así que deberían estar disponibles
 
 if __name__ == '__main__':
     init_db()
