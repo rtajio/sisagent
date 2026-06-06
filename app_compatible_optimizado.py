@@ -99,6 +99,15 @@ def format_peru_datetime_short(dt):
     t = _to_peru(dt)
     return t.strftime('%d/%m/%Y %H:%M') if t else ""
 
+def format_utc_a_peru_short(dt_utc):
+    """Convierte UTC naive (como ultimo_acceso) a hora Perú para mostrar.
+    Este campo se guarda como datetime.utcnow(), así que siempre es UTC."""
+    if dt_utc is None:
+        return None
+    # dt_utc es naive pero representa UTC puro
+    dt_peru = dt_utc.replace(tzinfo=pytz.UTC).astimezone(peru_tz)
+    return dt_peru.strftime('%d/%m/%Y %H:%M')
+
 print("[*] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO arrancando...")
 print("[!] OPTIMIZACIONES: Caché, Compresión, Consultas optimizadas, Paginación")
 print("[~] Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
@@ -152,6 +161,7 @@ def inject_format_functions():
         'format_peru_date': format_peru_date,
         'format_peru_datetime': format_peru_datetime,
         'format_peru_datetime_short': format_peru_datetime_short,
+        'format_utc_a_peru_short': format_utc_a_peru_short,
     }
 
 # Manejo global de errores para debugging
@@ -226,7 +236,8 @@ class Usuario(UserMixin, db.Model):
         if self.ultimo_acceso is None:
             return False
         from datetime import datetime as _dt
-        delta = _dt.utcnow() - self.ultimo_acceso
+        ahora_utc = _dt.now(pytz.UTC).replace(tzinfo=None)
+        delta = ahora_utc - self.ultimo_acceso
         return delta.total_seconds() < 600  # 10 minutos
 
     def es_admin_de_sucursal(self):
@@ -381,10 +392,12 @@ def load_user(user_id):
 @app.before_request
 def actualizar_ultimo_acceso():
     """Actualiza el timestamp de último acceso del usuario autenticado.
-    Guarda UTC naive para comparación simple sin problemas de zona horaria."""
+    Guarda UTC naive garantizado, incluso en PostgreSQL."""
     if current_user and current_user.is_authenticated:
         from datetime import datetime as _dt
-        ahora_utc = _dt.utcnow()
+        # Usar datetime con timezone UTC explícito, luego convertir a naive
+        # Esto garantiza UTC incluso en PostgreSQL
+        ahora_utc = _dt.now(pytz.UTC).replace(tzinfo=None)
         ultimo = current_user.ultimo_acceso
         # Solo escribir en DB si pasaron más de 60 s (evita escritura en cada request)
         if ultimo is None or (ahora_utc - ultimo).total_seconds() > 60:
