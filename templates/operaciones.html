@@ -122,8 +122,8 @@
 
                     
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
+                        <table class="table table-hover">
+                            <thead>
                                 <tr>
                                     <th>ID</th>
                                     <th>Hora</th>
@@ -441,21 +441,50 @@ function enfocarMonto() {
 document.addEventListener('DOMContentLoaded', function() {
     // Verificar si hay mensajes flash de éxito (operación registrada)
     const alerts = document.querySelectorAll('.alert-success');
-    const hayOperacionRegistrada = Array.from(alerts).some(alert => 
+    const hayOperacionRegistrada = Array.from(alerts).some(alert =>
         alert.textContent.includes('registrada') || alert.textContent.includes('Operación')
     );
-    
+
     if (hayOperacionRegistrada) {
-        // Si se acaba de registrar una operación, limpiar el formulario y enfocar
         const formRegistro = document.querySelector('form[action="{{ url_for('registrar_operacion') }}"]');
-        if (formRegistro) {
-            formRegistro.reset();
-        }
-        // Enfocar después de un pequeño delay para que la página se renderice
+        if (formRegistro) { formRegistro.reset(); }
         setTimeout(enfocarMonto, 400);
     } else {
-        // Si no hay operación recién registrada, solo enfocar normalmente
         enfocarMonto();
+    }
+
+    // ── Filtro dinámico de medios por sucursal (solo admin) ───────────
+    const selectSucursal = document.getElementById('sucursal_id');
+    const selectMedio    = document.getElementById('medio');
+
+    if (selectSucursal && selectMedio) {
+        selectSucursal.addEventListener('change', function() {
+            const sucursalId = this.value;
+            if (!sucursalId) {
+                // Sin sucursal: limpiar medios
+                selectMedio.innerHTML = '<option value="">Seleccionar...</option>';
+                return;
+            }
+            // Pedir medios habilitados para esa sucursal
+            fetch('/api/sucursal/' + sucursalId + '/medios')
+                .then(r => r.json())
+                .then(data => {
+                    selectMedio.innerHTML = '<option value="">Seleccionar...</option>';
+                    if (data.medios && data.medios.length > 0) {
+                        data.medios.forEach(m => {
+                            const opt = document.createElement('option');
+                            opt.value = m.value;
+                            opt.textContent = m.label;
+                            selectMedio.appendChild(opt);
+                        });
+                    } else {
+                        selectMedio.innerHTML = '<option value="">Sin medios habilitados</option>';
+                    }
+                })
+                .catch(() => {
+                    selectMedio.innerHTML = '<option value="">Error al cargar medios</option>';
+                });
+        });
     }
 });
 </script>

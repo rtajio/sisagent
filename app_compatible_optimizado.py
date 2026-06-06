@@ -6,9 +6,10 @@ VERSIÓN COMPATIBLE ULTRA OPTIMIZADA
 
 import os
 import sys
+import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -28,50 +29,48 @@ def get_peru_time():
 # Las operaciones se guardan con get_peru_time() que ya incluye la zona horaria de Perú
 # PostgreSQL está configurado con timezone 'America/Lima' en las conexiones
 
-def format_peru_time(dt):
-    """Formatea una fecha/hora para mostrar en zona horaria de Perú"""
+def _to_peru(dt):
+    """
+    Normaliza cualquier datetime a hora de Perú.
+    - Si tiene tzinfo: convierte a America/Lima.
+    - Si es naive: se asume YA en hora Perú (SQLite y PostgreSQL TIMESTAMP WITHOUT TZ
+      guardan el wall-clock que fue generado con get_peru_time()).
+    """
     if dt is None:
-        return ""
+        return None
     if dt.tzinfo is not None:
-        return dt.astimezone(peru_tz).strftime('%H:%M:%S')
-    else:
-        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%H:%M:%S')
+        return dt.astimezone(peru_tz)
+    # Naive → ya está en hora Perú, solo añadir tzinfo para consistencia
+    return peru_tz.localize(dt)
+
+def format_peru_time(dt):
+    """Formatea una hora para mostrar en zona horaria de Perú"""
+    t = _to_peru(dt)
+    return t.strftime('%H:%M:%S') if t else ""
 
 def format_peru_date(dt):
     """Formatea una fecha para mostrar en zona horaria de Perú"""
-    if dt is None:
-        return ""
-    if dt.tzinfo is not None:
-        return dt.astimezone(peru_tz).strftime('%d/%m/%Y')
-    else:
-        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%d/%m/%Y')
+    t = _to_peru(dt)
+    return t.strftime('%d/%m/%Y') if t else ""
 
 def format_peru_datetime(dt):
-    """Formatea una fecha/hora completa para mostrar en zona horaria de Perú"""
-    if dt is None:
-        return ""
-    if dt.tzinfo is not None:
-        return dt.astimezone(peru_tz).strftime('%d/%m/%Y %H:%M:%S')
-    else:
-        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%d/%m/%Y %H:%M:%S')
+    """Formatea fecha/hora completa en zona horaria de Perú"""
+    t = _to_peru(dt)
+    return t.strftime('%d/%m/%Y %H:%M:%S') if t else ""
 
 def format_peru_datetime_short(dt):
-    """Formatea una fecha/hora corta para mostrar en zona horaria de Perú"""
-    if dt is None:
-        return ""
-    if dt.tzinfo is not None:
-        return dt.astimezone(peru_tz).strftime('%d/%m/%Y %H:%M')
-    else:
-        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz).strftime('%d/%m/%Y %H:%M')
+    """Formatea fecha/hora corta en zona horaria de Perú"""
+    t = _to_peru(dt)
+    return t.strftime('%d/%m/%Y %H:%M') if t else ""
 
-print("🚀 SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO arrancando...")
-print("⚡ OPTIMIZACIONES: Caché, Compresión, Consultas optimizadas, Paginación")
-print("🔄 Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
+print("[*] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO arrancando...")
+print("[!] OPTIMIZACIONES: Caché, Compresión, Consultas optimizadas, Paginación")
+print("[~] Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
 
 # Configuración de la aplicación Flask
 app = Flask(__name__)
 
-print("✅ Flask app creada")
+print("[OK] Flask app creada")
 
 # Configuración para Railway
 if os.environ.get('DATABASE_URL'):
@@ -79,10 +78,10 @@ if os.environ.get('DATABASE_URL'):
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    print(f"✅ Usando PostgreSQL en Railway: {database_url[:20]}...")
+    print(f"[OK] Usando PostgreSQL en Railway: {database_url[:20]}...")
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
-    print("✅ Usando SQLite para desarrollo local")
+    print("[OK] Usando SQLite para desarrollo local")
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -150,10 +149,10 @@ def handle_error(e):
     flash(f'Error: {str(e)}', 'error')
     return redirect(url_for('login'))
 
-print("✅ Configuración de base de datos completada")
-print("✅ SQLAlchemy y LoginManager configurados")
-print("✅ Caché y compresión configurados")
-print("✅ Configuración de zona horaria completada")
+print("[OK] Configuración de base de datos completada")
+print("[OK] SQLAlchemy y LoginManager configurados")
+print("[OK] Caché y compresión configurados")
+print("[OK] Configuración de zona horaria completada")
 
 # Modelos de base de datos COMPATIBLES con la estructura existente
 class Sucursal(db.Model):
@@ -168,26 +167,28 @@ class Usuario(UserMixin, db.Model):
     __tablename__ = 'usuario'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), nullable=False, default='')  # Email requerido, se genera automáticamente si no se proporciona
+    email = db.Column(db.String(120), nullable=False, default='')
     password_hash = db.Column(db.String(120), nullable=False)
-    nombre_completo = db.Column(db.String(100), nullable=True)  # Nombre completo del usuario
+    nombre_completo = db.Column(db.String(100), nullable=True)
     es_admin = db.Column(db.Boolean, default=False)
     es_admin_sucursal = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
-    # Relación con sucursal para evitar errores en templates
+    # Token de sesión: se regenera al cambiar contraseña o al forzar cierre de sesión
+    session_token = db.Column(db.String(36), nullable=True)
     sucursal = db.relationship('Sucursal', backref='usuarios', lazy='joined')
     operaciones = db.relationship('Operacion', backref='usuario', lazy='dynamic')
-    
+
+    def regenerate_session_token(self):
+        """Genera un nuevo token, invalidando todas las sesiones activas."""
+        self.session_token = str(uuid.uuid4())
+
     def es_admin_de_sucursal(self):
-        """Verifica si el usuario es administrador de una sucursal"""
         return self.es_admin_sucursal and self.sucursal_id is not None
-    
+
     def es_admin_o_admin_sucursal(self):
-        """Verifica si el usuario es admin global o admin de sucursal"""
         return self.es_admin or self.es_admin_de_sucursal()
-    
+
     def puede_crear_usuario_en_sucursal(self, sucursal_id):
-        """Verifica si el usuario puede crear usuarios en una sucursal específica"""
         if self.es_admin:
             return True
         if self.es_admin_de_sucursal():
@@ -321,7 +322,14 @@ def get_dashboard_stats_cache(user_id, is_admin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Usuario.query.get(int(user_id))
+    user = Usuario.query.get(int(user_id))
+    if user is None:
+        return None
+    # Si el usuario tiene token definido, validar que coincida con el de la sesión actual
+    if user.session_token is not None:
+        if session.get('_user_session_token') != user.session_token:
+            return None  # Token inválido → fuerza logout
+    return user
 
 # OPTIMIZACIÓN ULTRA: Función para limpiar caché
 def clear_cache():
@@ -346,7 +354,7 @@ def asegurar_admin_existe():
             )
             db.session.add(admin)
             db.session.commit()
-            print("✅ Usuario 'admin' creado con contraseña 'vivalavida'")
+            print("[OK] Usuario 'admin' creado con contraseña 'vivalavida'")
         else:
             # Actualizar contraseña y asegurar que es admin
             admin.password_hash = password_hash
@@ -358,9 +366,9 @@ def asegurar_admin_existe():
             if not admin.nombre_completo:
                 admin.nombre_completo = 'Administrador Global'
             db.session.commit()
-            print("✅ Usuario 'admin' actualizado con contraseña 'vivalavida'")
+            print("[OK] Usuario 'admin' actualizado con contraseña 'vivalavida'")
     except Exception as e:
-        print(f"⚠️  Error al asegurar admin: {e}")
+        print(f"[!!]  Error al asegurar admin: {e}")
         db.session.rollback()
 
 # Rutas optimizadas
@@ -383,8 +391,12 @@ def login():
         user = Usuario.query.filter_by(username=username).first()
         
         if user and check_password_hash(user.password_hash, password):
+            # Asegurar que el usuario tenga session_token
+            if user.session_token is None:
+                user.regenerate_session_token()
+                db.session.commit()
             login_user(user)
-            # Limpiar caché al hacer login
+            session['_user_session_token'] = user.session_token
             clear_cache()
             return redirect(url_for('dashboard'))
         else:
@@ -631,9 +643,32 @@ def operaciones():
     sucursales = []
     if current_user.es_admin:
         sucursales = get_sucursales_activas_cache()
-    
-    # OPTIMIZACIÓN ULTRA: Cargar medios de pago con caché
-    medios_pago = get_medios_pago_cache()
+
+    # Cargar medios de pago filtrados por sucursal
+    if current_user.es_admin:
+        # Admin: si hay sucursal_id en params, filtrar; si no, mostrar todos
+        filtro_sucursal_id = request.args.get('sucursal_id', type=int)
+        if filtro_sucursal_id:
+            medios_pago = MedioPago.query.join(
+                MedioSucursal,
+                (MedioSucursal.medio_pago_id == MedioPago.id) &
+                (MedioSucursal.sucursal_id == filtro_sucursal_id) &
+                (MedioSucursal.activo == True)
+            ).filter(MedioPago.activo == True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+        else:
+            medios_pago = get_medios_pago_cache()
+    else:
+        # Usuario/admin de sucursal: filtrar medios habilitados para su sucursal
+        sucursal_id_usuario = current_user.sucursal_id
+        if sucursal_id_usuario:
+            medios_pago = MedioPago.query.join(
+                MedioSucursal,
+                (MedioSucursal.medio_pago_id == MedioPago.id) &
+                (MedioSucursal.sucursal_id == sucursal_id_usuario) &
+                (MedioSucursal.activo == True)
+            ).filter(MedioPago.activo == True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+        else:
+            medios_pago = get_medios_pago_cache()
     
     # Calcular comisión del día para sucursal específica si es admin global
     comision_dia = 0.0
@@ -806,6 +841,18 @@ def editar_operacion(operacion_id):
         return redirect(url_for('operaciones'))
     
     # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
+
+@app.route('/api/sucursal/<int:sucursal_id>/medios')
+@login_required
+def api_medios_por_sucursal(sucursal_id):
+    """Devuelve los medios de pago habilitados para una sucursal específica."""
+    medios = MedioPago.query.join(
+        MedioSucursal,
+        (MedioSucursal.medio_pago_id == MedioPago.id) &
+        (MedioSucursal.sucursal_id == sucursal_id) &
+        (MedioSucursal.activo == True)
+    ).filter(MedioPago.activo == True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    return {'medios': [{'value': m.nombre_abreviado, 'label': m.nombre_abreviado} for m in medios]}
 
 @app.route('/api/operaciones/<int:operacion_id>', methods=['PUT'])
 @login_required
@@ -990,6 +1037,8 @@ def editar_usuario(usuario_id):
             usuario.username = nuevo_username
         if password:
             usuario.password_hash = generate_password_hash(password)
+            # Regenerar token → cierra todas las sesiones activas de este usuario
+            usuario.regenerate_session_token()
         if nombre_completo:
             usuario.nombre_completo = nombre_completo
         
@@ -1059,28 +1108,60 @@ def eliminar_medio(medio_id):
 @login_required
 def activar_medio(medio_id):
     if not current_user.es_admin:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('dashboard'))
+        return {'ok': False, 'error': 'Acceso denegado'}, 403
     medio = MedioPago.query.get_or_404(medio_id)
     medio.activo = not medio.activo
     db.session.commit()
+    cache.clear()
+    # Soporta tanto AJAX como form POST normal
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+        return {'ok': True, 'activo': medio.activo}
     return redirect(url_for('admin_medios'))
 
 @app.route('/admin/medios/<int:medio_id>/subir', methods=['POST'])
 @login_required
 def subir_medio(medio_id):
-    if not current_user.es_admin:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('dashboard'))
+    # Mantenido por compatibilidad — reordenamiento via API /api/medios/orden
     return redirect(url_for('admin_medios'))
 
 @app.route('/admin/medios/<int:medio_id>/bajar', methods=['POST'])
 @login_required
 def bajar_medio(medio_id):
-    if not current_user.es_admin:
-        flash('Acceso denegado', 'error')
-        return redirect(url_for('dashboard'))
     return redirect(url_for('admin_medios'))
+
+@app.route('/api/medios/orden', methods=['POST'])
+@login_required
+def api_medios_orden():
+    """Guarda el nuevo orden de medios de pago (drag-and-drop)."""
+    if not current_user.es_admin:
+        return {'ok': False, 'error': 'Acceso denegado'}, 403
+    data = request.get_json()
+    ids = data.get('ids', [])
+    for i, mid in enumerate(ids):
+        m = MedioPago.query.get(mid)
+        if m:
+            m.orden = i
+    db.session.commit()
+    cache.clear()
+    return {'ok': True}
+
+@app.route('/api/medios/<int:medio_id>/editar', methods=['POST'])
+@login_required
+def api_editar_medio(medio_id):
+    """Edita inline nombre abreviado y completo de un medio."""
+    if not current_user.es_admin:
+        return {'ok': False, 'error': 'Acceso denegado'}, 403
+    medio = MedioPago.query.get_or_404(medio_id)
+    data = request.get_json()
+    abreviado = (data.get('nombre_abreviado') or '').strip().upper()
+    completo  = (data.get('nombre_completo')  or '').strip()
+    if not abreviado or not completo:
+        return {'ok': False, 'error': 'Datos incompletos'}, 400
+    medio.nombre_abreviado = abreviado
+    medio.nombre_completo  = completo
+    db.session.commit()
+    cache.clear()
+    return {'ok': True, 'abreviado': medio.nombre_abreviado, 'completo': medio.nombre_completo}
 
 @app.route('/admin/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
 @login_required
@@ -1096,6 +1177,42 @@ def eliminar_usuario(usuario_id):
     db.session.delete(usuario)
     db.session.commit()
     flash('Usuario eliminado', 'success')
+    return redirect(url_for('admin_usuarios'))
+
+
+@app.route('/admin/usuarios/<int:usuario_id>/cerrar-sesion', methods=['POST'])
+@login_required
+def forzar_cierre_sesion(usuario_id):
+    """Admin cierra la sesión activa de un usuario específico regenerando su token."""
+    if not current_user.es_admin_o_admin_sucursal():
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('admin_usuarios'))
+
+    usuario = Usuario.query.get_or_404(usuario_id)
+
+    # No se puede cerrar la sesión del propio usuario admin actual
+    if usuario.id == current_user.id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'error': 'No puedes cerrar tu propia sesión desde aquí'}), 400
+        flash('No puedes cerrar tu propia sesión desde aquí', 'warning')
+        return redirect(url_for('admin_usuarios'))
+
+    # Admin de sucursal solo puede afectar usuarios de su sucursal
+    if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        if usuario.sucursal_id != current_user.sucursal_id:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'ok': False, 'error': 'Sin permisos sobre este usuario'}), 403
+            flash('Sin permisos sobre este usuario', 'error')
+            return redirect(url_for('admin_usuarios'))
+
+    usuario.regenerate_session_token()
+    db.session.commit()
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True, 'mensaje': f'Sesión de {usuario.username} cerrada'})
+    flash(f'Sesión de {usuario.username} cerrada correctamente', 'success')
     return redirect(url_for('admin_usuarios'))
 
 
@@ -1315,16 +1432,16 @@ def api_reportes_operaciones():
             except ValueError:
                 pass  # Ignorar si no se puede convertir
         
-        # Aplicar filtros de fecha usando rangos de tiempo en hora de Perú
+        # Filtros de fecha: comparar naive vs naive (la DB guarda hora Perú sin tzinfo)
         if fecha_inicio:
             fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
-            inicio_fecha = datetime.combine(fecha_inicio_obj, datetime.min.time()).replace(tzinfo=peru_tz)
+            inicio_fecha = datetime.combine(fecha_inicio_obj, datetime.min.time())
             query = query.filter(Operacion.hora >= inicio_fecha)
-        
+
         if fecha_fin:
             fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
-            fin_fecha = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(tzinfo=peru_tz)
-            fin_fecha = fin_fecha.replace(hour=23, minute=59, second=59, microsecond=999999)
+            fin_fecha = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(
+                hour=23, minute=59, second=59, microsecond=999999)
             query = query.filter(Operacion.hora <= fin_fecha)
         
         if medio:
@@ -1388,6 +1505,339 @@ def api_reportes_operaciones():
         except:
             pass
         return jsonify({'error': str(e)}), 500
+
+
+# ── Función auxiliar: obtener operaciones filtradas ─────────────────────────
+def _get_operaciones_filtradas():
+    """Devuelve lista de dicts con las operaciones según los parámetros de la request."""
+    if not current_user.es_admin_o_admin_sucursal():
+        return None, 403
+
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin    = request.args.get('fecha_fin')
+    sucursal_id  = request.args.get('sucursal_id')
+    medio        = request.args.get('medio')
+
+    query = Operacion.query
+
+    if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        if current_user.sucursal_id:
+            query = query.filter(Operacion.sucursal_id == current_user.sucursal_id)
+    elif sucursal_id and sucursal_id.strip():
+        try:
+            query = query.filter(Operacion.sucursal_id == int(sucursal_id))
+        except ValueError:
+            pass
+
+    if fecha_inicio:
+        try:
+            fi = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            query = query.filter(Operacion.hora >= datetime.combine(fi, datetime.min.time()))
+        except ValueError:
+            pass
+
+    if fecha_fin:
+        try:
+            ff = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+            fin = datetime.combine(ff, datetime.max.time()).replace(
+                hour=23, minute=59, second=59, microsecond=999999)
+            query = query.filter(Operacion.hora <= fin)
+        except ValueError:
+            pass
+
+    if medio:
+        query = query.filter(Operacion.medio == medio)
+
+    from sqlalchemy.orm import joinedload
+    operaciones = query.options(
+        joinedload(Operacion.usuario).load_only(Usuario.id, Usuario.username, Usuario.nombre_completo),
+        joinedload(Operacion.sucursal).load_only(Sucursal.id, Sucursal.nombre)
+    ).order_by(Operacion.hora.asc()).all()
+
+    medios_cache = {mp.nombre_abreviado: mp.nombre_completo for mp in MedioPago.query.filter_by(activo=True).all()}
+
+    filas = []
+    for op in operaciones:
+        usuario_nombre = 'N/A'
+        if op.usuario:
+            usuario_nombre = op.usuario.nombre_completo or op.usuario.username
+        sucursal_nombre = op.sucursal.nombre if op.sucursal else 'Sin sucursal'
+        filas.append({
+            'id':       op.id,
+            'fecha':    format_peru_date(op.hora),
+            'hora':     format_peru_time(op.hora),
+            'monto':    float(op.monto),
+            'comision': float(op.comision),
+            'medio':    medios_cache.get(op.medio, op.medio),
+            'usuario':  usuario_nombre,
+            'sucursal': sucursal_nombre,
+        })
+    return filas, 200
+
+
+# ── Exportar CSV ─────────────────────────────────────────────────────────────
+@app.route('/api/reportes/exportar/csv')
+@login_required
+def exportar_csv():
+    filas, status = _get_operaciones_filtradas()
+    if status != 200:
+        return jsonify({'error': 'Acceso denegado'}), status
+
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal'])
+    for i, f in enumerate(filas, 1):
+        writer.writerow([i, f['fecha'], f['hora'],
+                         f'{f["monto"]:.2f}', f'{f["comision"]:.2f}',
+                         f['medio'], f['usuario'], f['sucursal']])
+    # Totales
+    writer.writerow([])
+    writer.writerow(['', '', 'TOTAL',
+                     f'{sum(f["monto"] for f in filas):.2f}',
+                     f'{sum(f["comision"] for f in filas):.2f}', '', '', ''])
+
+    from flask import Response
+    return Response(
+        '﻿' + output.getvalue(),      # BOM para Excel
+        mimetype='text/csv; charset=utf-8-sig',
+        headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.csv'}
+    )
+
+
+# ── Exportar XLSX ─────────────────────────────────────────────────────────────
+@app.route('/api/reportes/exportar/xlsx')
+@login_required
+def exportar_xlsx():
+    filas, status = _get_operaciones_filtradas()
+    if status != 200:
+        return jsonify({'error': 'Acceso denegado'}), status
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    import io
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Operaciones'
+
+    # Colores corporativos cálidos
+    COLOR_HEADER = '2A2420'   # chocolate oscuro
+    COLOR_ACCENT = 'A0845A'   # dorado
+    COLOR_TOTAL  = '332E28'
+
+    header_font  = Font(bold=True, color='E8DCC8', size=11)
+    total_font   = Font(bold=True, color='E8DCC8', size=11)
+    header_fill  = PatternFill('solid', fgColor=COLOR_HEADER)
+    total_fill   = PatternFill('solid', fgColor=COLOR_TOTAL)
+    accent_fill  = PatternFill('solid', fgColor=COLOR_ACCENT)
+    center       = Alignment(horizontal='center', vertical='center')
+    thin         = Side(style='thin', color='504840')
+    border       = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Título
+    ws.merge_cells('A1:H1')
+    title_cell = ws['A1']
+    title_cell.value = 'REPORTE DE OPERACIONES — SISAGENT'
+    title_cell.font  = Font(bold=True, size=14, color='E8DCC8')
+    title_cell.fill  = PatternFill('solid', fgColor=COLOR_ACCENT)
+    title_cell.alignment = center
+    ws.row_dimensions[1].height = 28
+
+    # Parámetros del reporte en fila 2
+    fecha_ini = request.args.get('fecha_inicio', '')
+    fecha_fin = request.args.get('fecha_fin', '')
+    ws.merge_cells('A2:H2')
+    ws['A2'].value = f'Período: {fecha_ini or "—"}  →  {fecha_fin or "—"}    Total registros: {len(filas)}'
+    ws['A2'].font  = Font(italic=True, color='C8B89A', size=9)
+    ws['A2'].fill  = PatternFill('solid', fgColor='3E3830')
+    ws['A2'].alignment = center
+    ws.row_dimensions[2].height = 16
+
+    # Cabecera columnas (fila 4)
+    headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
+    widths  = [5,     12,      10,     14,            14,              16,      22,         22]
+    for col, (h, w) in enumerate(zip(headers, widths), 1):
+        cell = ws.cell(row=4, column=col, value=h)
+        cell.font      = header_font
+        cell.fill      = header_fill
+        cell.alignment = center
+        cell.border    = border
+        ws.column_dimensions[get_column_letter(col)].width = w
+    ws.row_dimensions[4].height = 20
+
+    # Datos
+    money_fmt = '#,##0.00'
+    for i, f in enumerate(filas, 1):
+        row = i + 4
+        values = [i, f['fecha'], f['hora'], f['monto'], f['comision'],
+                  f['medio'], f['usuario'], f['sucursal']]
+        fill_bg = PatternFill('solid', fgColor='332E28' if i % 2 == 0 else '2A2420')
+        for col, val in enumerate(values, 1):
+            cell = ws.cell(row=row, column=col, value=val)
+            cell.fill   = fill_bg
+            cell.border = border
+            cell.font   = Font(color='E8DCC8', size=10)
+            if col in (4, 5):
+                cell.number_format = money_fmt
+                cell.alignment = Alignment(horizontal='right')
+            elif col == 1:
+                cell.alignment = center
+            else:
+                cell.alignment = Alignment(horizontal='left')
+
+    # Totales
+    total_row = len(filas) + 5
+    ws.merge_cells(f'A{total_row}:C{total_row}')
+    ws[f'A{total_row}'].value     = 'TOTALES'
+    ws[f'A{total_row}'].font      = total_font
+    ws[f'A{total_row}'].fill      = total_fill
+    ws[f'A{total_row}'].alignment = center
+    ws[f'A{total_row}'].border    = border
+
+    for col, val in [(4, sum(f['monto'] for f in filas)),
+                     (5, sum(f['comision'] for f in filas))]:
+        cell = ws.cell(row=total_row, column=col, value=val)
+        cell.font          = total_font
+        cell.fill          = total_fill
+        cell.number_format = money_fmt
+        cell.alignment     = Alignment(horizontal='right')
+        cell.border        = border
+
+    for col in range(6, 9):
+        cell = ws.cell(row=total_row, column=col, value='')
+        cell.fill   = total_fill
+        cell.border = border
+
+    ws.freeze_panes = 'A5'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from flask import Response
+    return Response(
+        buf.read(),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.xlsx'}
+    )
+
+
+# ── Exportar PDF ─────────────────────────────────────────────────────────────
+@app.route('/api/reportes/exportar/pdf')
+@login_required
+def exportar_pdf():
+    filas, status = _get_operaciones_filtradas()
+    if status != 200:
+        return jsonify({'error': 'Acceso denegado'}), status
+
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    import io
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=12*mm, rightMargin=12*mm,
+                            topMargin=14*mm, bottomMargin=14*mm)
+
+    # Paleta oscura cálida → para PDF usamos versión legible (fondo blanco papel)
+    C_DARK    = colors.HexColor('#2A2420')
+    C_ACCENT  = colors.HexColor('#A0845A')
+    C_MID     = colors.HexColor('#332E28')
+    C_LIGHT   = colors.HexColor('#F2EDE4')
+    C_MUTED   = colors.HexColor('#8A7E70')
+    C_ROW_ODD = colors.HexColor('#F7F3EE')
+    C_ROW_EVEN= colors.HexColor('#EDE6DC')
+    C_SUCCESS = colors.HexColor('#3A6A3A')
+    C_WHITE   = colors.white
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Normal'],
+                                 fontSize=16, fontName='Helvetica-Bold',
+                                 textColor=C_DARK, alignment=TA_CENTER, spaceAfter=2*mm)
+    sub_style   = ParagraphStyle('Sub', parent=styles['Normal'],
+                                 fontSize=9, fontName='Helvetica',
+                                 textColor=C_MUTED, alignment=TA_CENTER, spaceAfter=4*mm)
+
+    fecha_ini = request.args.get('fecha_inicio', '—')
+    fecha_fin = request.args.get('fecha_fin', '—')
+
+    elements = [
+        Paragraph('REPORTE DE OPERACIONES', title_style),
+        Paragraph(f'SISAGENT &nbsp;|&nbsp; Período: {fecha_ini} → {fecha_fin} &nbsp;|&nbsp; {len(filas)} registros', sub_style),
+    ]
+
+    # Tabla de datos
+    col_headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
+    col_widths  = [10*mm, 22*mm, 18*mm, 24*mm, 24*mm, 26*mm, 50*mm, 50*mm]
+
+    table_data = [col_headers]
+    for i, f in enumerate(filas, 1):
+        table_data.append([
+            str(i),
+            f['fecha'],
+            f['hora'],
+            f'S/ {f["monto"]:,.2f}',
+            f'S/ {f["comision"]:,.2f}',
+            f['medio'],
+            f['usuario'],
+            f['sucursal'],
+        ])
+
+    # Fila de totales
+    total_m = sum(f['monto'] for f in filas)
+    total_c = sum(f['comision'] for f in filas)
+    table_data.append(['', '', 'TOTAL',
+                       f'S/ {total_m:,.2f}', f'S/ {total_c:,.2f}',
+                       '', '', ''])
+
+    t = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+    # Estilos de la tabla
+    style_cmds = [
+        ('BACKGROUND',  (0, 0), (-1, 0),  C_DARK),
+        ('TEXTCOLOR',   (0, 0), (-1, 0),  C_LIGHT),
+        ('FONTNAME',    (0, 0), (-1, 0),  'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 0), (-1, 0),  9),
+        ('ALIGN',       (0, 0), (-1, 0),  'CENTER'),
+        ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE',    (0, 1), (-1, -1), 8),
+        ('FONTNAME',    (0, 1), (-1, -1), 'Helvetica'),
+        ('ALIGN',       (3, 1), (4, -1),  'RIGHT'),
+        ('ALIGN',       (0, 1), (0, -1),  'CENTER'),
+        ('GRID',        (0, 0), (-1, -1), 0.4, C_MUTED),
+        ('ROWHEIGHT',   (0, 0), (-1, 0),  16),
+        ('ROWHEIGHT',   (0, 1), (-1, -2), 13),
+        # Fila de totales
+        ('BACKGROUND',  (0, -1), (-1, -1), C_ACCENT),
+        ('TEXTCOLOR',   (0, -1), (-1, -1), C_LIGHT),
+        ('FONTNAME',    (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('ROWHEIGHT',   (0, -1), (-1, -1), 16),
+    ]
+    # Filas alternadas
+    for row_i in range(1, len(table_data) - 1):
+        bg = C_ROW_ODD if row_i % 2 == 1 else C_ROW_EVEN
+        style_cmds.append(('BACKGROUND', (0, row_i), (-1, row_i), bg))
+
+    t.setStyle(TableStyle(style_cmds))
+    elements.append(t)
+
+    doc.build(elements)
+    buf.seek(0)
+
+    from flask import Response
+    return Response(
+        buf.read(),
+        mimetype='application/pdf',
+        headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
+    )
+
 
 # Healthcheck optimizado
 @app.route('/api/dashboard/comisiones')
@@ -1478,7 +1928,17 @@ def init_db():
         try:
             # Solo crear tablas si no existen
             db.create_all()
-            
+
+            # Migración: agregar columna session_token si no existe
+            try:
+                from sqlalchemy import text
+                with db.engine.connect() as _conn:
+                    _conn.execute(text("ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)"))
+                    _conn.commit()
+                print("[OK] Columna session_token agregada")
+            except Exception:
+                pass  # La columna ya existe o DB no soporta ALTER TABLE en este momento
+
             # Asegurar que el admin exista con la contraseña correcta
             asegurar_admin_existe()
             
@@ -1492,7 +1952,7 @@ def init_db():
                 )
                 db.session.add(sucursal_principal)
                 db.session.commit()
-                print("✅ Sucursal principal creada")
+                print("[OK] Sucursal principal creada")
             
             # Crear medios de pago básicos si no existen
             medios_basicos = [
@@ -1514,17 +1974,17 @@ def init_db():
                     db.session.add(medio)
             
             db.session.commit()
-            print("✅ Medios de pago básicos creados")
+            print("[OK] Medios de pago básicos creados")
             
         except Exception as e:
-            print(f"⚠️ Error en inicialización (continuando): {e}")
+            print(f"[!!] Error en inicialización (continuando): {e}")
             # Continuar aunque haya errores menores
 
 # Asegurar inicialización cuando se importa (Gunicorn/Railway)
 try:
     init_db()
 except Exception as e:
-    print(f"⚠️ Error al inicializar en import: {e}")
+    print(f"[!!] Error al inicializar en import: {e}")
 
 if __name__ == '__main__':
     init_db()

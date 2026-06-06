@@ -1,71 +1,228 @@
 {% extends "base.html" %}
 {% block title %}Medios de Pago - SISAGENT{% endblock %}
+
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">
-                        <i class="fas fa-credit-card me-2"></i>
-                        Medios de Pago
-                    </h4>
-                </div>
-                <div class="card-body">
-                    <form method="POST" class="mb-4 d-flex align-items-end gap-2">
-                        <div>
-                            <label for="nombre_abreviado" class="form-label">Nombre Abreviado</label>
-                            <input type="text" class="form-control" id="nombre_abreviado" name="nombre_abreviado" required maxlength="20" placeholder="Abreviado">
-                        </div>
-                        <div>
-                            <label for="nombre_completo" class="form-label">Nombre Completo</label>
-                            <input type="text" class="form-control" id="nombre_completo" name="nombre_completo" required maxlength="100" placeholder="Nombre completo">
-                        </div>
-                        <button type="submit" class="btn btn-success">
-                            <i class="fas fa-plus me-2"></i>Agregar
-                        </button>
-                    </form>
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Abreviado</th>
-                                    <th>Nombre Completo</th>
-                                    <th>Activo</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for medio in medios %}
-                                <tr>
-                                    <td>{{ medio.id }}</td>
-                                    <td>{{ medio.nombre_abreviado }}</td>
-                                    <td>{{ medio.nombre_completo }}</td>
-                                    <td>{% if medio.activo %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-danger">No</span>{% endif %}</td>
-                                    <td>
-                                        <form method="POST" action="{{ url_for('eliminar_medio', medio_id=medio.id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar este medio?')">
-                                            <button type="submit" class="btn btn-sm btn-danger" title="Eliminar"><i class="fas fa-trash"></i></button>
-                                        </form>
-                                        <a href="{{ url_for('editar_medio', medio_id=medio.id) }}" class="btn btn-sm btn-warning" title="Editar"><i class="fas fa-edit"></i></a>
-                                        <form method="POST" action="{{ url_for('activar_medio', medio_id=medio.id) }}" style="display:inline;">
-                                            <button type="submit" class="btn btn-sm {% if medio.activo %}btn-secondary{% else %}btn-success{% endif %}" title="Activar/Desactivar"><i class="fas fa-toggle-{{ 'on' if medio.activo else 'off' }}"></i></button>
-                                        </form>
-                                        <form method="POST" action="{{ url_for('subir_medio', medio_id=medio.id) }}" style="display:inline;">
-                                            <button type="submit" class="btn btn-sm btn-info" title="Subir"><i class="fas fa-arrow-up"></i></button>
-                                        </form>
-                                        <form method="POST" action="{{ url_for('bajar_medio', medio_id=medio.id) }}" style="display:inline;">
-                                            <button type="submit" class="btn btn-sm btn-info" title="Bajar"><i class="fas fa-arrow-down"></i></button>
-                                        </form>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+<div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h4"><i class="fas fa-credit-card me-2"></i> Medios de Pago</h1>
+</div>
+
+<!-- Formulario: agregar nuevo medio -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="fas fa-plus me-2"></i> Agregar Nuevo Medio
+    </div>
+    <div class="card-body">
+        <form method="POST" class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+                <label class="form-label">Nombre Abreviado</label>
+                <input type="text" class="form-control" name="nombre_abreviado" required maxlength="20"
+                       placeholder="Ej: BCP" style="width:160px; text-transform:uppercase;">
+            </div>
+            <div>
+                <label class="form-label">Nombre Completo</label>
+                <input type="text" class="form-control" name="nombre_completo" required maxlength="100"
+                       placeholder="Ej: Banco de Crédito del Perú" style="width:280px;">
+            </div>
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i> Agregar
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Lista de medios drag-and-drop -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-grip-vertical me-2"></i> Lista de Medios — arrastra para reordenar</span>
+        <span class="text-muted small" id="orden-status"></span>
+    </div>
+    <div class="card-body p-0">
+        <ul id="medios-lista" class="list-group list-group-flush">
+            {% for medio in medios %}
+            <li class="list-group-item medio-item d-flex align-items-center gap-3 py-3 px-4"
+                data-id="{{ medio.id }}"
+                style="cursor: grab; background: var(--bg-paper); border-color: var(--border-light);">
+
+                <!-- Handle drag -->
+                <span class="drag-handle text-muted" style="cursor:grab; font-size:1.1rem;">
+                    <i class="fas fa-grip-vertical"></i>
+                </span>
+
+                <!-- Orden -->
+                <span class="badge-orden text-muted small" style="width:24px; text-align:center;">
+                    {{ loop.index }}
+                </span>
+
+                <!-- Nombre abreviado (editable) -->
+                <span class="medio-abreviado fw-bold"
+                      style="width:90px; color: var(--accent);"
+                      data-id="{{ medio.id }}"
+                      title="Doble clic para editar">{{ medio.nombre_abreviado }}</span>
+
+                <!-- Nombre completo (editable) -->
+                <span class="medio-completo flex-grow-1 text-muted"
+                      data-id="{{ medio.id }}"
+                      title="Doble clic para editar">{{ medio.nombre_completo }}</span>
+
+                <!-- Toggle activo -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted">Activo</span>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input toggle-activo"
+                               type="checkbox"
+                               id="toggle-{{ medio.id }}"
+                               data-id="{{ medio.id }}"
+                               {% if medio.activo %}checked{% endif %}
+                               style="width:2.5em; height:1.3em; cursor:pointer;">
                     </div>
                 </div>
+
+                <!-- Botón eliminar -->
+                <form method="POST" action="{{ url_for('eliminar_medio', medio_id=medio.id) }}"
+                      onsubmit="return confirm('¿Eliminar «{{ medio.nombre_abreviado }}»? Esta acción no se puede deshacer.')">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- Modal edición inline -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="fas fa-edit me-2"></i>Editar Medio</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-id">
+                <div class="mb-3">
+                    <label class="form-label">Abreviado</label>
+                    <input type="text" id="edit-abreviado" class="form-control"
+                           maxlength="20" style="text-transform:uppercase;">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nombre Completo</label>
+                    <input type="text" id="edit-completo" class="form-control" maxlength="100">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btn-guardar-edicion">
+                    <i class="fas fa-save me-1"></i> Guardar
+                </button>
             </div>
         </div>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}
+
+{% block scripts %}
+<!-- SortableJS CDN -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+// ── 1. DRAG & DROP ──────────────────────────────────────────────
+const lista = document.getElementById('medios-lista');
+const statusEl = document.getElementById('orden-status');
+
+const sortable = Sortable.create(lista, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    onEnd: function() {
+        const ids = [...lista.querySelectorAll('.medio-item')].map(el => parseInt(el.dataset.id));
+        // Actualizar números de orden visualmente
+        lista.querySelectorAll('.badge-orden').forEach((el, i) => el.textContent = i + 1);
+        // Guardar en servidor
+        statusEl.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Guardando...';
+        fetch('/api/medios/orden', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ids})
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                statusEl.innerHTML = '<i class="fas fa-check text-success me-1"></i> Orden guardado';
+                setTimeout(() => statusEl.innerHTML = '', 2500);
+            }
+        })
+        .catch(() => { statusEl.innerHTML = '<span class="text-danger">Error al guardar</span>'; });
+    }
+});
+
+// ── 2. TOGGLE ACTIVO (AJAX) ─────────────────────────────────────
+document.querySelectorAll('.toggle-activo').forEach(toggle => {
+    toggle.addEventListener('change', function() {
+        const id = this.dataset.id;
+        const activo = this.checked;
+        fetch('/admin/medios/' + id + '/activar', {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) {
+                this.checked = !activo; // revertir si falla
+            }
+        })
+        .catch(() => { this.checked = !activo; });
+    });
+});
+
+// ── 3. EDICIÓN INLINE (doble clic) ─────────────────────────────
+const modal = new bootstrap.Modal(document.getElementById('modalEditar'));
+
+document.querySelectorAll('.medio-abreviado, .medio-completo').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('dblclick', function() {
+        const id = this.dataset.id;
+        const row = this.closest('.medio-item');
+        document.getElementById('edit-id').value = id;
+        document.getElementById('edit-abreviado').value = row.querySelector('.medio-abreviado').textContent.trim();
+        document.getElementById('edit-completo').value  = row.querySelector('.medio-completo').textContent.trim();
+        modal.show();
+        setTimeout(() => document.getElementById('edit-abreviado').focus(), 300);
+    });
+});
+
+document.getElementById('btn-guardar-edicion').addEventListener('click', function() {
+    const id       = document.getElementById('edit-id').value;
+    const abreviado = document.getElementById('edit-abreviado').value.trim().toUpperCase();
+    const completo  = document.getElementById('edit-completo').value.trim();
+    if (!abreviado || !completo) return;
+
+    fetch('/api/medios/' + id + '/editar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({nombre_abreviado: abreviado, nombre_completo: completo})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            const row = lista.querySelector('[data-id="' + id + '"]');
+            row.querySelector('.medio-abreviado').textContent = d.abreviado;
+            row.querySelector('.medio-completo').textContent  = d.completo;
+            modal.hide();
+        }
+    });
+});
+
+// Estilo para el ghost al arrastrar
+const style = document.createElement('style');
+style.textContent = `
+    .sortable-ghost { opacity: 0.4; background: var(--bg-inset) !important; }
+    .list-group-item.medio-item { transition: background 0.15s; }
+    .list-group-item.medio-item:hover { background: var(--bg-surface) !important; }
+    .form-check-input:checked { background-color: var(--success) !important; border-color: var(--success) !important; }
+    .form-check-input:not(:checked) { background-color: var(--bg-inset) !important; border-color: var(--border) !important; }
+    #modalEditar .modal-content { background: var(--bg-surface); color: var(--text-primary); }
+    #modalEditar .form-control { background: var(--bg-inset); color: var(--text-primary); border-color: var(--border); }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}
