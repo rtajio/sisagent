@@ -191,7 +191,7 @@ function formatearHora(fecha) {
 
 // Función para actualizar las comisiones
 function actualizarComisiones() {
-    fetch('/api/dashboard/comisiones')
+    fetch('/api/comisiones')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
