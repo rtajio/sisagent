@@ -2097,21 +2097,37 @@ def init_db():
             print(f"[!!] Error en inicialización (continuando): {e}")
             # Continuar aunque haya errores menores
 
-# Inicialización de BD: solo en modo development, nunca durante import
-# En Railway/Gunicorn, cada worker importa el módulo - init_db en import causa race conditions
-# La BD se inicializa una sola vez cuando el app arranca en modo development
-if __name__ == '__main__':
-    try:
-        init_db()
-        print("[OK] BD inicializada correctamente")
-    except Exception as e:
-        import traceback
-        print(f"[ERROR] Error al inicializar BD: {e}")
-        traceback.print_exc()
+# Inicialización segura de BD con lock (evita race conditions en multi-worker)
+import threading
+_init_db_lock = threading.Lock()
+_init_db_done = False
 
+def init_db_safe():
+    """Ejecuta init_db() una sola vez de forma thread-safe"""
+    global _init_db_done
+    if _init_db_done:
+        return
+
+    with _init_db_lock:
+        if _init_db_done:  # Double-check pattern
+            return
+        try:
+            init_db()
+            print("[OK] BD inicializada correctamente")
+        except Exception as e:
+            print(f"[WARN] Error en init_db (ignorado): {e}")
+        finally:
+            _init_db_done = True
+
+# En primer request (no en import), ejecutar init_db de forma segura
+@app.before_request
+def before_first_request():
+    """Se ejecuta ANTES del primer request de CADA worker
+    Asegura que init_db() se ejecute exactamente una vez por worker"""
+    init_db_safe()
+
+# Para desarrollo local
+if __name__ == '__main__':
+    init_db()
     print("[OK] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para produccion!")
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-
-# En Railway: Gunicorn NO ejecuta __name__ == '__main__'
-# Las rutas se registran al importar el módulo, sin necesidad de init_db() en import
-# Si se necesita inicialización de BD en Railway, usar command de deployment o appshotgun hook
