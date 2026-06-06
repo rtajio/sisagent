@@ -123,7 +123,7 @@
 
 {% block scripts %}
 <!-- SortableJS CDN -->
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://unpkg.com/sortablejs@1.15.2/Sortable.min.js"></script>
 <script>
 // ── 1. DRAG & DROP ──────────────────────────────────────────────
 const lista = document.getElementById('medios-lista');
@@ -226,3 +226,4 @@ style.textContent = `
 document.head.appendChild(style);
 </script>
 {% endblock %}
+
