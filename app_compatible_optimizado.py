@@ -1988,11 +1988,31 @@ def init_db():
             try:
                 from sqlalchemy import text
                 with db.engine.connect() as _conn:
-                    _conn.execute(text("ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)"))
+                    if os.environ.get('DATABASE_URL'):
+                        # PostgreSQL soporta IF NOT EXISTS
+                        _conn.execute(text(
+                            "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS session_token VARCHAR(36)"))
+                    else:
+                        # SQLite no soporta IF NOT EXISTS en ALTER TABLE
+                        _conn.execute(text(
+                            "ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)"))
                     _conn.commit()
-                print("[OK] Columna session_token agregada")
+                print("[OK] Columna session_token verificada/agregada")
             except Exception:
-                pass  # La columna ya existe o DB no soporta ALTER TABLE en este momento
+                pass  # La columna ya existe (SQLite lanza error si duplicada)
+
+            # Asignar session_token a usuarios existentes que tengan NULL
+            # (ocurre en deploys post-migración: usuarios registrados antes del feature)
+            try:
+                usuarios_sin_token = Usuario.query.filter(
+                    Usuario.session_token == None).all()
+                if usuarios_sin_token:
+                    for u in usuarios_sin_token:
+                        u.session_token = str(uuid.uuid4())
+                    db.session.commit()
+                    print(f"[OK] Tokens asignados a {len(usuarios_sin_token)} usuarios existentes")
+            except Exception as e:
+                print(f"[WARN] No se pudo asignar tokens iniciales: {e}")
 
             # Asegurar que el admin exista con la contraseña correcta
             asegurar_admin_existe()
