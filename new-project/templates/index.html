@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Bienvenido, {{ session.username }}</h2>
+        <p class="text-muted">Panel principal del sistema.</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h5 class="card-title">Módulo 1</h5>
+                <p class="card-text text-muted">Descripción del módulo</p>
+                <a href="#" class="btn btn-primary btn-sm">Abrir</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h5 class="card-title">Módulo 2</h5>
+                <p class="card-text text-muted">Descripción del módulo</p>
+                <a href="#" class="btn btn-success btn-sm">Abrir</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h5 class="card-title">Módulo 3</h5>
+                <p class="card-text text-muted">Descripción del módulo</p>
+                <a href="#" class="btn btn-warning btn-sm">Abrir</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
