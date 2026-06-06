@@ -221,11 +221,12 @@ class Usuario(UserMixin, db.Model):
         self.session_token = str(uuid.uuid4())
 
     def esta_en_linea(self):
-        """True si el usuario tuvo actividad en los últimos 10 minutos."""
+        """True si el usuario tuvo actividad en los últimos 10 minutos.
+        ultimo_acceso se guarda como UTC naive para evitar problemas de zona horaria."""
         if self.ultimo_acceso is None:
             return False
-        ahora = get_peru_time().replace(tzinfo=None)
-        delta = ahora - _to_peru(self.ultimo_acceso).replace(tzinfo=None)
+        from datetime import datetime as _dt
+        delta = _dt.utcnow() - self.ultimo_acceso
         return delta.total_seconds() < 600  # 10 minutos
 
     def es_admin_de_sucursal(self):
@@ -379,15 +380,16 @@ def load_user(user_id):
 
 @app.before_request
 def actualizar_ultimo_acceso():
-    """Actualiza el timestamp de último acceso del usuario autenticado."""
+    """Actualiza el timestamp de último acceso del usuario autenticado.
+    Guarda UTC naive para comparación simple sin problemas de zona horaria."""
     if current_user and current_user.is_authenticated:
-        # Solo actualizar si han pasado más de 60 s desde la última actualización
-        # (evita escrituras en DB en cada recurso estático / polling)
-        ahora = get_peru_time().replace(tzinfo=None)
+        from datetime import datetime as _dt
+        ahora_utc = _dt.utcnow()
         ultimo = current_user.ultimo_acceso
-        if ultimo is None or (ahora - _to_peru(ultimo).replace(tzinfo=None)).total_seconds() > 60:
+        # Solo escribir en DB si pasaron más de 60 s (evita escritura en cada request)
+        if ultimo is None or (ahora_utc - ultimo).total_seconds() > 60:
             try:
-                current_user.ultimo_acceso = ahora
+                current_user.ultimo_acceso = ahora_utc
                 db.session.commit()
             except Exception:
                 db.session.rollback()
