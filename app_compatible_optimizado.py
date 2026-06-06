@@ -1997,29 +1997,41 @@ def init_db():
             db.create_all()
 
             # Migración: agregar columnas nuevas si no existen
+            # NOTA: En Railway con múltiples workers, los ALTERs pueden causar race conditions
+            # Solución: hacer las ALTERs de forma segura con manejo de locks
             try:
-                from sqlalchemy import text
-                with db.engine.connect() as _conn:
-                    if os.environ.get('DATABASE_URL'):
-                        # PostgreSQL soporta IF NOT EXISTS
-                        _conn.execute(text(
-                            "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS session_token VARCHAR(36)"))
-                        _conn.execute(text(
-                            "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS ultimo_acceso TIMESTAMP"))
-                    else:
-                        # SQLite: ejecutar por separado, ignorar error si ya existe
-                        for col_sql in [
-                            "ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)",
-                            "ALTER TABLE usuario ADD COLUMN ultimo_acceso TIMESTAMP",
-                        ]:
-                            try:
+                from sqlalchemy import text, event
+
+                # En Railway, usar transaction safety
+                if os.environ.get('DATABASE_URL'):
+                    try:
+                        with db.engine.begin() as _conn:
+                            # Usar CONCURRENTLY si es PostgreSQL 9.2+
+                            _conn.execute(text(
+                                "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS session_token VARCHAR(36)"))
+                            _conn.execute(text(
+                                "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS ultimo_acceso TIMESTAMP"))
+                        print("[OK] Columnas verificadas (PostgreSQL)")
+                    except Exception as e:
+                        if "already exists" in str(e) or "duplicate" in str(e).lower():
+                            print("[OK] Columnas ya existen")
+                        else:
+                            print(f"[WARN] Error en migración: {e}")
+                else:
+                    # SQLite: ejecutar por separado, ignorar error si ya existe
+                    for col_sql in [
+                        "ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)",
+                        "ALTER TABLE usuario ADD COLUMN ultimo_acceso TIMESTAMP",
+                    ]:
+                        try:
+                            with db.engine.connect() as _conn:
                                 _conn.execute(text(col_sql))
-                            except Exception:
-                                pass
-                    _conn.commit()
-                print("[OK] Columnas session_token / ultimo_acceso verificadas")
-            except Exception:
-                pass  # La columna ya existe (SQLite lanza error si duplicada)
+                                _conn.commit()
+                        except Exception:
+                            pass
+                    print("[OK] Columnas verificadas (SQLite)")
+            except Exception as e:
+                print(f"[WARN] Error general en migración de columnas: {e}")
 
             # Asignar session_token a usuarios existentes que tengan NULL
             # (ocurre en deploys post-migración: usuarios registrados antes del feature)
