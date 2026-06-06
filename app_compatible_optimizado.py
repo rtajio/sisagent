@@ -29,19 +29,55 @@ def get_peru_time():
 # Las operaciones se guardan con get_peru_time() que ya incluye la zona horaria de Perú
 # PostgreSQL está configurado con timezone 'America/Lima' en las conexiones
 
+def _fecha_rango(fecha_str, es_fin=False):
+    """
+    Convierte una fecha 'YYYY-MM-DD' en un datetime naive comparable
+    con los valores guardados en la DB:
+    - PostgreSQL (Railway): guarda UTC → convertir límites de día Perú a UTC
+    - SQLite (local): guarda hora Perú → usar naive Perú directo
+    """
+    try:
+        d = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+    if es_fin:
+        dt_peru = datetime.combine(d, datetime.max.time()).replace(
+            tzinfo=peru_tz, hour=23, minute=59, second=59, microsecond=999999)
+    else:
+        dt_peru = datetime.combine(d, datetime.min.time()).replace(tzinfo=peru_tz)
+
+    if os.environ.get('DATABASE_URL'):
+        # Railway/PostgreSQL: la DB guarda UTC naive → convertir a UTC naive
+        return dt_peru.astimezone(pytz.UTC).replace(tzinfo=None)
+    else:
+        # SQLite local: la DB guarda hora Perú naive → strip tzinfo
+        return dt_peru.replace(tzinfo=None)
+
+
 def _to_peru(dt):
     """
-    Normaliza cualquier datetime a hora de Perú.
-    - Si tiene tzinfo: convierte a America/Lima.
-    - Si es naive: se asume YA en hora Perú (SQLite y PostgreSQL TIMESTAMP WITHOUT TZ
-      guardan el wall-clock que fue generado con get_peru_time()).
+    Normaliza cualquier datetime a hora de Perú (America/Lima, UTC-5).
+
+    Comportamiento según backend:
+    - PostgreSQL (Railway): psycopg2 convierte datetime timezone-aware a UTC antes
+      de guardar en TIMESTAMP WITHOUT TIME ZONE. Al leer, regresa naive UTC.
+      → hay que tratar naive como UTC y convertir a Perú (-5h).
+    - SQLite (local): SQLAlchemy guarda el wall-clock tal cual (sin conversión).
+      get_peru_time() retorna hora Perú, SQLite la guarda como naive Perú.
+      → tratar naive como ya hora Perú (sin conversión adicional).
     """
     if dt is None:
         return None
     if dt.tzinfo is not None:
+        # Ya tiene zona horaria → convertir directo
         return dt.astimezone(peru_tz)
-    # Naive → ya está en hora Perú, solo añadir tzinfo para consistencia
-    return peru_tz.localize(dt)
+    # Naive: depende del backend
+    if os.environ.get('DATABASE_URL'):
+        # PostgreSQL en Railway → naive = UTC
+        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz)
+    else:
+        # SQLite local → naive = hora Perú (ya está bien)
+        return peru_tz.localize(dt)
 
 def format_peru_time(dt):
     """Formatea una hora para mostrar en zona horaria de Perú"""
@@ -1432,17 +1468,16 @@ def api_reportes_operaciones():
             except ValueError:
                 pass  # Ignorar si no se puede convertir
         
-        # Filtros de fecha: comparar naive vs naive (la DB guarda hora Perú sin tzinfo)
+        # Filtros de fecha: usar _fecha_rango para adaptarse al backend (SQLite vs PostgreSQL)
         if fecha_inicio:
-            fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
-            inicio_fecha = datetime.combine(fecha_inicio_obj, datetime.min.time())
-            query = query.filter(Operacion.hora >= inicio_fecha)
+            inicio = _fecha_rango(fecha_inicio, es_fin=False)
+            if inicio:
+                query = query.filter(Operacion.hora >= inicio)
 
         if fecha_fin:
-            fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
-            fin_fecha = datetime.combine(fecha_fin_obj, datetime.max.time()).replace(
-                hour=23, minute=59, second=59, microsecond=999999)
-            query = query.filter(Operacion.hora <= fin_fecha)
+            fin = _fecha_rango(fecha_fin, es_fin=True)
+            if fin:
+                query = query.filter(Operacion.hora <= fin)
         
         if medio:
             query = query.filter(Operacion.medio == medio)
@@ -1530,20 +1565,14 @@ def _get_operaciones_filtradas():
             pass
 
     if fecha_inicio:
-        try:
-            fi = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
-            query = query.filter(Operacion.hora >= datetime.combine(fi, datetime.min.time()))
-        except ValueError:
-            pass
+        inicio = _fecha_rango(fecha_inicio, es_fin=False)
+        if inicio:
+            query = query.filter(Operacion.hora >= inicio)
 
     if fecha_fin:
-        try:
-            ff = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
-            fin = datetime.combine(ff, datetime.max.time()).replace(
-                hour=23, minute=59, second=59, microsecond=999999)
+        fin = _fecha_rango(fecha_fin, es_fin=True)
+        if fin:
             query = query.filter(Operacion.hora <= fin)
-        except ValueError:
-            pass
 
     if medio:
         query = query.filter(Operacion.medio == medio)
