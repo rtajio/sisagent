@@ -1651,42 +1651,48 @@ def exportar_xlsx():
     ws = wb.active
     ws.title = 'Operaciones'
 
-    # Colores corporativos cálidos
-    COLOR_HEADER = '2A2420'   # chocolate oscuro
-    COLOR_ACCENT = 'A0845A'   # dorado
-    COLOR_TOTAL  = '332E28'
+    # Paleta clara y profesional para Excel (legible en impresión y pantalla)
+    COLOR_HEADER = '1F4E79'   # azul oscuro profesional
+    COLOR_TITLE  = '2E75B6'   # azul medio para título
+    COLOR_TOTAL  = 'D6E4F0'   # azul muy claro para totales
+    COLOR_ODD    = 'FFFFFF'   # blanco
+    COLOR_EVEN   = 'EBF3FA'   # azul muy claro alternado
 
-    header_font  = Font(bold=True, color='E8DCC8', size=11)
-    total_font   = Font(bold=True, color='E8DCC8', size=11)
+    header_font  = Font(bold=True, color='FFFFFF', size=10)
+    total_font   = Font(bold=True, color='1F4E79', size=10)
+    data_font    = Font(color='1A1A1A', size=10)
     header_fill  = PatternFill('solid', fgColor=COLOR_HEADER)
     total_fill   = PatternFill('solid', fgColor=COLOR_TOTAL)
-    accent_fill  = PatternFill('solid', fgColor=COLOR_ACCENT)
-    center       = Alignment(horizontal='center', vertical='center')
-    thin         = Side(style='thin', color='504840')
+    odd_fill     = PatternFill('solid', fgColor=COLOR_ODD)
+    even_fill    = PatternFill('solid', fgColor=COLOR_EVEN)
+    center       = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left_wrap    = Alignment(horizontal='left',   vertical='center', wrap_text=True)
+    right_al     = Alignment(horizontal='right',  vertical='center')
+    thin         = Side(style='thin', color='BDD7EE')
     border       = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     # Título
     ws.merge_cells('A1:H1')
     title_cell = ws['A1']
     title_cell.value = 'REPORTE DE OPERACIONES — SISAGENT'
-    title_cell.font  = Font(bold=True, size=14, color='E8DCC8')
-    title_cell.fill  = PatternFill('solid', fgColor=COLOR_ACCENT)
+    title_cell.font  = Font(bold=True, size=14, color='FFFFFF')
+    title_cell.fill  = PatternFill('solid', fgColor=COLOR_TITLE)
     title_cell.alignment = center
-    ws.row_dimensions[1].height = 28
+    ws.row_dimensions[1].height = 30
 
     # Parámetros del reporte en fila 2
     fecha_ini = request.args.get('fecha_inicio', '')
     fecha_fin = request.args.get('fecha_fin', '')
     ws.merge_cells('A2:H2')
     ws['A2'].value = f'Período: {fecha_ini or "—"}  →  {fecha_fin or "—"}    Total registros: {len(filas)}'
-    ws['A2'].font  = Font(italic=True, color='C8B89A', size=9)
-    ws['A2'].fill  = PatternFill('solid', fgColor='3E3830')
+    ws['A2'].font  = Font(italic=True, color='2E75B6', size=9)
+    ws['A2'].fill  = PatternFill('solid', fgColor='DEEAF1')
     ws['A2'].alignment = center
     ws.row_dimensions[2].height = 16
 
     # Cabecera columnas (fila 4)
     headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
-    widths  = [5,     12,      10,     14,            14,              16,      22,         22]
+    widths  = [5,     12,      10,     14,            14,              22,      22,         22]
     for col, (h, w) in enumerate(zip(headers, widths), 1):
         cell = ws.cell(row=4, column=col, value=h)
         cell.font      = header_font
@@ -1702,19 +1708,20 @@ def exportar_xlsx():
         row = i + 4
         values = [i, f['fecha'], f['hora'], f['monto'], f['comision'],
                   f['medio'], f['usuario'], f['sucursal']]
-        fill_bg = PatternFill('solid', fgColor='332E28' if i % 2 == 0 else '2A2420')
+        fill_bg = odd_fill if i % 2 == 1 else even_fill
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
             cell.fill   = fill_bg
             cell.border = border
-            cell.font   = Font(color='E8DCC8', size=10)
+            cell.font   = data_font
             if col in (4, 5):
                 cell.number_format = money_fmt
-                cell.alignment = Alignment(horizontal='right')
+                cell.alignment = right_al
             elif col == 1:
                 cell.alignment = center
             else:
-                cell.alignment = Alignment(horizontal='left')
+                cell.alignment = left_wrap
+        ws.row_dimensions[row].height = 15
 
     # Totales
     total_row = len(filas) + 5
