@@ -2038,35 +2038,13 @@ def init_db():
                 print(f"[WARN] No se pudo asignar tokens iniciales: {e}")
 
             # Migración: Corregir operaciones guardadas en UTC (antes del refactor a Perú puro)
-            # En Railway/PostgreSQL, las operaciones viejas fueron guardadas con tzinfo aware,
-            # psycopg2 las convirtió a UTC. Ahora el código asume naive = Perú.
-            # Hay que restar 5h a las operaciones que detectemos como UTC.
+            # NOTA: Migración DESACTIVADA por ahora - usar SQL directo si es necesario
+            # El problema es que consultar todas las operaciones puede causar timeout en Railway
+            # Solución: ejecutar manualmente en Railway cuando sea necesario
             try:
-                from datetime import timedelta
-                if os.environ.get('DATABASE_URL'):  # Solo en Railway/PostgreSQL
-                    operaciones = Operacion.query.all()
-                    operaciones_corregidas = 0
-                    for op in operaciones:
-                        if op.hora is None:
-                            continue
-                        # Heurística: si la hora está en rango "anormal" para Perú normal
-                        # (14:00 - 23:59 de operaciones recientes típicamente), podría ser UTC
-                        # Mejor: revisar si el rango es consistente con "5h adelantado"
-                        # Para simplificar: si la operación es reciente (últimos 2 meses) y
-                        # está entre 15:00-06:00 AHORA (después del refactor), es UTC vieja
-                        hora_peru_ahora = get_peru_time()
-                        dias_desde_op = (hora_peru_ahora.replace(tzinfo=None).date() - op.hora.date()).days
-                        if 0 <= dias_desde_op <= 60:  # Últimos 2 meses
-                            # Si la hora parece UTC (15:00-23:59), ajustar a Perú
-                            if 15 <= op.hora.hour <= 23 or 0 <= op.hora.hour <= 5:
-                                op.hora = op.hora - timedelta(hours=5)
-                                operaciones_corregidas += 1
-                    if operaciones_corregidas > 0:
-                        db.session.commit()
-                        print(f"[OK] Corregidas {operaciones_corregidas} operaciones de UTC a Perú")
+                print("[INFO] Migración de Operacion.hora desactivada (ejecutar manualmente si es necesario)")
             except Exception as e:
-                db.session.rollback()
-                print(f"[WARN] Error en migración de Operacion.hora: {e}")
+                print(f"[WARN] Nota sobre migración: {e}")
 
             # Asegurar que el admin exista con la contraseña correcta
             asegurar_admin_existe()
