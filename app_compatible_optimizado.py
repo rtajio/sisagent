@@ -234,7 +234,7 @@ class Operacion(db.Model):
     monto = db.Column(db.Numeric(10, 2), nullable=False)
     comision = db.Column(db.Numeric(10, 2), nullable=False)
     medio = db.Column(db.String(50), nullable=False)
-    hora = db.Column(db.DateTime, default=lambda: get_peru_time())
+    hora = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
 
@@ -785,15 +785,15 @@ def registrar_operacion():
         else:
             sucursal_id = current_user.sucursal_id
         
-        # Crear operación con hora explícita de Perú
-        hora_peru = get_peru_time()
+        # Crear operación con hora Perú (wall-clock naive, sin tzinfo)
+        hora_peru = get_peru_time().replace(tzinfo=None)
         operacion = Operacion(
             monto=monto,
             comision=comision,
             medio=medio,
             usuario_id=current_user.id,
             sucursal_id=sucursal_id,
-            hora=hora_peru  # Asegurar que se guarde con hora de Perú
+            hora=hora_peru  # Guardar como naive Perú para consistencia
         )
         
         db.session.add(operacion)
