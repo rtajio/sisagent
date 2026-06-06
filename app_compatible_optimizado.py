@@ -1907,7 +1907,7 @@ def exportar_pdf():
 
 
 # Healthcheck optimizado
-@app.route('/api/dashboard/comisiones')
+@app.route('/api/comisiones')
 @login_required
 def api_dashboard_comisiones():
     """API para obtener comisiones actualizadas del dashboard"""
