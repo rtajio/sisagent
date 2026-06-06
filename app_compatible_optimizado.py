@@ -1428,9 +1428,12 @@ def eliminar_sucursal(sucursal_id):
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
     suc = Sucursal.query.get_or_404(sucursal_id)
-    db.session.delete(suc)
+
+    # Soft delete: marcar como inactiva (preserva operaciones históricas y medios)
+    suc.activa = False
     db.session.commit()
-    flash('Sucursal eliminada', 'success')
+
+    flash(f'Sucursal "{suc.nombre}" marcada como inactiva. Datos históricos preservados.', 'success')
     return redirect(url_for('admin_sucursales'))
 
 @app.route('/reportes')
