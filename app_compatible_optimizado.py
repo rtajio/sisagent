@@ -2117,5 +2117,5 @@ except Exception as e:
 
 if __name__ == '__main__':
     init_db()
-    print("🎉 SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para producción!")
+    print("[OK] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para produccion!")
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
