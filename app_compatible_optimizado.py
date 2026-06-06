@@ -2097,18 +2097,21 @@ def init_db():
             print(f"[!!] Error en inicialización (continuando): {e}")
             # Continuar aunque haya errores menores
 
-# Asegurar inicialización cuando se importa (Gunicorn/Railway)
-try:
-    init_db()
-except Exception as e:
-    import traceback
-    print(f"[!!] Error al inicializar en import: {e}")
-    print("[!!] Traceback completo:")
-    traceback.print_exc()
-    # NO levantamos la excepción - permite que la app cargue aunque init_db falle
-    # Las rutas se registran ANTES de init_db(), así que deberían estar disponibles
-
+# Inicialización de BD: solo en modo development, nunca durante import
+# En Railway/Gunicorn, cada worker importa el módulo - init_db en import causa race conditions
+# La BD se inicializa una sola vez cuando el app arranca en modo development
 if __name__ == '__main__':
-    init_db()
+    try:
+        init_db()
+        print("[OK] BD inicializada correctamente")
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Error al inicializar BD: {e}")
+        traceback.print_exc()
+
     print("[OK] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para produccion!")
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
+# En Railway: Gunicorn NO ejecuta __name__ == '__main__'
+# Las rutas se registran al importar el módulo, sin necesidad de init_db() en import
+# Si se necesita inicialización de BD en Railway, usar command de deployment o appshotgun hook
