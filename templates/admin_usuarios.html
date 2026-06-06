@@ -70,8 +70,8 @@
                             {% elif usuario.ultimo_acceso %}
                             <span class="badge sesion-badge-{{ usuario.id }}"
                                   style="background:var(--text-muted); font-size:.7rem;"
-                                  title="Último acceso: {{ format_utc_a_peru_short(usuario.ultimo_acceso) }}">
-                                <i class="fas fa-clock me-1"></i>{{ format_utc_a_peru_short(usuario.ultimo_acceso) }}
+                                  title="Último acceso: {{ format_peru_datetime_short(usuario.ultimo_acceso) }}">
+                                <i class="fas fa-clock me-1"></i>{{ format_peru_datetime_short(usuario.ultimo_acceso) }}
                             </span>
                             {% else %}
                             <span class="badge sesion-badge-{{ usuario.id }}"

@@ -31,10 +31,9 @@ def get_peru_time():
 
 def _fecha_rango(fecha_str, es_fin=False):
     """
-    Convierte una fecha 'YYYY-MM-DD' en un datetime naive comparable
-    con los valores guardados en la DB:
-    - PostgreSQL (Railway): guarda UTC → convertir límites de día Perú a UTC
-    - SQLite (local): guarda hora Perú → usar naive Perú directo
+    Convierte una fecha 'YYYY-MM-DD' en un datetime naive en hora Perú
+    comparable con los valores guardados en la DB.
+    TODO se guarda como wall-clock Perú (naive).
     """
     try:
         d = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -46,38 +45,25 @@ def _fecha_rango(fecha_str, es_fin=False):
     else:
         dt_peru = datetime.combine(d, datetime.min.time()).replace(tzinfo=peru_tz)
 
-    if os.environ.get('DATABASE_URL'):
-        # Railway/PostgreSQL: la DB guarda UTC naive → convertir a UTC naive
-        return dt_peru.astimezone(pytz.UTC).replace(tzinfo=None)
-    else:
-        # SQLite local: la DB guarda hora Perú naive → strip tzinfo
-        return dt_peru.replace(tzinfo=None)
+    # Retornar como naive Perú (wall-clock) para comparar directamente con BD
+    return dt_peru.replace(tzinfo=None)
 
 
 def _to_peru(dt):
     """
     Normaliza cualquier datetime a hora de Perú (America/Lima, UTC-5).
 
-    Comportamiento según backend:
-    - PostgreSQL (Railway): psycopg2 convierte datetime timezone-aware a UTC antes
-      de guardar en TIMESTAMP WITHOUT TIME ZONE. Al leer, regresa naive UTC.
-      → hay que tratar naive como UTC y convertir a Perú (-5h).
-    - SQLite (local): SQLAlchemy guarda el wall-clock tal cual (sin conversión).
-      get_peru_time() retorna hora Perú, SQLite la guarda como naive Perú.
-      → tratar naive como ya hora Perú (sin conversión adicional).
+    Estrategia unificada: TODO se guarda como wall-clock Perú (naive) en ambos backends.
+    - Con tzinfo: convertir a Perú (puede venir de librerías externas)
+    - Sin tzinfo: asumir que YA es hora Perú, solo agregar zona para operaciones
     """
     if dt is None:
         return None
     if dt.tzinfo is not None:
-        # Ya tiene zona horaria → convertir directo
+        # Ya tiene zona horaria → convertir a Perú
         return dt.astimezone(peru_tz)
-    # Naive: depende del backend
-    if os.environ.get('DATABASE_URL'):
-        # PostgreSQL en Railway → naive = UTC
-        return dt.replace(tzinfo=pytz.UTC).astimezone(peru_tz)
-    else:
-        # SQLite local → naive = hora Perú (ya está bien)
-        return peru_tz.localize(dt)
+    # Naive: asumir que YA es hora Perú (guarda como wall-clock en la BD)
+    return peru_tz.localize(dt)
 
 def format_peru_time(dt):
     """Formatea una hora para mostrar en zona horaria de Perú"""
@@ -98,15 +84,6 @@ def format_peru_datetime_short(dt):
     """Formatea fecha/hora corta en zona horaria de Perú"""
     t = _to_peru(dt)
     return t.strftime('%d/%m/%Y %H:%M') if t else ""
-
-def format_utc_a_peru_short(dt_utc):
-    """Convierte UTC naive (como ultimo_acceso) a hora Perú para mostrar.
-    Este campo se guarda como datetime.utcnow(), así que siempre es UTC."""
-    if dt_utc is None:
-        return None
-    # dt_utc es naive pero representa UTC puro
-    dt_peru = dt_utc.replace(tzinfo=pytz.UTC).astimezone(peru_tz)
-    return dt_peru.strftime('%d/%m/%Y %H:%M')
 
 print("[*] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO arrancando...")
 print("[!] OPTIMIZACIONES: Caché, Compresión, Consultas optimizadas, Paginación")
@@ -161,7 +138,6 @@ def inject_format_functions():
         'format_peru_date': format_peru_date,
         'format_peru_datetime': format_peru_datetime,
         'format_peru_datetime_short': format_peru_datetime_short,
-        'format_utc_a_peru_short': format_utc_a_peru_short,
     }
 
 # Manejo global de errores para debugging
@@ -232,12 +208,11 @@ class Usuario(UserMixin, db.Model):
 
     def esta_en_linea(self):
         """True si el usuario tuvo actividad en los últimos 10 minutos.
-        ultimo_acceso se guarda como UTC naive para evitar problemas de zona horaria."""
+        ultimo_acceso se guarda en hora Perú (naive wall-clock)."""
         if self.ultimo_acceso is None:
             return False
-        from datetime import datetime as _dt
-        ahora_utc = _dt.now(pytz.UTC).replace(tzinfo=None)
-        delta = ahora_utc - self.ultimo_acceso
+        ahora_peru = get_peru_time().replace(tzinfo=None)
+        delta = ahora_peru - self.ultimo_acceso
         return delta.total_seconds() < 600  # 10 minutos
 
     def es_admin_de_sucursal(self):
@@ -392,17 +367,14 @@ def load_user(user_id):
 @app.before_request
 def actualizar_ultimo_acceso():
     """Actualiza el timestamp de último acceso del usuario autenticado.
-    Guarda UTC naive garantizado, incluso en PostgreSQL."""
+    Guarda en hora Perú (wall-clock naive) para consistencia total."""
     if current_user and current_user.is_authenticated:
-        from datetime import datetime as _dt
-        # Usar datetime con timezone UTC explícito, luego convertir a naive
-        # Esto garantiza UTC incluso en PostgreSQL
-        ahora_utc = _dt.now(pytz.UTC).replace(tzinfo=None)
+        ahora_peru = get_peru_time().replace(tzinfo=None)
         ultimo = current_user.ultimo_acceso
         # Solo escribir en DB si pasaron más de 60 s (evita escritura en cada request)
-        if ultimo is None or (ahora_utc - ultimo).total_seconds() > 60:
+        if ultimo is None or (ahora_peru - ultimo).total_seconds() > 60:
             try:
-                current_user.ultimo_acceso = ahora_utc
+                current_user.ultimo_acceso = ahora_peru
                 db.session.commit()
             except Exception:
                 db.session.rollback()
