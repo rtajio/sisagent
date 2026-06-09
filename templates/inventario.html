@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Inventario - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h4"><i class="fas fa-boxes-stacked me-2"></i> Inventario</h1>
+    {% if puede_gestionar %}
+    <a href="{{ url_for('nuevo_producto') }}" class="btn btn-success">
+        <i class="fas fa-plus me-1"></i> Nuevo Producto
+    </a>
+    {% endif %}
+</div>
+
+<!-- Filtro por sucursal (solo admin global, cuando hay más de una) -->
+{% if current_user.es_admin and sucursales|length > 1 %}
+<form method="GET" class="mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-auto">
+            <label for="sucursal_id" class="form-label mb-0 small">Filtrar por sucursal</label>
+            <select class="form-control form-control-sm" id="sucursal_id" name="sucursal_id" onchange="this.form.submit()">
+                <option value="">-- Todas las sucursales --</option>
+                {% for sucursal in sucursales %}
+                <option value="{{ sucursal.id }}" {% if sucursal_id == sucursal.id %}selected{% endif %}>{{ sucursal.nombre }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+</form>
+{% endif %}
+
+{% if productos %}
+<div class="row">
+    {% for producto in productos %}
+    <div class="col-sm-6 col-md-4 col-lg-3 mb-4">
+        <div class="card shadow h-100">
+            {% if producto.foto %}
+            <img src="{{ url_for('foto_producto', producto_id=producto.id) }}"
+                 class="card-img-top" style="height: 160px; object-fit: cover;" alt="{{ producto.nombre }}">
+            {% else %}
+            <div class="card-img-top d-flex align-items-center justify-content-center bg-light text-muted" style="height: 160px;">
+                <i class="fas fa-image fa-3x"></i>
+            </div>
+            {% endif %}
+            <div class="card-body d-flex flex-column">
+                <h6 class="font-weight-bold text-gray-800 mb-1">{{ producto.nombre }}</h6>
+                {% if producto.descripcion %}
+                <p class="small text-muted mb-2">{{ producto.descripcion }}</p>
+                {% endif %}
+                <div class="mb-1">
+                    <span class="h6 text-success">S/ {{ "%.2f"|format(producto.precio) }}</span>
+                </div>
+                <div class="mb-2">
+                    {% if producto.stock <= 0 %}
+                    <span class="badge bg-danger">Sin stock</span>
+                    {% elif producto.stock <= 5 %}
+                    <span class="badge bg-warning text-dark">Stock bajo: {{ producto.stock }}</span>
+                    {% else %}
+                    <span class="badge bg-success">Stock: {{ producto.stock }}</span>
+                    {% endif %}
+                </div>
+                {% if current_user.es_admin %}
+                <div class="small text-muted mb-2">
+                    <i class="fas fa-building me-1"></i>{{ producto.sucursal.nombre }}
+                </div>
+                {% endif %}
+                {% if puede_gestionar %}
+                <div class="mt-auto d-flex gap-2">
+                    <a href="{{ url_for('editar_producto', producto_id=producto.id) }}" class="btn btn-sm btn-outline-primary flex-grow-1">
+                        <i class="fas fa-edit"></i> Editar
+                    </a>
+                    <form method="POST" action="{{ url_for('eliminar_producto', producto_id=producto.id) }}"
+                          onsubmit="return confirm('¿Quitar &quot;{{ producto.nombre }}&quot; del inventario?')">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="fas fa-info-circle me-2"></i>
+    No hay productos en el inventario{% if not current_user.es_admin %} de tu sucursal{% endif %}.
+    {% if puede_gestionar %}
+    <a href="{{ url_for('nuevo_producto') }}">Agrega el primero</a>.
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

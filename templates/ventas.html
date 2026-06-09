@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Ventas - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h4"><i class="fas fa-shopping-cart me-2"></i> Ventas del Día</h1>
+    <a href="{{ url_for('registrar_venta') }}" class="btn btn-success">
+        <i class="fas fa-plus me-1"></i> Nueva Venta
+    </a>
+</div>
+
+<!-- Filtro por sucursal (solo admin global, cuando hay más de una) -->
+{% if current_user.es_admin and sucursales|length > 1 %}
+<form method="GET" class="mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-auto">
+            <label for="sucursal_id" class="form-label mb-0 small">Filtrar por sucursal</label>
+            <select class="form-control form-control-sm" id="sucursal_id" name="sucursal_id" onchange="this.form.submit()">
+                <option value="">-- Todas las sucursales --</option>
+                {% for sucursal in sucursales %}
+                <option value="{{ sucursal.id }}" {% if sucursal_id == sucursal.id %}selected{% endif %}>{{ sucursal.nombre }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+</form>
+{% endif %}
+
+{% if not current_user.es_admin_o_admin_sucursal() %}
+<div class="alert alert-secondary py-2 small">
+    <i class="fas fa-info-circle me-2"></i>Estás viendo únicamente las ventas que tú registraste hoy.
+</div>
+{% endif %}
+
+<!-- Resumen de caja de ventas -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-body">
+                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                    Total Vendido Hoy
+                </div>
+                <div class="h5 mb-0 font-weight-bold text-gray-800">
+                    S/ <span id="total-vendido">{{ "%.2f"|format(total_ventas) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-body">
+                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                    Operaciones
+                </div>
+                <div class="h5 mb-0 font-weight-bold text-gray-800">
+                    {{ ventas|length }}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-body">
+                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                    Promedio
+                </div>
+                <div class="h5 mb-0 font-weight-bold text-gray-800">
+                    S/ <span id="promedio-venta">{{ "%.2f"|format(total_ventas / ventas|length if ventas else 0) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de ventas -->
+<div class="card shadow">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold">
+            <i class="fas fa-list me-2"></i>Registro de Ventas
+        </h6>
+    </div>
+    <div class="card-body">
+        {% if ventas %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm">
+                <thead>
+                    <tr>
+                        <th>Hora</th>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Precio Unit. (S/)</th>
+                        <th>Total (S/)</th>
+                        <th>Usuario</th>
+                        {% if current_user.es_admin %}<th>Sucursal</th>{% endif %}
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for venta in ventas %}
+                    <tr>
+                        <td>{{ format_peru_time(venta.fecha) }}</td>
+                        <td>{{ venta.producto.nombre if venta.producto else '—' }}</td>
+                        <td>{{ venta.cantidad }}</td>
+                        <td>{{ "%.2f"|format(venta.precio_unitario) }}</td>
+                        <td class="font-weight-bold text-success">{{ "%.2f"|format(venta.monto) }}</td>
+                        <td>{{ venta.usuario.nombre_completo or venta.usuario.username }}</td>
+                        {% if current_user.es_admin %}<td>{{ venta.sucursal.nombre }}</td>{% endif %}
+                        <td>
+                            {% if current_user.es_admin or venta.usuario_id == current_user.id %}
+                            <a href="{{ url_for('editar_venta', venta_id=venta.id) }}" class="btn btn-sm btn-outline-warning" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            {% else %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Solo quien registró la venta puede editarla">
+                                <i class="fas fa-lock"></i>
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="font-weight-bold">
+                        <td colspan="4" class="text-right">TOTAL:</td>
+                        <td class="text-success">S/ {{ "%.2f"|format(total_ventas) }}</td>
+                        <td colspan="{{ 3 if current_user.es_admin else 2 }}"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            No hay ventas registradas hoy
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

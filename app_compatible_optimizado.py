@@ -9,7 +9,7 @@ import sys
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session, Response, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,6 +17,12 @@ from flask_caching import Cache
 from flask_compress import Compress
 import pytz
 import time
+import base64
+import json
+import anthropic
+import threading
+from sqlalchemy import or_
+from flask_sock import Sock
 
 # Configuración de zona horaria (UTC-5 para Perú)
 peru_tz = pytz.timezone('America/Lima')
@@ -108,6 +114,20 @@ else:
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Configuración del chatbot IA (Anthropic Claude Haiku 4.5)
+app.config['ANTHROPIC_API_KEY'] = os.getenv('ANTHROPIC_API_KEY', '')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-haiku-4-5')
+
+# Configuración de transcripción de voz (Google Gemini — capa gratuita 1500 req/día)
+app.config['GEMINI_API_KEY'] = os.getenv('GEMINI_API_KEY', '')
+GEMINI_TRANSCRIPTION_MODEL = os.getenv('GEMINI_TRANSCRIPTION_MODEL', 'gemini-2.5-flash-lite')
+GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
+GEMINI_MAX_AUDIO_BYTES = 18 * 1024 * 1024  # 18 MB (Gemini admite hasta 20MB inline)
+
+# Modelo Live API (transcripción en streaming via WebSocket)
+GEMINI_LIVE_MODEL = os.getenv('GEMINI_LIVE_MODEL', 'models/gemini-2.5-flash-native-audio-latest')
+GEMINI_LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent'
+
 # OPTIMIZACIÓN ULTRA: Configuración de caché
 app.config['CACHE_TYPE'] = 'simple'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 300  # 5 minutos
@@ -125,6 +145,9 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# WebSocket (para Gemini Live API streaming)
+sock = Sock(app)
 
 # OPTIMIZACIÓN ULTRA: Inicializar caché y compresión
 cache = Cache(app)
@@ -151,13 +174,13 @@ def handle_error(e):
     print("=" * 80)
     traceback.print_exc()
     print("=" * 80)
-    
+
     # Intentar rollback de la sesión si hay error de BD
     try:
         db.session.rollback()
     except:
         pass
-    
+
     # Si el usuario está autenticado, redirigir al dashboard con mensaje de error
     try:
         from flask_login import current_user
@@ -166,7 +189,7 @@ def handle_error(e):
             return redirect(url_for('dashboard'))
     except:
         pass
-    
+
     # Si no está autenticado, redirigir al login
     flash(f'Error: {str(e)}', 'error')
     return redirect(url_for('login'))
@@ -273,6 +296,45 @@ class ComisionMensual(db.Model):
     mes = db.Column(db.Integer, nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
     total_comision = db.Column(db.Numeric(10, 2), default=0.0)
+
+class Producto(db.Model):
+    __tablename__ = 'producto'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+    descripcion = db.Column(db.String(255))
+    precio = db.Column(db.Numeric(10, 2), nullable=False)
+    stock = db.Column(db.Integer, nullable=False, default=0)
+    # La foto se guarda directamente en la base de datos (funciona igual en local
+    # y en Railway, donde el filesystem es efímero y se perdería un archivo subido a disco)
+    foto = db.Column(db.LargeBinary)
+    foto_mimetype = db.Column(db.String(50))
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
+    sucursal = db.relationship('Sucursal', backref='productos')
+
+class Venta(db.Model):
+    __tablename__ = 'venta'
+    id = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
+    producto_id = db.Column(db.Integer, db.ForeignKey('producto.id'), nullable=False)
+    cantidad = db.Column(db.Integer, nullable=False, default=1)
+    precio_unitario = db.Column(db.Numeric(10, 2), nullable=False)
+    monto = db.Column(db.Numeric(10, 2), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    usuario = db.relationship('Usuario', backref='ventas')
+    sucursal = db.relationship('Sucursal', backref='ventas')
+    producto = db.relationship('Producto', backref='ventas')
+
+class CajaVentas(db.Model):
+    __tablename__ = 'caja_ventas'
+    id = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.Date, nullable=False)
+    sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    total_vendido = db.Column(db.Numeric(10, 2), default=0.0)
+    saldo = db.Column(db.Numeric(10, 2), default=0.0)
+    sucursal = db.relationship('Sucursal', backref='caja_ventas')
 
 # OPTIMIZACIÓN ULTRA: Cache de medios de pago
 @cache.memoize(timeout=300)
@@ -585,7 +647,7 @@ def dashboard():
             base_ctx['usuarios_sucursal'] = usuarios_sucursal
             base_ctx['comisiones_usuarios_hoy'] = comisiones_usuarios_hoy
             base_ctx['sucursal'] = current_user.sucursal
-            
+
             return render_template('admin_sucursal_dashboard.html', **base_ctx)
         else:
             # Para usuarios normales: agregar variables que el template espera
@@ -604,6 +666,7 @@ def dashboard():
                 Operacion.hora <= fin_dia
             ).order_by(Operacion.hora.desc()).limit(10).all()
             base_ctx['operaciones_hoy'] = operaciones_hoy_list
+
             return render_template('user_dashboard.html', **base_ctx)
     except Exception as e:
         import traceback
@@ -979,6 +1042,489 @@ def api_actualizar_operacion(operacion_id):
         sucursales = get_sucursales_activas_cache()
     
     return render_template('editar_operacion.html', operacion=operacion, sucursales=sucursales)
+
+# ========== MÓDULO DE INVENTARIO ==========
+
+# Tipos de imagen aceptados y peso máximo para la foto de un producto.
+# La foto se guarda en la base de datos (no en disco) porque en Railway el
+# filesystem es efímero y un archivo subido se perdería en cada redeploy.
+FOTO_TIPOS_PERMITIDOS = {'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'}
+FOTO_TAMANO_MAXIMO = 2 * 1024 * 1024  # 2 MB
+
+def leer_foto_producto(file_storage):
+    """Lee y valida la foto subida para un producto.
+
+    Devuelve (bytes, mimetype). Si no se subió ninguna foto devuelve (None, None).
+    Lanza ValueError con un mensaje amigable si el archivo no es válido.
+    """
+    if not file_storage or not file_storage.filename:
+        return None, None
+
+    mimetype = (file_storage.mimetype or '').lower()
+    if mimetype not in FOTO_TIPOS_PERMITIDOS:
+        raise ValueError('Formato de imagen no permitido (usa PNG, JPG, GIF o WEBP)')
+
+    datos = file_storage.read()
+    if not datos:
+        return None, None
+    if len(datos) > FOTO_TAMANO_MAXIMO:
+        raise ValueError('La imagen pesa demasiado (máximo 2 MB)')
+
+    return datos, mimetype
+
+
+def sucursales_visibles_para(usuario):
+    """Sucursales que el usuario puede ver/gestionar en inventario y ventas."""
+    if usuario.es_admin:
+        return Sucursal.query.filter_by(activa=True).order_by(Sucursal.nombre).all()
+    return [usuario.sucursal] if usuario.sucursal else []
+
+
+@app.route('/inventario')
+@login_required
+def inventario():
+    """Listado de productos en inventario (stock por sucursal)"""
+    sucursales = sucursales_visibles_para(current_user)
+
+    if current_user.es_admin:
+        sucursal_id = request.args.get('sucursal_id', type=int)
+        query = Producto.query.filter_by(activo=True)
+        if sucursal_id:
+            query = query.filter_by(sucursal_id=sucursal_id)
+    else:
+        sucursal_id = current_user.sucursal_id
+        query = Producto.query.filter_by(activo=True, sucursal_id=current_user.sucursal_id)
+
+    productos = query.order_by(Producto.nombre).all()
+    puede_gestionar = current_user.es_admin_o_admin_sucursal()
+
+    return render_template(
+        'inventario.html',
+        productos=productos,
+        sucursales=sucursales,
+        sucursal_id=sucursal_id,
+        puede_gestionar=puede_gestionar
+    )
+
+
+@app.route('/inventario/nuevo', methods=['GET', 'POST'])
+@login_required
+def nuevo_producto():
+    """Agregar un producto al inventario (solo administradores / admins de sucursal)"""
+    if not current_user.es_admin_o_admin_sucursal():
+        flash('No tienes permisos para gestionar el inventario', 'error')
+        return redirect(url_for('inventario'))
+
+    sucursales = sucursales_visibles_para(current_user)
+
+    if request.method == 'POST':
+        try:
+            nombre = request.form.get('nombre', '').strip()
+            descripcion = request.form.get('descripcion', '').strip()
+            precio = request.form.get('precio', type=float)
+            stock = request.form.get('stock', type=int)
+
+            if not nombre:
+                flash('Debe ingresar el nombre del producto', 'error')
+                return redirect(url_for('nuevo_producto'))
+            if precio is None or precio <= 0:
+                flash('El precio debe ser mayor a 0', 'error')
+                return redirect(url_for('nuevo_producto'))
+            if stock is None or stock < 0:
+                flash('El stock no puede ser negativo', 'error')
+                return redirect(url_for('nuevo_producto'))
+
+            if current_user.es_admin:
+                sucursal_id = request.form.get('sucursal_id', type=int)
+                if not sucursal_id:
+                    flash('Debe seleccionar una sucursal', 'error')
+                    return redirect(url_for('nuevo_producto'))
+            else:
+                sucursal_id = current_user.sucursal_id
+
+            try:
+                foto, foto_mimetype = leer_foto_producto(request.files.get('foto'))
+            except ValueError as e:
+                flash(str(e), 'error')
+                return redirect(url_for('nuevo_producto'))
+
+            producto = Producto(
+                nombre=nombre,
+                descripcion=descripcion,
+                precio=precio,
+                stock=stock,
+                foto=foto,
+                foto_mimetype=foto_mimetype,
+                sucursal_id=sucursal_id
+            )
+            db.session.add(producto)
+            db.session.commit()
+            flash(f'Producto "{nombre}" agregado al inventario', 'success')
+            return redirect(url_for('inventario'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al agregar el producto: {str(e)}', 'error')
+            return redirect(url_for('nuevo_producto'))
+
+    return render_template('producto_form.html', sucursales=sucursales, producto=None)
+
+
+@app.route('/inventario/<int:producto_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_producto(producto_id):
+    """Editar un producto del inventario (solo administradores / admins de sucursal)"""
+    if not current_user.es_admin_o_admin_sucursal():
+        flash('No tienes permisos para gestionar el inventario', 'error')
+        return redirect(url_for('inventario'))
+
+    producto = Producto.query.get_or_404(producto_id)
+    if not current_user.es_admin and producto.sucursal_id != current_user.sucursal_id:
+        flash('No tienes permisos para editar este producto', 'error')
+        return redirect(url_for('inventario'))
+
+    sucursales = sucursales_visibles_para(current_user)
+
+    if request.method == 'POST':
+        try:
+            nombre = request.form.get('nombre', '').strip()
+            descripcion = request.form.get('descripcion', '').strip()
+            precio = request.form.get('precio', type=float)
+            stock = request.form.get('stock', type=int)
+
+            if not nombre:
+                flash('Debe ingresar el nombre del producto', 'error')
+                return redirect(url_for('editar_producto', producto_id=producto_id))
+            if precio is None or precio <= 0:
+                flash('El precio debe ser mayor a 0', 'error')
+                return redirect(url_for('editar_producto', producto_id=producto_id))
+            if stock is None or stock < 0:
+                flash('El stock no puede ser negativo', 'error')
+                return redirect(url_for('editar_producto', producto_id=producto_id))
+
+            try:
+                foto, foto_mimetype = leer_foto_producto(request.files.get('foto'))
+            except ValueError as e:
+                flash(str(e), 'error')
+                return redirect(url_for('editar_producto', producto_id=producto_id))
+
+            producto.nombre = nombre
+            producto.descripcion = descripcion
+            producto.precio = precio
+            producto.stock = stock
+            if foto is not None:
+                producto.foto = foto
+                producto.foto_mimetype = foto_mimetype
+
+            db.session.commit()
+            flash(f'Producto "{nombre}" actualizado', 'success')
+            return redirect(url_for('inventario'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al actualizar el producto: {str(e)}', 'error')
+            return redirect(url_for('editar_producto', producto_id=producto_id))
+
+    return render_template('producto_form.html', sucursales=sucursales, producto=producto)
+
+
+@app.route('/inventario/<int:producto_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_producto(producto_id):
+    """Quitar (desactivar) un producto del inventario"""
+    if not current_user.es_admin_o_admin_sucursal():
+        flash('No tienes permisos para gestionar el inventario', 'error')
+        return redirect(url_for('inventario'))
+
+    producto = Producto.query.get_or_404(producto_id)
+    if not current_user.es_admin and producto.sucursal_id != current_user.sucursal_id:
+        flash('No tienes permisos para eliminar este producto', 'error')
+        return redirect(url_for('inventario'))
+
+    producto.activo = False
+    db.session.commit()
+    flash(f'Producto "{producto.nombre}" eliminado del inventario', 'success')
+    return redirect(url_for('inventario'))
+
+
+@app.route('/inventario/foto/<int:producto_id>')
+@login_required
+def foto_producto(producto_id):
+    """Sirve la foto de un producto guardada en la base de datos"""
+    producto = Producto.query.get_or_404(producto_id)
+    if not producto.foto:
+        abort(404)
+    respuesta = Response(producto.foto, mimetype=producto.foto_mimetype or 'image/jpeg')
+    respuesta.headers['Cache-Control'] = 'private, max-age=3600'
+    return respuesta
+
+
+# ========== MÓDULO DE VENTAS ==========
+
+@app.route('/ventas')
+@login_required
+def ventas():
+    """Listado de ventas del día.
+
+    Visibilidad (igual que en Operaciones):
+      - Admin global: todas las ventas (puede filtrar por sucursal)
+      - Admin de sucursal: las ventas de su sucursal
+      - Usuario normal: solo SUS PROPIAS ventas
+    """
+    sucursales = sucursales_visibles_para(current_user)
+
+    if current_user.es_admin:
+        sucursal_id = request.args.get('sucursal_id', type=int)
+        query = Venta.query
+        if sucursal_id:
+            query = query.filter(Venta.sucursal_id == sucursal_id)
+    elif current_user.es_admin_de_sucursal():
+        sucursal_id = current_user.sucursal_id
+        query = Venta.query.filter(Venta.sucursal_id == current_user.sucursal_id)
+    else:
+        sucursal_id = current_user.sucursal_id
+        query = Venta.query.filter(Venta.usuario_id == current_user.id)
+
+    # Solo las ventas de hoy (hora de Perú)
+    hoy = get_peru_time().date()
+    query = query.filter(db.func.date(Venta.fecha) == hoy)
+
+    ventas_hoy = query.order_by(Venta.fecha.desc()).all()
+    total_ventas = sum(float(v.monto) for v in ventas_hoy)
+
+    return render_template(
+        'ventas.html',
+        ventas=ventas_hoy,
+        total_ventas=total_ventas,
+        sucursales=sucursales,
+        sucursal_id=sucursal_id
+    )
+
+@app.route('/ventas/registrar', methods=['GET', 'POST'])
+@login_required
+def registrar_venta():
+    """Registrar una nueva venta eligiendo un producto del inventario.
+
+    El monto se calcula como precio_unitario * cantidad y se descuenta
+    automáticamente del stock del producto en esa sucursal.
+    """
+    if request.method == 'POST':
+        try:
+            producto_id = request.form.get('producto_id', type=int)
+            cantidad = request.form.get('cantidad', type=int)
+
+            if not producto_id:
+                flash('Debe seleccionar un producto', 'error')
+                return redirect(url_for('registrar_venta'))
+
+            if not cantidad or cantidad <= 0:
+                flash('La cantidad debe ser mayor a 0', 'error')
+                return redirect(url_for('registrar_venta'))
+
+            producto = Producto.query.get(producto_id)
+            if not producto or not producto.activo:
+                flash('El producto seleccionado no es válido', 'error')
+                return redirect(url_for('registrar_venta'))
+
+            # Determinar sucursal de la venta
+            if current_user.es_admin:
+                sucursal_id = request.form.get('sucursal_id', type=int)
+                if not sucursal_id:
+                    flash('Debe seleccionar una sucursal', 'error')
+                    return redirect(url_for('registrar_venta'))
+            else:
+                sucursal_id = current_user.sucursal_id
+
+            if producto.sucursal_id != sucursal_id:
+                flash('Ese producto no pertenece al inventario de la sucursal seleccionada', 'error')
+                return redirect(url_for('registrar_venta'))
+
+            if cantidad > producto.stock:
+                flash(f'Stock insuficiente: quedan {producto.stock} unidad(es) de "{producto.nombre}"', 'error')
+                return redirect(url_for('registrar_venta'))
+
+            precio_unitario = float(producto.precio)
+            monto = precio_unitario * cantidad
+
+            # Crear venta (snapshot del precio al momento de la venta)
+            venta = Venta(
+                producto_id=producto.id,
+                cantidad=cantidad,
+                precio_unitario=precio_unitario,
+                monto=monto,
+                usuario_id=current_user.id,
+                sucursal_id=sucursal_id,
+                fecha=get_peru_time().replace(tzinfo=None)
+            )
+            db.session.add(venta)
+
+            # Descontar stock del inventario
+            producto.stock = producto.stock - cantidad
+
+            # Actualizar caja de ventas del día
+            hoy = get_peru_time().date()
+            caja = CajaVentas.query.filter_by(
+                fecha=hoy,
+                sucursal_id=sucursal_id
+            ).first()
+
+            if caja:
+                caja.total_vendido = float(caja.total_vendido) + monto
+                caja.saldo = float(caja.saldo) + monto
+            else:
+                caja = CajaVentas(
+                    fecha=hoy,
+                    sucursal_id=sucursal_id,
+                    total_vendido=monto,
+                    saldo=monto
+                )
+                db.session.add(caja)
+
+            db.session.commit()
+            flash(f'Venta registrada: {cantidad} x "{producto.nombre}" = S/ {monto:.2f}', 'success')
+            return redirect(url_for('ventas'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al registrar venta: {str(e)}', 'error')
+            return redirect(url_for('registrar_venta'))
+
+    # GET: mostrar formulario
+    sucursales = sucursales_visibles_para(current_user)
+    if current_user.es_admin:
+        productos = Producto.query.filter_by(activo=True).order_by(Producto.nombre).all()
+    else:
+        productos = Producto.query.filter_by(activo=True, sucursal_id=current_user.sucursal_id).order_by(Producto.nombre).all()
+
+    return render_template('registrar_venta.html', sucursales=sucursales, productos=productos)
+
+
+@app.route('/ventas/<int:venta_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_venta(venta_id):
+    """Editar una venta ya registrada.
+
+    Solo puede editarla quien la registró (o el administrador global), igual
+    que con las operaciones. Al cambiar de producto/cantidad se recalculan el
+    stock del/los producto(s) involucrados y el total de la caja de ventas del día.
+    """
+    venta = Venta.query.get_or_404(venta_id)
+
+    if not current_user.es_admin and venta.usuario_id != current_user.id:
+        flash('Solo puedes editar las ventas que tú mismo registraste', 'error')
+        return redirect(url_for('ventas'))
+
+    productos = Producto.query.filter_by(sucursal_id=venta.sucursal_id, activo=True).order_by(Producto.nombre).all()
+    # Asegurar que el producto actual de la venta aparezca en la lista aunque
+    # ya no esté activo (para no romper el formulario de edición)
+    if venta.producto and venta.producto not in productos:
+        productos = [venta.producto] + productos
+
+    if request.method == 'POST':
+        try:
+            producto_id = request.form.get('producto_id', type=int)
+            cantidad = request.form.get('cantidad', type=int)
+
+            if not producto_id:
+                flash('Debe seleccionar un producto', 'error')
+                return redirect(url_for('editar_venta', venta_id=venta_id))
+
+            if not cantidad or cantidad <= 0:
+                flash('La cantidad debe ser mayor a 0', 'error')
+                return redirect(url_for('editar_venta', venta_id=venta_id))
+
+            nuevo_producto_obj = Producto.query.get(producto_id)
+            if not nuevo_producto_obj or nuevo_producto_obj.sucursal_id != venta.sucursal_id:
+                flash('El producto seleccionado no es válido para esta venta', 'error')
+                return redirect(url_for('editar_venta', venta_id=venta_id))
+
+            producto_anterior = venta.producto
+            cantidad_anterior = venta.cantidad
+            monto_anterior = float(venta.monto)
+
+            # Cuánto stock queda "disponible" si liberamos lo que ya estaba
+            # comprometido por la venta original
+            if nuevo_producto_obj.id == producto_anterior.id:
+                stock_disponible = nuevo_producto_obj.stock + cantidad_anterior
+            else:
+                stock_disponible = nuevo_producto_obj.stock
+
+            if cantidad > stock_disponible:
+                flash(f'Stock insuficiente: solo hay {stock_disponible} unidad(es) disponibles de "{nuevo_producto_obj.nombre}"', 'error')
+                return redirect(url_for('editar_venta', venta_id=venta_id))
+
+            # Revertir el stock comprometido por la venta original y aplicar el nuevo
+            producto_anterior.stock = producto_anterior.stock + cantidad_anterior
+            nuevo_producto_obj.stock = nuevo_producto_obj.stock - cantidad
+
+            nuevo_precio_unitario = float(nuevo_producto_obj.precio)
+            nuevo_monto = nuevo_precio_unitario * cantidad
+
+            # Ajustar la caja de ventas del día de la venta original
+            # (revertir el monto anterior y aplicar el nuevo)
+            fecha_caja = venta.fecha.date()
+            caja = CajaVentas.query.filter_by(fecha=fecha_caja, sucursal_id=venta.sucursal_id).first()
+            if caja:
+                caja.total_vendido = float(caja.total_vendido) - monto_anterior + nuevo_monto
+                caja.saldo = float(caja.saldo) - monto_anterior + nuevo_monto
+            else:
+                caja = CajaVentas(
+                    fecha=fecha_caja,
+                    sucursal_id=venta.sucursal_id,
+                    total_vendido=nuevo_monto,
+                    saldo=nuevo_monto
+                )
+                db.session.add(caja)
+
+            venta.producto_id = nuevo_producto_obj.id
+            venta.cantidad = cantidad
+            venta.precio_unitario = nuevo_precio_unitario
+            venta.monto = nuevo_monto
+
+            db.session.commit()
+            flash('Venta actualizada correctamente', 'success')
+            return redirect(url_for('ventas'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al actualizar la venta: {str(e)}', 'error')
+            return redirect(url_for('editar_venta', venta_id=venta_id))
+
+    return render_template('editar_venta.html', venta=venta, productos=productos)
+
+
+@app.route('/api/ventas/resumen')
+@login_required
+def api_ventas_resumen():
+    """API para obtener resumen de ventas del día"""
+    from datetime import date
+    hoy = get_peru_time().date()
+
+    sucursal_id = request.args.get('sucursal_id', type=int)
+
+    if current_user.es_admin and sucursal_id:
+        caja = CajaVentas.query.filter_by(
+            fecha=hoy,
+            sucursal_id=sucursal_id
+        ).first()
+    elif not current_user.es_admin:
+        caja = CajaVentas.query.filter_by(
+            fecha=hoy,
+            sucursal_id=current_user.sucursal_id
+        ).first()
+    else:
+        return jsonify({'error': 'Sucursal no especificada'}), 400
+
+    if caja:
+        return jsonify({
+            'total_vendido': float(caja.total_vendido),
+            'saldo': float(caja.saldo)
+        })
+
+    return jsonify({
+        'total_vendido': 0.0,
+        'saldo': 0.0
+    })
 
 # Rutas de administración optimizadas
 @app.route('/admin/usuarios')
@@ -1904,6 +2450,2208 @@ def exportar_pdf():
         mimetype='application/pdf',
         headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
     )
+
+
+# ========== MÓDULO DE CHATBOT IA (Anthropic Claude Haiku 4.5) ==========
+
+# Límite de tamaño para imágenes adjuntas al chat (independiente del límite
+# de fotos de producto, porque las imágenes del chat son efímeras).
+FOTO_CHAT_TAMANO_MAXIMO = 10 * 1024 * 1024  # 10 MB
+
+SYSTEM_PROMPT_CHATBOT = """Eres el asistente virtual de SISAGENT, un sistema de gestión bancaria y de ventas para Perú.
+
+Modelo de datos del sistema:
+- Operaciones bancarias: cada operación tiene `monto` (S/), `comision` (S/) y `medio` (uno de: EFECTIVO, TARJETA, TRANSFERENCIA, YAPE, PLIN, etc. — depende de qué medios estén habilitados en cada sucursal). NO existe un campo "tipo de operación"; las operaciones se categorizan únicamente por su medio de pago. La comisión se acumula en totales diarios y mensuales por sucursal.
+- Productos: cada producto tiene `nombre`, `descripcion`, `precio` (S/), `stock` (unidades), una `foto` opcional, y pertenece a una `sucursal`. Solo los administradores pueden crear/editar productos.
+- Ventas: cada venta es de un producto x cantidad al precio actual. Al registrarse, descuenta stock automáticamente y suma a la caja de ventas del día (separada de las comisiones bancarias).
+
+Tu rol — eres un asistente operativo COMPLETO. Puedes:
+1. Explicar cómo funciona el sistema.
+2. Buscar y consultar: productos, operaciones, ventas, usuarios, sucursales, medios de pago.
+3. Ejecutar acciones bajo confirmación (siempre pasan por una tarjeta que el usuario aprueba):
+   - Registrar venta / operación bancaria
+   - Crear / editar / eliminar productos
+   - Eliminar operaciones o ventas
+   - Crear usuarios (con su rol y sucursal)
+   - Crear sucursales nuevas
+
+Reglas críticas:
+- Para CUALQUIER mutación, usa siempre la herramienta `proponer_*` correspondiente. NUNCA digas "ya quedó registrado/eliminado/creado" — el sistema le mostrará al usuario una tarjeta de confirmación y solo entonces ejecuta.
+- Si necesitas el ID de una operación/venta para eliminarla, primero usa `buscar_operaciones` o `buscar_ventas` para que el usuario te confirme cuál.
+- Si te muestran una imagen, descríbela brevemente y usa `buscar_productos` con palabras clave.
+- No inventes valores: si falta información, pregunta en lenguaje natural ("¿en qué sucursal?", "¿qué precio?", "¿con qué stock inicial?").
+- Los permisos se respetan en el servidor automáticamente. Si el usuario no tiene acceso, la herramienta devolverá un error claro que debes transmitir.
+- Roles: admin global (puede TODO), admin de sucursal (gestiona su sucursal — productos, usuarios, operaciones de su sucursal), usuario regular (solo sus propias ventas/operaciones).
+- Responde SIEMPRE en español, conciso, amable y orientado a la acción. Cuando expliques lo que vas a hacer, anuncia primero: "Voy a proponer X" — luego invoca la herramienta.
+"""
+
+
+_HERRAMIENTAS_DECLARACIONES = [
+    {
+        "name": "buscar_productos",
+        "description": "Busca productos en el inventario por palabras clave (en nombre o descripcion). Devuelve productos visibles para el usuario actual (acotados a sus sucursales). Usala cuando el usuario pregunte por un producto, o cuando adjunte una foto.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "termino": {"type": "string", "description": "Palabras clave separadas por espacios (ej: 'coca cola 500ml', 'arroz costeno')"},
+            },
+            "required": ["termino"],
+        },
+    },
+    {
+        "name": "consultar_precio_stock",
+        "description": "Devuelve precio, stock, descripcion y sucursal de UN producto especifico identificado por su ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "producto_id": {"type": "integer", "description": "ID del producto"},
+            },
+            "required": ["producto_id"],
+        },
+    },
+    {
+        "name": "resumen_ventas_dia",
+        "description": "Devuelve el total vendido hoy y el saldo de caja de ventas para las sucursales visibles del usuario.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sucursal_id": {"type": "integer", "description": "(Opcional) ID de sucursal especifica"},
+            },
+        },
+    },
+    {
+        "name": "medios_de_pago",
+        "description": "Lista los medios de pago activos en una sucursal (EFECTIVO, YAPE, PLIN, TARJETA, etc.).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sucursal_id": {"type": "integer", "description": "(Opcional) ID de sucursal — si se omite, usa la primera sucursal visible del usuario"},
+            },
+        },
+    },
+    {
+        "name": "proponer_venta",
+        "description": "PROPONE registrar una venta. Valida el producto, calcula el total y devuelve una vista previa — el sistema mostrara una tarjeta de confirmacion al usuario. NO ejecuta la venta directamente. Usala cuando el usuario pida registrar una venta.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "producto_id": {"type": "integer", "description": "ID del producto a vender"},
+                "cantidad": {"type": "integer", "description": "Cantidad de unidades", "minimum": 1},
+                "sucursal_id": {"type": "integer", "description": "(Opcional, solo admin) ID de la sucursal donde se registra la venta"},
+            },
+            "required": ["producto_id", "cantidad"],
+        },
+    },
+    {
+        "name": "proponer_operacion",
+        "description": "PROPONE registrar una operacion bancaria. Valida el medio de pago y devuelve una vista previa — el sistema mostrara una tarjeta de confirmacion al usuario. NO ejecuta la operacion directamente. Usala cuando el usuario pida registrar una operacion bancaria.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "monto": {"type": "number", "description": "Monto de la operacion en soles (S/)"},
+                "comision": {"type": "number", "description": "Comision cobrada en soles (S/)"},
+                "medio": {"type": "string", "description": "Medio de pago (EFECTIVO, YAPE, PLIN, TARJETA, TRANSFERENCIA, etc.)"},
+                "sucursal_id": {"type": "integer", "description": "(Opcional, solo admin) ID de la sucursal"},
+            },
+            "required": ["monto", "comision", "medio"],
+        },
+    },
+    # ===== Read-only: búsquedas para localizar entidades a editar/eliminar =====
+    {
+        "name": "buscar_operaciones",
+        "description": "Lista operaciones bancarias recientes (de hoy por defecto, o de la fecha que el usuario especifique). Útil para que el usuario identifique cuál editar o eliminar. Acotada a las sucursales visibles del usuario.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fecha": {"type": "string", "description": "(Opcional) Fecha YYYY-MM-DD. Default: hoy."},
+                "sucursal_id": {"type": "integer", "description": "(Opcional) ID de sucursal específica."},
+                "limite": {"type": "integer", "description": "(Opcional) Cuántos devolver. Default 10, máx 30."},
+            },
+        },
+    },
+    {
+        "name": "buscar_ventas",
+        "description": "Lista ventas recientes (de hoy por defecto). Útil para identificar cuál editar o eliminar. Acotada a las sucursales visibles del usuario.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fecha": {"type": "string", "description": "(Opcional) Fecha YYYY-MM-DD. Default: hoy."},
+                "sucursal_id": {"type": "integer", "description": "(Opcional) ID de sucursal específica."},
+                "limite": {"type": "integer", "description": "(Opcional) Default 10, máx 30."},
+            },
+        },
+    },
+    {
+        "name": "listar_usuarios",
+        "description": "Lista usuarios del sistema. Solo admin o admin de sucursal pueden usarla. Admin de sucursal solo ve usuarios de su sucursal.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sucursal_id": {"type": "integer", "description": "(Opcional) Filtrar por sucursal."},
+            },
+        },
+    },
+    {
+        "name": "listar_sucursales",
+        "description": "Lista todas las sucursales (activas e inactivas).",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    # ===== Acciones que requieren confirmación =====
+    {
+        "name": "proponer_crear_producto",
+        "description": "PROPONE crear un producto nuevo en el inventario. Solo admin o admin de sucursal pueden. NO ejecuta — muestra tarjeta de confirmación.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nombre": {"type": "string", "description": "Nombre del producto"},
+                "precio": {"type": "number", "description": "Precio en S/ (mayor a 0)"},
+                "stock": {"type": "integer", "description": "Stock inicial (>=0)", "minimum": 0},
+                "descripcion": {"type": "string", "description": "(Opcional) Descripción"},
+                "sucursal_id": {"type": "integer", "description": "(Opcional, solo admin) Sucursal donde se crea"},
+            },
+            "required": ["nombre", "precio", "stock"],
+        },
+    },
+    {
+        "name": "proponer_editar_producto",
+        "description": "PROPONE editar campos de un producto. Solo admin o admin de sucursal en su sucursal. NO ejecuta — muestra tarjeta de confirmación.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "producto_id": {"type": "integer", "description": "ID del producto"},
+                "nombre": {"type": "string", "description": "(Opcional) Nuevo nombre"},
+                "precio": {"type": "number", "description": "(Opcional) Nuevo precio"},
+                "stock": {"type": "integer", "description": "(Opcional) Nuevo stock", "minimum": 0},
+                "descripcion": {"type": "string", "description": "(Opcional) Nueva descripción"},
+            },
+            "required": ["producto_id"],
+        },
+    },
+    {
+        "name": "proponer_eliminar_producto",
+        "description": "PROPONE eliminar (desactivar) un producto del inventario. Solo admin o admin de sucursal en su sucursal. NO ejecuta.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "producto_id": {"type": "integer", "description": "ID del producto"},
+            },
+            "required": ["producto_id"],
+        },
+    },
+    {
+        "name": "proponer_eliminar_operacion",
+        "description": "PROPONE eliminar una operación bancaria. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las que él registró. NO ejecuta.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "operacion_id": {"type": "integer", "description": "ID de la operación a eliminar"},
+            },
+            "required": ["operacion_id"],
+        },
+    },
+    {
+        "name": "proponer_eliminar_venta",
+        "description": "PROPONE eliminar una venta (devuelve el stock al inventario). Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas. NO ejecuta.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "venta_id": {"type": "integer", "description": "ID de la venta a eliminar"},
+            },
+            "required": ["venta_id"],
+        },
+    },
+    {
+        "name": "proponer_crear_usuario",
+        "description": "PROPONE crear un usuario nuevo. Solo admin global puede elegir rol/sucursal; admin de sucursal solo crea usuarios regulares en su propia sucursal. NO ejecuta.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "username": {"type": "string", "description": "Nombre de usuario único"},
+                "password": {"type": "string", "description": "Contraseña inicial"},
+                "nombre_completo": {"type": "string", "description": "Nombre completo"},
+                "sucursal_id": {"type": "integer", "description": "(Opcional, solo admin) Sucursal donde se asigna"},
+                "rol": {"type": "string", "enum": ["usuario", "admin_sucursal", "admin"], "description": "(Opcional, solo admin global) Rol. Default: usuario"},
+            },
+            "required": ["username", "password", "nombre_completo"],
+        },
+    },
+    {
+        "name": "proponer_crear_sucursal",
+        "description": "PROPONE crear una sucursal nueva. Solo admin global. NO ejecuta.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nombre": {"type": "string", "description": "Nombre de la sucursal"},
+                "direccion": {"type": "string", "description": "(Opcional) Dirección"},
+            },
+            "required": ["nombre"],
+        },
+    },
+]
+
+
+def _serializar_producto_chat(producto):
+    """Serializa un producto para enviarlo al chat (incluye URL de foto si tiene)."""
+    return {
+        "id": producto.id,
+        "nombre": producto.nombre,
+        "descripcion": producto.descripcion or "",
+        "precio": float(producto.precio),
+        "stock": producto.stock,
+        "sucursal_id": producto.sucursal_id,
+        "sucursal_nombre": producto.sucursal.nombre if producto.sucursal else "",
+        "foto_url": url_for('foto_producto', producto_id=producto.id) if producto.foto else None,
+    }
+
+
+def _resolver_sucursal_para_accion(sucursal_id_args, usuario):
+    """Resuelve la sucursal donde se ejecutara una accion.
+
+    - No-admin: siempre su propia sucursal (ignora sucursal_id_args).
+    - Admin: usa sucursal_id_args si se proporciona; si no, exige explicito cuando hay >1.
+    """
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        raise ValueError("No tienes ninguna sucursal asignada.")
+
+    if not usuario.es_admin:
+        if not usuario.sucursal:
+            raise ValueError("No tienes una sucursal asignada.")
+        return usuario.sucursal
+
+    if sucursal_id_args is not None:
+        try:
+            sid = int(sucursal_id_args)
+        except (TypeError, ValueError):
+            raise ValueError(f"sucursal_id invalido: {sucursal_id_args}")
+        sucursal = next((s for s in sucursales if s.id == sid), None)
+        if not sucursal:
+            raise ValueError(f"La sucursal {sid} no existe o no esta activa.")
+        return sucursal
+
+    if len(sucursales) == 1:
+        return sucursales[0]
+
+    nombres = ", ".join(f"{s.nombre} (id={s.id})" for s in sucursales)
+    raise ValueError(
+        "Como administrador, debes especificar en que sucursal registrar la accion. "
+        f"Sucursales disponibles: {nombres}."
+    )
+
+
+# ---------- Handlers de herramientas de SOLO LECTURA ----------
+
+def _tool_buscar_productos(args, usuario):
+    termino = (args.get("termino") or "").strip()
+    if not termino:
+        return {"error": "Debes proporcionar un termino de busqueda."}
+
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        return {"productos": [], "mensaje": "No tienes ninguna sucursal asignada."}
+
+    sucursal_ids = [s.id for s in sucursales]
+    palabras = [p for p in termino.split() if p]
+
+    query = Producto.query.filter(
+        Producto.sucursal_id.in_(sucursal_ids),
+        Producto.activo == True,
+    )
+    for palabra in palabras:
+        like = f"%{palabra}%"
+        query = query.filter(or_(
+            Producto.nombre.ilike(like),
+            Producto.descripcion.ilike(like),
+        ))
+
+    productos = query.order_by(Producto.nombre).limit(8).all()
+    return {
+        "productos": [_serializar_producto_chat(p) for p in productos],
+        "total_encontrados": len(productos),
+    }
+
+
+def _tool_consultar_precio_stock(args, usuario):
+    producto_id = args.get("producto_id")
+    if producto_id is None:
+        return {"error": "Debes proporcionar producto_id."}
+
+    sucursal_ids = [s.id for s in sucursales_visibles_para(usuario)]
+    if not sucursal_ids:
+        return {"error": "No tienes sucursales visibles."}
+
+    producto = Producto.query.filter(
+        Producto.id == int(producto_id),
+        Producto.sucursal_id.in_(sucursal_ids),
+        Producto.activo == True,
+    ).first()
+
+    if not producto:
+        return {"error": f"El producto {producto_id} no existe o no es visible para ti."}
+
+    return {"producto": _serializar_producto_chat(producto)}
+
+
+def _tool_resumen_ventas_dia(args, usuario):
+    hoy = get_peru_time().date()
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        return {"resumen": [], "mensaje": "No tienes sucursales asignadas."}
+
+    sucursal_id_arg = args.get("sucursal_id")
+    if sucursal_id_arg is not None:
+        sucursales = [s for s in sucursales if s.id == int(sucursal_id_arg)]
+        if not sucursales:
+            return {"error": f"Sucursal {sucursal_id_arg} no visible."}
+
+    resultados = []
+    for sucursal in sucursales:
+        caja = CajaVentas.query.filter_by(fecha=hoy, sucursal_id=sucursal.id).first()
+        resultados.append({
+            "sucursal_id": sucursal.id,
+            "sucursal_nombre": sucursal.nombre,
+            "total_vendido": float(caja.total_vendido) if caja else 0.0,
+            "saldo": float(caja.saldo) if caja else 0.0,
+        })
+
+    return {"fecha": hoy.isoformat(), "resumen": resultados}
+
+
+def _tool_medios_de_pago(args, usuario):
+    sucursal_id_arg = args.get("sucursal_id")
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        return {"medios": [], "mensaje": "No tienes sucursales asignadas."}
+
+    if sucursal_id_arg is not None:
+        sucursal = next((s for s in sucursales if s.id == int(sucursal_id_arg)), None)
+    else:
+        sucursal = sucursales[0]
+
+    if not sucursal:
+        return {"error": f"Sucursal {sucursal_id_arg} no visible."}
+
+    medios = MedioPago.query.join(
+        MedioSucursal,
+        (MedioSucursal.medio_pago_id == MedioPago.id) &
+        (MedioSucursal.sucursal_id == sucursal.id) &
+        (MedioSucursal.activo == True)
+    ).filter(MedioPago.activo == True).order_by(
+        MedioPago.orden, MedioPago.nombre_abreviado
+    ).all()
+
+    return {
+        "sucursal_id": sucursal.id,
+        "sucursal_nombre": sucursal.nombre,
+        "medios": [{"nombre_abreviado": m.nombre_abreviado, "nombre_completo": m.nombre_completo} for m in medios],
+    }
+
+
+# ---------- Handlers de herramientas de PROPUESTA (no ejecutan, solo validan) ----------
+
+def _tool_proponer_venta(args, usuario):
+    """Valida una venta y devuelve preview. NO toca la BD."""
+    producto_id = args.get("producto_id")
+    cantidad = args.get("cantidad")
+
+    if not producto_id:
+        raise ValueError("Falta producto_id.")
+    try:
+        cantidad = int(cantidad)
+    except (TypeError, ValueError):
+        raise ValueError("La cantidad debe ser un numero entero.")
+    if cantidad <= 0:
+        raise ValueError("La cantidad debe ser mayor a 0.")
+
+    sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
+
+    producto = Producto.query.filter_by(id=int(producto_id), activo=True).first()
+    if not producto:
+        raise ValueError(f"El producto {producto_id} no existe o no esta activo.")
+    if producto.sucursal_id != sucursal.id:
+        raise ValueError(
+            f'El producto "{producto.nombre}" pertenece a otra sucursal '
+            f'(esta en "{producto.sucursal.nombre}", no en "{sucursal.nombre}").'
+        )
+    if cantidad > producto.stock:
+        raise ValueError(
+            f'Stock insuficiente: quedan {producto.stock} unidad(es) de "{producto.nombre}", '
+            f'no se pueden vender {cantidad}.'
+        )
+
+    precio_unitario = float(producto.precio)
+    monto = precio_unitario * cantidad
+
+    return {
+        "producto_id": producto.id,
+        "producto_nombre": producto.nombre,
+        "cantidad": cantidad,
+        "precio_unitario": precio_unitario,
+        "monto": monto,
+        "stock_restante": producto.stock - cantidad,
+        "sucursal_id": sucursal.id,
+        "sucursal_nombre": sucursal.nombre,
+    }
+
+
+def _tool_proponer_operacion(args, usuario):
+    """Valida una operacion bancaria y devuelve preview. NO toca la BD."""
+    try:
+        monto = float(args.get("monto"))
+        comision = float(args.get("comision"))
+    except (TypeError, ValueError):
+        raise ValueError("Monto y comision deben ser numeros.")
+
+    if monto <= 0:
+        raise ValueError("El monto debe ser mayor a 0.")
+    if comision < 0:
+        raise ValueError("La comision no puede ser negativa.")
+
+    medio_arg = (args.get("medio") or "").strip().upper()
+    if not medio_arg:
+        raise ValueError("Falta el medio de pago.")
+
+    sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
+
+    medio_valido = MedioPago.query.join(
+        MedioSucursal,
+        (MedioSucursal.medio_pago_id == MedioPago.id) &
+        (MedioSucursal.sucursal_id == sucursal.id) &
+        (MedioSucursal.activo == True)
+    ).filter(
+        MedioPago.activo == True,
+        db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+    ).first()
+
+    if not medio_valido:
+        habilitados = MedioPago.query.join(
+            MedioSucursal,
+            (MedioSucursal.medio_pago_id == MedioPago.id) &
+            (MedioSucursal.sucursal_id == sucursal.id) &
+            (MedioSucursal.activo == True)
+        ).filter(MedioPago.activo == True).all()
+        nombres = ", ".join(m.nombre_abreviado for m in habilitados) or "(ninguno habilitado)"
+        raise ValueError(
+            f'El medio "{medio_arg}" no esta habilitado en "{sucursal.nombre}". '
+            f'Disponibles: {nombres}.'
+        )
+
+    return {
+        "monto": monto,
+        "comision": comision,
+        "medio": medio_valido.nombre_abreviado,
+        "sucursal_id": sucursal.id,
+        "sucursal_nombre": sucursal.nombre,
+    }
+
+
+# ---------- Handlers de búsquedas read-only (para localizar entidades a editar/eliminar) ----------
+
+def _tool_buscar_operaciones(args, usuario):
+    """Lista operaciones acotadas a las sucursales visibles del usuario."""
+    from datetime import date as _date
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        return {"operaciones": [], "mensaje": "No tienes sucursales asignadas."}
+    sucursal_ids = [s.id for s in sucursales]
+
+    sid = args.get("sucursal_id")
+    if sid is not None:
+        sucursal_ids = [int(sid)] if int(sid) in sucursal_ids else []
+        if not sucursal_ids:
+            return {"error": f"Sucursal {sid} no visible para ti."}
+
+    fecha_str = args.get("fecha")
+    if fecha_str:
+        try:
+            fecha = _date.fromisoformat(fecha_str)
+        except Exception:
+            return {"error": f"Fecha inválida: {fecha_str}. Usa formato YYYY-MM-DD."}
+    else:
+        fecha = get_peru_time().date()
+
+    limite = max(1, min(int(args.get("limite", 10) or 10), 30))
+
+    q = Operacion.query.filter(
+        Operacion.sucursal_id.in_(sucursal_ids),
+        db.func.date(Operacion.hora) == fecha,
+    )
+    # Usuario regular solo ve sus propias operaciones
+    if not usuario.es_admin and not usuario.es_admin_de_sucursal():
+        q = q.filter(Operacion.usuario_id == usuario.id)
+
+    ops = q.order_by(Operacion.hora.desc()).limit(limite).all()
+    return {
+        "fecha": fecha.isoformat(),
+        "operaciones": [
+            {
+                "id": o.id,
+                "monto": float(o.monto),
+                "comision": float(o.comision),
+                "medio": o.medio,
+                "hora": o.hora.strftime("%H:%M") if o.hora else "",
+                "sucursal_nombre": o.sucursal.nombre if o.sucursal else "",
+                "usuario_nombre": (o.usuario.nombre_completo or o.usuario.username) if o.usuario else "",
+            }
+            for o in ops
+        ],
+    }
+
+
+def _tool_buscar_ventas(args, usuario):
+    from datetime import date as _date
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        return {"ventas": [], "mensaje": "No tienes sucursales asignadas."}
+    sucursal_ids = [s.id for s in sucursales]
+
+    sid = args.get("sucursal_id")
+    if sid is not None:
+        sucursal_ids = [int(sid)] if int(sid) in sucursal_ids else []
+        if not sucursal_ids:
+            return {"error": f"Sucursal {sid} no visible."}
+
+    fecha_str = args.get("fecha")
+    if fecha_str:
+        try:
+            fecha = _date.fromisoformat(fecha_str)
+        except Exception:
+            return {"error": f"Fecha inválida: {fecha_str}."}
+    else:
+        fecha = get_peru_time().date()
+
+    limite = max(1, min(int(args.get("limite", 10) or 10), 30))
+
+    q = Venta.query.filter(
+        Venta.sucursal_id.in_(sucursal_ids),
+        db.func.date(Venta.fecha) == fecha,
+    )
+    if not usuario.es_admin and not usuario.es_admin_de_sucursal():
+        q = q.filter(Venta.usuario_id == usuario.id)
+
+    vts = q.order_by(Venta.fecha.desc()).limit(limite).all()
+    return {
+        "fecha": fecha.isoformat(),
+        "ventas": [
+            {
+                "id": v.id,
+                "producto_nombre": v.producto.nombre if v.producto else "(eliminado)",
+                "cantidad": v.cantidad,
+                "precio_unitario": float(v.precio_unitario),
+                "monto": float(v.monto),
+                "hora": v.fecha.strftime("%H:%M") if v.fecha else "",
+                "sucursal_nombre": v.sucursal.nombre if v.sucursal else "",
+                "usuario_nombre": (v.usuario.nombre_completo or v.usuario.username) if v.usuario else "",
+            }
+            for v in vts
+        ],
+    }
+
+
+def _tool_listar_usuarios(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        return {"error": "Solo administradores pueden listar usuarios."}
+    q = Usuario.query
+    if not usuario.es_admin:
+        # admin de sucursal: solo su sucursal
+        q = q.filter(Usuario.sucursal_id == usuario.sucursal_id)
+    sid = args.get("sucursal_id")
+    if sid is not None:
+        q = q.filter(Usuario.sucursal_id == int(sid))
+    usuarios = q.order_by(Usuario.username).limit(50).all()
+    return {
+        "usuarios": [
+            {
+                "id": u.id,
+                "username": u.username,
+                "nombre_completo": u.nombre_completo or "",
+                "sucursal_id": u.sucursal_id,
+                "sucursal_nombre": u.sucursal.nombre if u.sucursal else "",
+                "rol": "admin" if u.es_admin else ("admin_sucursal" if u.es_admin_sucursal else "usuario"),
+            }
+            for u in usuarios
+        ],
+    }
+
+
+def _tool_listar_sucursales(args, usuario):
+    sucs = Sucursal.query.order_by(Sucursal.nombre).all()
+    return {
+        "sucursales": [
+            {"id": s.id, "nombre": s.nombre, "direccion": s.direccion or "", "activa": s.activa}
+            for s in sucs
+        ],
+    }
+
+
+# ---------- Handlers de propuesta (validan, devuelven preview, NO tocan BD) ----------
+
+def _tool_proponer_crear_producto(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("No tienes permisos para gestionar el inventario.")
+    nombre = (args.get("nombre") or "").strip()
+    if not nombre:
+        raise ValueError("Falta el nombre del producto.")
+    try:
+        precio = float(args.get("precio"))
+        stock = int(args.get("stock"))
+    except (TypeError, ValueError):
+        raise ValueError("Precio y stock deben ser numéricos.")
+    if precio <= 0:
+        raise ValueError("El precio debe ser mayor a 0.")
+    if stock < 0:
+        raise ValueError("El stock no puede ser negativo.")
+
+    sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
+    descripcion = (args.get("descripcion") or "").strip()
+
+    return {
+        "_titulo": "Confirmar creación de producto",
+        "campos": [
+            {"label": "Nombre", "valor": nombre},
+            {"label": "Descripción", "valor": descripcion or "(ninguna)"},
+            {"label": "Precio", "valor": f"S/ {precio:.2f}"},
+            {"label": "Stock inicial", "valor": str(stock)},
+            {"label": "Sucursal", "valor": sucursal.nombre},
+        ],
+        "nombre": nombre, "descripcion": descripcion, "precio": precio,
+        "stock": stock, "sucursal_id": sucursal.id,
+    }
+
+
+def _tool_proponer_editar_producto(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("No tienes permisos para gestionar el inventario.")
+    pid = args.get("producto_id")
+    if not pid:
+        raise ValueError("Falta producto_id.")
+    producto = Producto.query.filter_by(id=int(pid), activo=True).first()
+    if not producto:
+        raise ValueError(f"El producto {pid} no existe o no está activo.")
+    if not usuario.es_admin and producto.sucursal_id != usuario.sucursal_id:
+        raise ValueError("No puedes editar productos de otra sucursal.")
+
+    nuevo_nombre = (args.get("nombre") or "").strip() or None
+    nueva_desc = args.get("descripcion")
+    if nueva_desc is not None:
+        nueva_desc = nueva_desc.strip()
+    nuevo_precio = args.get("precio")
+    nuevo_stock = args.get("stock")
+    if nuevo_precio is not None:
+        try: nuevo_precio = float(nuevo_precio)
+        except: raise ValueError("Precio inválido.")
+        if nuevo_precio <= 0:
+            raise ValueError("El precio debe ser mayor a 0.")
+    if nuevo_stock is not None:
+        try: nuevo_stock = int(nuevo_stock)
+        except: raise ValueError("Stock inválido.")
+        if nuevo_stock < 0:
+            raise ValueError("El stock no puede ser negativo.")
+
+    if (nuevo_nombre is None and nueva_desc is None and
+            nuevo_precio is None and nuevo_stock is None):
+        raise ValueError("No especificaste ningún cambio.")
+
+    cambios = []
+    if nuevo_nombre and nuevo_nombre != producto.nombre:
+        cambios.append({"label": "Nombre", "valor": f'"{producto.nombre}" → "{nuevo_nombre}"'})
+    if nueva_desc is not None and nueva_desc != (producto.descripcion or ""):
+        cambios.append({"label": "Descripción", "valor": f'"{producto.descripcion or "(vacío)"}" → "{nueva_desc or "(vacío)"}"'})
+    if nuevo_precio is not None and abs(nuevo_precio - float(producto.precio)) > 0.001:
+        cambios.append({"label": "Precio", "valor": f"S/ {float(producto.precio):.2f} → S/ {nuevo_precio:.2f}"})
+    if nuevo_stock is not None and nuevo_stock != producto.stock:
+        cambios.append({"label": "Stock", "valor": f"{producto.stock} → {nuevo_stock}"})
+
+    if not cambios:
+        raise ValueError("Los valores propuestos son iguales a los actuales — no hay cambios que aplicar.")
+
+    return {
+        "_titulo": f'Confirmar edición de "{producto.nombre}"',
+        "campos": cambios,
+        "producto_id": producto.id,
+        "nombre": nuevo_nombre, "descripcion": nueva_desc,
+        "precio": nuevo_precio, "stock": nuevo_stock,
+    }
+
+
+def _tool_proponer_eliminar_producto(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("No tienes permisos para gestionar el inventario.")
+    pid = args.get("producto_id")
+    if not pid:
+        raise ValueError("Falta producto_id.")
+    producto = Producto.query.filter_by(id=int(pid), activo=True).first()
+    if not producto:
+        raise ValueError(f"El producto {pid} no existe o ya fue eliminado.")
+    if not usuario.es_admin and producto.sucursal_id != usuario.sucursal_id:
+        raise ValueError("No puedes eliminar productos de otra sucursal.")
+    return {
+        "_titulo": "Confirmar eliminación de producto",
+        "campos": [
+            {"label": "Producto", "valor": producto.nombre},
+            {"label": "Precio", "valor": f"S/ {float(producto.precio):.2f}"},
+            {"label": "Stock actual", "valor": str(producto.stock)},
+            {"label": "Sucursal", "valor": producto.sucursal.nombre if producto.sucursal else ""},
+        ],
+        "_advertencia": "El producto se quitará del inventario. No se podrán registrar nuevas ventas de él, pero las ventas existentes se conservan.",
+        "producto_id": producto.id,
+    }
+
+
+def _tool_proponer_eliminar_operacion(args, usuario):
+    op_id = args.get("operacion_id")
+    if not op_id:
+        raise ValueError("Falta operacion_id.")
+    operacion = Operacion.query.filter_by(id=int(op_id)).first()
+    if not operacion:
+        raise ValueError(f"La operación {op_id} no existe.")
+    # Reglas de permisos (mirror de eliminar_operacion):
+    if not usuario.es_admin:
+        if operacion.sucursal_id != usuario.sucursal_id:
+            raise ValueError("No tienes permisos para eliminar operaciones de otra sucursal.")
+        if not usuario.es_admin_de_sucursal() and operacion.usuario_id != usuario.id:
+            raise ValueError("Solo puedes eliminar las operaciones que tú registraste.")
+    return {
+        "_titulo": "Confirmar eliminación de operación",
+        "campos": [
+            {"label": "Monto", "valor": f"S/ {float(operacion.monto):.2f}"},
+            {"label": "Comisión", "valor": f"S/ {float(operacion.comision):.2f}"},
+            {"label": "Medio", "valor": operacion.medio or ""},
+            {"label": "Hora", "valor": operacion.hora.strftime("%Y-%m-%d %H:%M") if operacion.hora else ""},
+            {"label": "Sucursal", "valor": operacion.sucursal.nombre if operacion.sucursal else ""},
+            {"label": "Usuario", "valor": (operacion.usuario.nombre_completo or operacion.usuario.username) if operacion.usuario else ""},
+        ],
+        "_advertencia": "Se restará la comisión de los totales diarios y mensuales de la sucursal.",
+        "operacion_id": operacion.id,
+    }
+
+
+def _tool_proponer_eliminar_venta(args, usuario):
+    v_id = args.get("venta_id")
+    if not v_id:
+        raise ValueError("Falta venta_id.")
+    venta = Venta.query.filter_by(id=int(v_id)).first()
+    if not venta:
+        raise ValueError(f"La venta {v_id} no existe.")
+    if not usuario.es_admin:
+        if venta.sucursal_id != usuario.sucursal_id:
+            raise ValueError("No tienes permisos para eliminar ventas de otra sucursal.")
+        if not usuario.es_admin_de_sucursal() and venta.usuario_id != usuario.id:
+            raise ValueError("Solo puedes eliminar las ventas que tú registraste.")
+    return {
+        "_titulo": "Confirmar eliminación de venta",
+        "campos": [
+            {"label": "Producto", "valor": venta.producto.nombre if venta.producto else "(eliminado)"},
+            {"label": "Cantidad", "valor": str(venta.cantidad)},
+            {"label": "Total", "valor": f"S/ {float(venta.monto):.2f}"},
+            {"label": "Hora", "valor": venta.fecha.strftime("%Y-%m-%d %H:%M") if venta.fecha else ""},
+            {"label": "Sucursal", "valor": venta.sucursal.nombre if venta.sucursal else ""},
+            {"label": "Usuario", "valor": (venta.usuario.nombre_completo or venta.usuario.username) if venta.usuario else ""},
+        ],
+        "_advertencia": "Se devolverá el stock al inventario y se restará el monto de la caja de ventas del día.",
+        "venta_id": venta.id,
+    }
+
+
+def _tool_proponer_crear_usuario(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("Solo administradores pueden crear usuarios.")
+    username = (args.get("username") or "").strip()
+    password = (args.get("password") or "").strip()
+    nombre_completo = (args.get("nombre_completo") or "").strip()
+    if not username:
+        raise ValueError("Falta el nombre de usuario.")
+    if not password or len(password) < 4:
+        raise ValueError("La contraseña debe tener al menos 4 caracteres.")
+    if not nombre_completo:
+        raise ValueError("Falta el nombre completo.")
+    if Usuario.query.filter_by(username=username).first():
+        raise ValueError(f"El usuario '{username}' ya existe.")
+
+    rol = (args.get("rol") or "usuario").strip().lower()
+    if rol not in ("usuario", "admin_sucursal", "admin"):
+        raise ValueError(f"Rol inválido: {rol}. Usa 'usuario', 'admin_sucursal' o 'admin'.")
+
+    if usuario.es_admin:
+        # Admin global: puede asignar cualquier sucursal y cualquier rol
+        sid = args.get("sucursal_id")
+        if sid is not None:
+            sucursal = Sucursal.query.filter_by(id=int(sid), activa=True).first()
+            if not sucursal:
+                raise ValueError(f"Sucursal {sid} no existe o no está activa.")
+        else:
+            sucursal = None
+    else:
+        # Admin de sucursal: solo en su sucursal, rol forzado a 'usuario'
+        if rol != "usuario":
+            raise ValueError("Como admin de sucursal solo puedes crear usuarios con rol 'usuario'.")
+        sucursal = usuario.sucursal
+        if not sucursal:
+            raise ValueError("No tienes una sucursal asignada para crear usuarios en ella.")
+
+    return {
+        "_titulo": "Confirmar creación de usuario",
+        "campos": [
+            {"label": "Username", "valor": username},
+            {"label": "Nombre completo", "valor": nombre_completo},
+            {"label": "Rol", "valor": rol},
+            {"label": "Sucursal", "valor": sucursal.nombre if sucursal else "(sin asignar)"},
+        ],
+        "_advertencia": "Se generará un email automático: " + f"{username}@sisagent.local",
+        "username": username, "password": password, "nombre_completo": nombre_completo,
+        "sucursal_id": sucursal.id if sucursal else None, "rol": rol,
+    }
+
+
+def _tool_proponer_crear_sucursal(args, usuario):
+    if not usuario.es_admin:
+        raise ValueError("Solo el admin global puede crear sucursales.")
+    nombre = (args.get("nombre") or "").strip()
+    direccion = (args.get("direccion") or "").strip()
+    if not nombre:
+        raise ValueError("Falta el nombre de la sucursal.")
+    if Sucursal.query.filter_by(nombre=nombre).first():
+        raise ValueError(f"Ya existe una sucursal con nombre '{nombre}'.")
+    return {
+        "_titulo": "Confirmar creación de sucursal",
+        "campos": [
+            {"label": "Nombre", "valor": nombre},
+            {"label": "Dirección", "valor": direccion or "(ninguna)"},
+        ],
+        "nombre": nombre, "direccion": direccion,
+    }
+
+
+# Registro: nombre -> {handler, requires_confirmation}
+CHATBOT_TOOLS = {
+    "buscar_productos":       {"handler": _tool_buscar_productos,       "requires_confirmation": False},
+    "consultar_precio_stock": {"handler": _tool_consultar_precio_stock, "requires_confirmation": False},
+    "resumen_ventas_dia":     {"handler": _tool_resumen_ventas_dia,     "requires_confirmation": False},
+    "medios_de_pago":         {"handler": _tool_medios_de_pago,         "requires_confirmation": False},
+    "buscar_operaciones":     {"handler": _tool_buscar_operaciones,     "requires_confirmation": False},
+    "buscar_ventas":          {"handler": _tool_buscar_ventas,          "requires_confirmation": False},
+    "listar_usuarios":        {"handler": _tool_listar_usuarios,        "requires_confirmation": False},
+    "listar_sucursales":      {"handler": _tool_listar_sucursales,      "requires_confirmation": False},
+    "proponer_venta":         {"handler": _tool_proponer_venta,             "requires_confirmation": True},
+    "proponer_operacion":     {"handler": _tool_proponer_operacion,         "requires_confirmation": True},
+    "proponer_crear_producto":   {"handler": _tool_proponer_crear_producto,   "requires_confirmation": True},
+    "proponer_editar_producto":  {"handler": _tool_proponer_editar_producto,  "requires_confirmation": True},
+    "proponer_eliminar_producto":{"handler": _tool_proponer_eliminar_producto,"requires_confirmation": True},
+    "proponer_eliminar_operacion":{"handler": _tool_proponer_eliminar_operacion,"requires_confirmation": True},
+    "proponer_eliminar_venta":   {"handler": _tool_proponer_eliminar_venta,   "requires_confirmation": True},
+    "proponer_crear_usuario":    {"handler": _tool_proponer_crear_usuario,    "requires_confirmation": True},
+    "proponer_crear_sucursal":   {"handler": _tool_proponer_crear_sucursal,   "requires_confirmation": True},
+}
+
+
+# ---------- Ejecutores validados (tras confirmacion del usuario) ----------
+
+def _ejecutar_venta_validada(args, usuario):
+    """Re-valida desde cero y registra la venta. Espeja la logica de registrar_venta."""
+    producto_id = args.get("producto_id")
+    try:
+        cantidad = int(args.get("cantidad", 0))
+    except (TypeError, ValueError):
+        raise ValueError("Cantidad invalida.")
+
+    if not producto_id or cantidad <= 0:
+        raise ValueError("Datos de la venta incompletos.")
+
+    sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
+
+    producto = Producto.query.filter_by(id=int(producto_id), activo=True).first()
+    if not producto:
+        raise ValueError("El producto ya no existe o fue desactivado.")
+    if producto.sucursal_id != sucursal.id:
+        raise ValueError("El producto no pertenece a esta sucursal.")
+    if cantidad > producto.stock:
+        raise ValueError(
+            f'Stock insuficiente al confirmar: quedan {producto.stock} unidad(es). '
+            "Es posible que otro usuario haya registrado una venta antes que tu."
+        )
+
+    precio_unitario = float(producto.precio)
+    monto = precio_unitario * cantidad
+
+    venta = Venta(
+        producto_id=producto.id,
+        cantidad=cantidad,
+        precio_unitario=precio_unitario,
+        monto=monto,
+        usuario_id=usuario.id,
+        sucursal_id=sucursal.id,
+        fecha=get_peru_time().replace(tzinfo=None),
+    )
+    db.session.add(venta)
+    producto.stock = producto.stock - cantidad
+
+    hoy = get_peru_time().date()
+    caja = CajaVentas.query.filter_by(fecha=hoy, sucursal_id=sucursal.id).first()
+    if caja:
+        caja.total_vendido = float(caja.total_vendido) + monto
+        caja.saldo = float(caja.saldo) + monto
+    else:
+        caja = CajaVentas(
+            fecha=hoy,
+            sucursal_id=sucursal.id,
+            total_vendido=monto,
+            saldo=monto,
+        )
+        db.session.add(caja)
+
+    db.session.commit()
+    clear_cache()
+
+    return {
+        "mensaje": f'Venta registrada: {cantidad} x "{producto.nombre}" = S/ {monto:.2f} en {sucursal.nombre}.',
+        "monto": monto,
+        "producto_nombre": producto.nombre,
+        "cantidad": cantidad,
+        "sucursal_nombre": sucursal.nombre,
+    }
+
+
+def _ejecutar_operacion_validada(args, usuario):
+    """Re-valida desde cero y registra la operacion bancaria. Espeja registrar_operacion."""
+    try:
+        monto = float(args.get("monto"))
+        comision = float(args.get("comision"))
+    except (TypeError, ValueError):
+        raise ValueError("Monto y comision invalidos.")
+
+    if monto <= 0:
+        raise ValueError("El monto debe ser mayor a 0.")
+    if comision < 0:
+        raise ValueError("La comision no puede ser negativa.")
+
+    medio_arg = (args.get("medio") or "").strip().upper()
+    if not medio_arg:
+        raise ValueError("Falta el medio de pago.")
+
+    sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
+
+    medio_valido = MedioPago.query.join(
+        MedioSucursal,
+        (MedioSucursal.medio_pago_id == MedioPago.id) &
+        (MedioSucursal.sucursal_id == sucursal.id) &
+        (MedioSucursal.activo == True)
+    ).filter(
+        MedioPago.activo == True,
+        db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+    ).first()
+
+    if not medio_valido:
+        raise ValueError(f'El medio "{medio_arg}" ya no esta habilitado en "{sucursal.nombre}".')
+
+    hora_peru = get_peru_time().replace(tzinfo=None)
+    operacion = Operacion(
+        monto=monto,
+        comision=comision,
+        medio=medio_valido.nombre_abreviado,
+        usuario_id=usuario.id,
+        sucursal_id=sucursal.id,
+        hora=hora_peru,
+    )
+    db.session.add(operacion)
+
+    # Actualizar comisiones diarias y mensuales (mirror de registrar_operacion)
+    hoy = get_peru_time().date()
+    comision_diaria = ComisionDiaria.query.filter_by(fecha=hoy, sucursal_id=sucursal.id).first()
+    if comision_diaria:
+        comision_diaria.total_comision = float(comision_diaria.total_comision) + comision
+    else:
+        comision_diaria = ComisionDiaria(fecha=hoy, sucursal_id=sucursal.id, total_comision=comision)
+        db.session.add(comision_diaria)
+
+    ahora = get_peru_time()
+    comision_mensual = ComisionMensual.query.filter_by(
+        año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id
+    ).first()
+    if comision_mensual:
+        comision_mensual.total_comision = float(comision_mensual.total_comision) + comision
+    else:
+        comision_mensual = ComisionMensual(
+            año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id, total_comision=comision
+        )
+        db.session.add(comision_mensual)
+
+    db.session.commit()
+    clear_cache()
+
+    return {
+        "mensaje": (
+            f'Operacion registrada: S/ {monto:.2f} con comision S/ {comision:.2f} '
+            f'via {medio_valido.nombre_abreviado} en {sucursal.nombre}.'
+        ),
+        "monto": monto,
+        "comision": comision,
+        "medio": medio_valido.nombre_abreviado,
+        "sucursal_nombre": sucursal.nombre,
+    }
+
+
+def _ejecutar_crear_producto_validado(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("No tienes permisos para gestionar inventario.")
+    nombre = (args.get("nombre") or "").strip()
+    if not nombre:
+        raise ValueError("Nombre vacío.")
+    try:
+        precio = float(args.get("precio"))
+        stock = int(args.get("stock"))
+    except (TypeError, ValueError):
+        raise ValueError("Precio/stock inválidos.")
+    if precio <= 0 or stock < 0:
+        raise ValueError("Precio debe ser >0 y stock >=0.")
+    sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
+    descripcion = (args.get("descripcion") or "").strip()
+
+    producto = Producto(
+        nombre=nombre, descripcion=descripcion, precio=precio, stock=stock,
+        sucursal_id=sucursal.id,
+    )
+    db.session.add(producto)
+    db.session.commit()
+    clear_cache()
+    return {"mensaje": f'Producto "{nombre}" creado en {sucursal.nombre} con stock {stock} a S/ {precio:.2f}.', "producto_id": producto.id}
+
+
+def _ejecutar_editar_producto_validado(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("Sin permisos.")
+    pid = args.get("producto_id")
+    if not pid:
+        raise ValueError("Falta producto_id.")
+    producto = Producto.query.filter_by(id=int(pid), activo=True).first()
+    if not producto:
+        raise ValueError("El producto ya no existe.")
+    if not usuario.es_admin and producto.sucursal_id != usuario.sucursal_id:
+        raise ValueError("No puedes editar productos de otra sucursal.")
+
+    cambios = []
+    nuevo_nombre = args.get("nombre")
+    if nuevo_nombre and nuevo_nombre.strip() and nuevo_nombre.strip() != producto.nombre:
+        producto.nombre = nuevo_nombre.strip(); cambios.append("nombre")
+    nueva_desc = args.get("descripcion")
+    if nueva_desc is not None and nueva_desc.strip() != (producto.descripcion or ""):
+        producto.descripcion = nueva_desc.strip(); cambios.append("descripción")
+    if args.get("precio") is not None:
+        p = float(args["precio"])
+        if p <= 0: raise ValueError("Precio debe ser >0.")
+        if abs(p - float(producto.precio)) > 0.001:
+            producto.precio = p; cambios.append("precio")
+    if args.get("stock") is not None:
+        st = int(args["stock"])
+        if st < 0: raise ValueError("Stock no puede ser negativo.")
+        if st != producto.stock:
+            producto.stock = st; cambios.append("stock")
+
+    if not cambios:
+        raise ValueError("Nada que cambiar.")
+    db.session.commit()
+    clear_cache()
+    return {"mensaje": f'Producto "{producto.nombre}" actualizado ({", ".join(cambios)}).'}
+
+
+def _ejecutar_eliminar_producto_validado(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("Sin permisos.")
+    pid = args.get("producto_id")
+    if not pid:
+        raise ValueError("Falta producto_id.")
+    producto = Producto.query.filter_by(id=int(pid), activo=True).first()
+    if not producto:
+        raise ValueError("El producto ya no existe o fue eliminado por otro usuario.")
+    if not usuario.es_admin and producto.sucursal_id != usuario.sucursal_id:
+        raise ValueError("No puedes eliminar productos de otra sucursal.")
+    nombre = producto.nombre
+    producto.activo = False
+    db.session.commit()
+    clear_cache()
+    return {"mensaje": f'Producto "{nombre}" eliminado del inventario.'}
+
+
+def _ejecutar_eliminar_operacion_validada(args, usuario):
+    op_id = args.get("operacion_id")
+    if not op_id:
+        raise ValueError("Falta operacion_id.")
+    operacion = Operacion.query.filter_by(id=int(op_id)).first()
+    if not operacion:
+        raise ValueError("La operación ya no existe.")
+    if not usuario.es_admin:
+        if operacion.sucursal_id != usuario.sucursal_id:
+            raise ValueError("Sin permisos para esta sucursal.")
+        if not usuario.es_admin_de_sucursal() and operacion.usuario_id != usuario.id:
+            raise ValueError("Solo puedes eliminar las operaciones que tú registraste.")
+    # Revertir comisión de los totales diarios y mensuales
+    comision = float(operacion.comision)
+    hoy = operacion.hora.date() if operacion.hora else get_peru_time().date()
+    cd = ComisionDiaria.query.filter_by(fecha=hoy, sucursal_id=operacion.sucursal_id).first()
+    if cd:
+        cd.total_comision = max(0.0, float(cd.total_comision) - comision)
+    cm = ComisionMensual.query.filter_by(
+        año=hoy.year, mes=hoy.month, sucursal_id=operacion.sucursal_id
+    ).first()
+    if cm:
+        cm.total_comision = max(0.0, float(cm.total_comision) - comision)
+
+    monto = float(operacion.monto)
+    medio = operacion.medio
+    db.session.delete(operacion)
+    db.session.commit()
+    clear_cache()
+    return {"mensaje": f'Operación eliminada: S/ {monto:.2f} vía {medio}. Comisión S/ {comision:.2f} restada de los totales.'}
+
+
+def _ejecutar_eliminar_venta_validada(args, usuario):
+    v_id = args.get("venta_id")
+    if not v_id:
+        raise ValueError("Falta venta_id.")
+    venta = Venta.query.filter_by(id=int(v_id)).first()
+    if not venta:
+        raise ValueError("La venta ya no existe.")
+    if not usuario.es_admin:
+        if venta.sucursal_id != usuario.sucursal_id:
+            raise ValueError("Sin permisos para esta sucursal.")
+        if not usuario.es_admin_de_sucursal() and venta.usuario_id != usuario.id:
+            raise ValueError("Solo puedes eliminar las ventas que tú registraste.")
+
+    # Devolver stock al producto (si existe)
+    if venta.producto:
+        venta.producto.stock = (venta.producto.stock or 0) + venta.cantidad
+
+    # Restar de la caja de ventas
+    fecha = venta.fecha.date() if venta.fecha else get_peru_time().date()
+    caja = CajaVentas.query.filter_by(fecha=fecha, sucursal_id=venta.sucursal_id).first()
+    if caja:
+        caja.total_vendido = max(0.0, float(caja.total_vendido) - float(venta.monto))
+        caja.saldo = max(0.0, float(caja.saldo) - float(venta.monto))
+
+    nombre_prod = venta.producto.nombre if venta.producto else "(eliminado)"
+    cantidad = venta.cantidad
+    monto = float(venta.monto)
+    db.session.delete(venta)
+    db.session.commit()
+    clear_cache()
+    return {"mensaje": f'Venta eliminada: {cantidad} × "{nombre_prod}" = S/ {monto:.2f}. Stock devuelto al inventario.'}
+
+
+def _ejecutar_crear_usuario_validado(args, usuario):
+    if not usuario.es_admin_o_admin_sucursal():
+        raise ValueError("Sin permisos.")
+    username = (args.get("username") or "").strip()
+    password = (args.get("password") or "").strip()
+    nombre_completo = (args.get("nombre_completo") or "").strip()
+    if not (username and password and nombre_completo):
+        raise ValueError("Datos incompletos.")
+    if Usuario.query.filter_by(username=username).first():
+        raise ValueError(f"El usuario '{username}' ya existe (creado por otro mientras tanto).")
+
+    rol = (args.get("rol") or "usuario").strip().lower()
+    if usuario.es_admin:
+        sid = args.get("sucursal_id")
+        if sid is not None:
+            sucursal = Sucursal.query.filter_by(id=int(sid), activa=True).first()
+            if not sucursal:
+                raise ValueError(f"Sucursal {sid} ya no existe o no está activa.")
+            sucursal_id = sucursal.id
+        else:
+            sucursal_id = None
+        es_admin = (rol == "admin")
+        es_admin_sucursal = (rol == "admin_sucursal")
+    else:
+        if rol != "usuario":
+            raise ValueError("Solo admin global puede crear con rol distinto a 'usuario'.")
+        if not usuario.sucursal:
+            raise ValueError("No tienes sucursal asignada.")
+        sucursal_id = usuario.sucursal_id
+        es_admin = False
+        es_admin_sucursal = False
+
+    nuevo = Usuario(
+        username=username,
+        email=f"{username}@sisagent.local",
+        password_hash=generate_password_hash(password),
+        nombre_completo=nombre_completo,
+        sucursal_id=sucursal_id,
+        es_admin=es_admin,
+        es_admin_sucursal=es_admin_sucursal,
+    )
+    db.session.add(nuevo)
+    db.session.commit()
+    clear_cache()
+    sucursal_nombre = nuevo.sucursal.nombre if nuevo.sucursal else "(sin sucursal)"
+    return {"mensaje": f'Usuario "{username}" creado como {rol} en {sucursal_nombre}.', "usuario_id": nuevo.id}
+
+
+def _ejecutar_crear_sucursal_validada(args, usuario):
+    if not usuario.es_admin:
+        raise ValueError("Solo el admin global puede crear sucursales.")
+    nombre = (args.get("nombre") or "").strip()
+    direccion = (args.get("direccion") or "").strip()
+    if not nombre:
+        raise ValueError("Nombre vacío.")
+    if Sucursal.query.filter_by(nombre=nombre).first():
+        raise ValueError(f"Ya existe una sucursal '{nombre}'.")
+    suc = Sucursal(nombre=nombre, direccion=direccion, activa=True)
+    db.session.add(suc)
+    db.session.commit()
+    clear_cache()
+    return {"mensaje": f'Sucursal "{nombre}" creada exitosamente.', "sucursal_id": suc.id}
+
+
+# ---------- Cliente Anthropic (lazy) y loop de function-calling ----------
+
+_anthropic_client = None
+
+def _get_anthropic_client():
+    global _anthropic_client
+    if not app.config.get('ANTHROPIC_API_KEY'):
+        raise RuntimeError(
+            "El asistente IA no esta disponible: falta configurar ANTHROPIC_API_KEY en el servidor."
+        )
+    if _anthropic_client is None:
+        _anthropic_client = anthropic.Anthropic(
+            api_key=app.config['ANTHROPIC_API_KEY'],
+            timeout=30.0,
+        )
+    return _anthropic_client
+
+
+def _construir_mensajes_chat(historial, mensaje_usuario, imagen_bytes=None, imagen_mimetype=None):
+    """Construye el array de mensajes para Anthropic, incluyendo el turno actual.
+
+    El historial del cliente es texto plano (sin tool_use) — las imagenes pasadas no se reenvian.
+    """
+    mensajes = []
+
+    for turno in (historial or []):
+        if not isinstance(turno, dict):
+            continue
+        rol = turno.get("role")
+        contenido = turno.get("content")
+        if rol not in ("user", "assistant") or not contenido or not isinstance(contenido, str):
+            continue
+        mensajes.append({"role": rol, "content": contenido})
+
+    # Turno actual
+    if imagen_bytes and imagen_mimetype:
+        b64 = base64.standard_b64encode(imagen_bytes).decode("ascii")
+        contenido_actual = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": imagen_mimetype,
+                    "data": b64,
+                },
+            },
+            {"type": "text", "text": mensaje_usuario or "(El usuario adjunto una imagen)"},
+        ]
+    else:
+        contenido_actual = mensaje_usuario or ""
+
+    mensajes.append({"role": "user", "content": contenido_actual})
+    return mensajes
+
+
+def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
+    """Loop de tool-use. Devuelve dict con 'tipo': 'texto' o 'propuesta'.
+
+    Acumula los productos vistos por la IA durante el turno (via `buscar_productos`)
+    para que el frontend pueda renderizar tarjetas con fotos junto a la respuesta.
+    """
+    cliente = _get_anthropic_client()
+    productos_buscados = []
+    productos_ids_vistos = set()
+
+    def _registrar_productos(lista):
+        for prod in (lista or []):
+            pid = prod.get("id")
+            if pid is None or pid in productos_ids_vistos:
+                continue
+            productos_ids_vistos.add(pid)
+            productos_buscados.append(prod)
+
+    for _ in range(max_iteraciones):
+        respuesta = cliente.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=2048,
+            system=SYSTEM_PROMPT_CHATBOT,
+            tools=_HERRAMIENTAS_DECLARACIONES,
+            messages=mensajes,
+        )
+
+        if respuesta.stop_reason == "end_turn":
+            texto = "".join(b.text for b in respuesta.content if b.type == "text").strip()
+            return {
+                "tipo": "texto",
+                "texto": texto or "(Sin respuesta)",
+                "productos": productos_buscados,
+            }
+
+        if respuesta.stop_reason != "tool_use":
+            texto = "".join(b.text for b in respuesta.content if b.type == "text").strip()
+            return {
+                "tipo": "texto",
+                "texto": texto or f"(La IA no pudo continuar: {respuesta.stop_reason})",
+                "productos": productos_buscados,
+            }
+
+        tool_uses = [b for b in respuesta.content if b.type == "tool_use"]
+        if not tool_uses:
+            texto = "".join(b.text for b in respuesta.content if b.type == "text").strip()
+            return {
+                "tipo": "texto",
+                "texto": texto or "(Sin respuesta)",
+                "productos": productos_buscados,
+            }
+
+        # Si alguna herramienta requiere confirmacion, detener y devolver propuesta
+        for tu in tool_uses:
+            spec = CHATBOT_TOOLS.get(tu.name)
+            if not spec:
+                continue
+            if spec["requires_confirmation"]:
+                try:
+                    preview = spec["handler"](tu.input or {}, usuario)
+                except ValueError as e:
+                    return {
+                        "tipo": "texto",
+                        "texto": f"No puedo proponer esa accion: {str(e)}",
+                        "productos": productos_buscados,
+                    }
+                texto_previo = "".join(b.text for b in respuesta.content if b.type == "text").strip()
+                return {
+                    "tipo": "propuesta",
+                    "accion": tu.name,
+                    "args": tu.input or {},
+                    "preview": preview,
+                    "texto": texto_previo,
+                    "productos": productos_buscados,
+                }
+
+        # Todas son de solo lectura — ejecutar y continuar el loop
+        mensajes.append({"role": "assistant", "content": respuesta.content})
+        resultados = []
+        for tu in tool_uses:
+            spec = CHATBOT_TOOLS.get(tu.name)
+            try:
+                if not spec:
+                    raise ValueError(f"Herramienta desconocida: {tu.name}")
+                resultado = spec["handler"](tu.input or {}, usuario)
+                if tu.name == "buscar_productos" and isinstance(resultado, dict):
+                    _registrar_productos(resultado.get("productos"))
+                elif tu.name == "consultar_precio_stock" and isinstance(resultado, dict):
+                    prod = resultado.get("producto")
+                    if prod:
+                        _registrar_productos([prod])
+                resultados.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "content": json.dumps(resultado, ensure_ascii=False),
+                })
+            except Exception as e:
+                resultados.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "content": f"Error: {str(e)}",
+                    "is_error": True,
+                })
+        mensajes.append({"role": "user", "content": resultados})
+
+    return {
+        "tipo": "texto",
+        "texto": "(He alcanzado el limite de iteraciones internas. Por favor reformula tu pregunta.)",
+        "productos": productos_buscados,
+    }
+
+
+# ---------- Rutas HTTP del chatbot ----------
+
+@app.route('/api/chat/mensaje', methods=['POST'])
+@login_required
+def api_chat_mensaje():
+    """Procesa un mensaje del chat. Acepta multipart/form-data con `mensaje`, `historial` (JSON) e `imagen` (opcional)."""
+    try:
+        mensaje = (request.form.get('mensaje') or '').strip()
+        historial_json = request.form.get('historial') or '[]'
+        try:
+            historial = json.loads(historial_json)
+            if not isinstance(historial, list):
+                historial = []
+        except json.JSONDecodeError:
+            historial = []
+
+        imagen_bytes = None
+        imagen_mimetype = None
+        imagen_file = request.files.get('imagen')
+        if imagen_file and imagen_file.filename:
+            mimetype = (imagen_file.mimetype or '').lower()
+            if mimetype not in FOTO_TIPOS_PERMITIDOS:
+                return jsonify({
+                    'success': False,
+                    'message': f'Tipo de imagen no permitido: {mimetype}. Usa png/jpg/gif/webp.',
+                }), 400
+            imagen_bytes = imagen_file.read()
+            if len(imagen_bytes) > FOTO_CHAT_TAMANO_MAXIMO:
+                return jsonify({
+                    'success': False,
+                    'message': f'La imagen excede el tamano maximo de {FOTO_CHAT_TAMANO_MAXIMO // (1024*1024)} MB.',
+                }), 400
+            imagen_mimetype = mimetype
+
+        if not mensaje and not imagen_bytes:
+            return jsonify({'success': False, 'message': 'Escribe un mensaje o adjunta una imagen.'}), 400
+
+        mensajes = _construir_mensajes_chat(historial, mensaje, imagen_bytes, imagen_mimetype)
+        resultado = _ejecutar_turno_chat(mensajes, current_user)
+
+        return jsonify({'success': True, **resultado})
+
+    except RuntimeError as e:
+        return jsonify({'success': False, 'message': str(e)}), 503
+    except anthropic.APIStatusError as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error de la IA ({e.status_code}). Intenta de nuevo en un momento.',
+        }), 502
+    except anthropic.APIConnectionError:
+        return jsonify({
+            'success': False,
+            'message': 'No se pudo conectar con la IA. Verifica tu conexion a internet.',
+        }), 502
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({
+            'success': False,
+            'message': f'Error procesando el mensaje: {str(e)}',
+        }), 500
+
+
+@app.route('/api/chat/confirmar_accion', methods=['POST'])
+@login_required
+def api_chat_confirmar_accion():
+    """Ejecuta una accion previamente propuesta tras confirmacion explicita del usuario.
+
+    REVALIDA todo desde cero — nunca confia en los args que viajaron por el cliente.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        accion = data.get('accion')
+        args = data.get('args') or {}
+
+        if accion not in CHATBOT_TOOLS:
+            return jsonify({'success': False, 'message': 'Accion desconocida.'}), 400
+        if not CHATBOT_TOOLS[accion]['requires_confirmation']:
+            return jsonify({'success': False, 'message': 'Esta accion no requiere confirmacion.'}), 400
+
+        # Dispatcher de acciones que requieren confirmación
+        dispatcher = {
+            'proponer_venta':             _ejecutar_venta_validada,
+            'proponer_operacion':         _ejecutar_operacion_validada,
+            'proponer_crear_producto':    _ejecutar_crear_producto_validado,
+            'proponer_editar_producto':   _ejecutar_editar_producto_validado,
+            'proponer_eliminar_producto': _ejecutar_eliminar_producto_validado,
+            'proponer_eliminar_operacion':_ejecutar_eliminar_operacion_validada,
+            'proponer_eliminar_venta':    _ejecutar_eliminar_venta_validada,
+            'proponer_crear_usuario':     _ejecutar_crear_usuario_validado,
+            'proponer_crear_sucursal':    _ejecutar_crear_sucursal_validada,
+        }
+        ejecutor = dispatcher.get(accion)
+        if not ejecutor:
+            return jsonify({'success': False, 'message': f'Accion {accion} no implementada.'}), 400
+
+        resultado = ejecutor(args, current_user)
+        return jsonify({'success': True, **resultado})
+
+    except ValueError as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({
+            'success': False,
+            'message': f'Error ejecutando la accion: {str(e)}',
+        }), 500
+
+
+def _convertir_audio_a_wav_16k_mono(audio_bytes):
+    """Convierte cualquier audio a WAV 16kHz mono via PyAV.
+
+    Gemini acepta nativamente wav/mp3/aiff/aac/ogg/flac, pero los navegadores
+    producen webm/opus que NO está en esa lista. Convertimos a WAV (formato
+    universal que Gemini procesa eficientemente).
+    """
+    import io
+    import av
+    input_container = av.open(io.BytesIO(audio_bytes))
+    try:
+        audio_stream = next((s for s in input_container.streams if s.type == 'audio'), None)
+        if audio_stream is None:
+            raise ValueError('El archivo no contiene pista de audio.')
+
+        output_buf = io.BytesIO()
+        output_container = av.open(output_buf, mode='w', format='wav')
+        output_stream = output_container.add_stream('pcm_s16le', rate=16000)
+        output_stream.layout = 'mono'
+
+        resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+
+        for frame in input_container.decode(audio_stream):
+            for rs_frame in resampler.resample(frame):
+                for packet in output_stream.encode(rs_frame):
+                    output_container.mux(packet)
+        # Flush
+        for packet in output_stream.encode(None):
+            output_container.mux(packet)
+        output_container.close()
+
+        return output_buf.getvalue()
+    finally:
+        input_container.close()
+
+
+@app.route('/api/chat/transcribir', methods=['POST'])
+@login_required
+def api_chat_transcribir():
+    """Transcribe un blob de audio del cliente usando Google Gemini.
+
+    Capa gratuita: 1500 requests/día, sin tarjeta. Soporta audios largos.
+    Recibe multipart/form-data con campo `audio`. Devuelve
+    {'success': True, 'texto': '...'} o {'success': False, 'message': '...'}.
+    """
+    try:
+        if not app.config.get('GEMINI_API_KEY'):
+            return jsonify({
+                'success': False,
+                'message': 'La transcripcion por voz no esta disponible: falta configurar GEMINI_API_KEY. Obten una key gratis en https://aistudio.google.com/app/apikey',
+            }), 503
+
+        audio = request.files.get('audio')
+        if not audio or not audio.filename:
+            return jsonify({'success': False, 'message': 'No se recibio archivo de audio.'}), 400
+
+        audio_bytes = audio.read()
+        if not audio_bytes:
+            return jsonify({'success': False, 'message': 'El audio esta vacio.'}), 400
+        if len(audio_bytes) > GEMINI_MAX_AUDIO_BYTES:
+            return jsonify({
+                'success': False,
+                'message': f'El audio excede {GEMINI_MAX_AUDIO_BYTES // (1024*1024)}MB. Graba un fragmento mas corto.',
+            }), 400
+
+        # Convertir a WAV 16kHz mono (Gemini no acepta webm directo)
+        try:
+            wav_bytes = _convertir_audio_a_wav_16k_mono(audio_bytes)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'message': f'No se pudo decodificar el audio: {str(e)}',
+            }), 400
+
+        # Llamar a Gemini con audio embebido (inline_data + base64)
+        import httpx as _httpx_local
+        url = f'{GEMINI_API_URL}/{GEMINI_TRANSCRIPTION_MODEL}:generateContent?key={app.config["GEMINI_API_KEY"]}'
+        payload = {
+            'contents': [{
+                'parts': [
+                    {
+                        'text': (
+                            'Transcribe el siguiente audio en espanol. Devuelve EXCLUSIVAMENTE el texto '
+                            'transcrito tal cual se dijo, sin comentarios, sin notas, sin formato Markdown, '
+                            'sin prefijos como "Transcripcion:". Si no hay voz audible, devuelve cadena vacia.'
+                        )
+                    },
+                    {
+                        'inline_data': {
+                            'mime_type': 'audio/wav',
+                            'data': base64.b64encode(wav_bytes).decode('ascii'),
+                        }
+                    },
+                ]
+            }],
+            'generationConfig': {
+                'temperature': 0.0,
+                'maxOutputTokens': 2048,
+            },
+        }
+
+        # Llamada a Gemini con reintentos automáticos para errores transitorios de red
+        # (getaddrinfo failed, connection reset, etc.) — comunes en Windows con httpx.
+        resp = None
+        last_error = None
+        for intento in range(3):
+            try:
+                resp = _httpx_local.post(url, json=payload, timeout=90.0)
+                break  # éxito
+            except _httpx_local.TimeoutException as e:
+                return jsonify({
+                    'success': False,
+                    'message': 'Gemini tardo demasiado en responder. Intenta con un audio mas corto.',
+                }), 504
+            except (_httpx_local.ConnectError, _httpx_local.ReadError,
+                    _httpx_local.RemoteProtocolError, OSError) as e:
+                # Errores transitorios — reintentar con backoff (0.5s, 1.5s)
+                last_error = e
+                if intento < 2:
+                    time.sleep(0.5 + intento)
+                    continue
+            except _httpx_local.HTTPError as e:
+                return jsonify({
+                    'success': False,
+                    'message': f'No se pudo conectar con Gemini: {str(e)}',
+                }), 502
+
+        if resp is None:
+            return jsonify({
+                'success': False,
+                'message': (
+                    f'No se pudo conectar con Gemini despues de 3 intentos: {str(last_error)}. '
+                    'Verifica tu conexion a internet y vuelve a intentar.'
+                ),
+            }), 502
+
+        if resp.status_code == 400:
+            try:
+                err = resp.json().get('error', {}).get('message', '')[:300]
+            except Exception:
+                err = resp.text[:200]
+            if 'API key' in err or 'API_KEY' in err:
+                return jsonify({
+                    'success': False,
+                    'message': f'GEMINI_API_KEY invalida. Genera una nueva en https://aistudio.google.com/app/apikey',
+                }), 502
+            return jsonify({'success': False, 'message': f'Gemini rechazo la peticion: {err}'}), 400
+        if resp.status_code == 429:
+            return jsonify({
+                'success': False,
+                'message': 'Excediste la cuota gratuita de Gemini (1500/dia). Espera unos minutos.',
+            }), 429
+        if resp.status_code != 200:
+            return jsonify({
+                'success': False,
+                'message': f'Gemini error HTTP {resp.status_code}: {resp.text[:200]}',
+            }), 502
+
+        try:
+            data = resp.json()
+            if not data.get('candidates'):
+                # Posible bloqueo de safety filters
+                prompt_feedback = data.get('promptFeedback', {})
+                block_reason = prompt_feedback.get('blockReason')
+                if block_reason:
+                    return jsonify({
+                        'success': False,
+                        'message': f'Gemini bloqueo el contenido: {block_reason}',
+                    }), 400
+                return jsonify({'success': False, 'message': 'Gemini no devolvio resultado.'}), 502
+
+            candidate = data['candidates'][0]
+            texto_partes = []
+            for part in candidate.get('content', {}).get('parts', []):
+                if 'text' in part:
+                    texto_partes.append(part['text'])
+            texto = ''.join(texto_partes).strip()
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'Respuesta inesperada de Gemini: {str(e)}',
+            }), 502
+
+        return jsonify({'success': True, 'texto': texto})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error procesando el audio: {str(e)}',
+        }), 500
+
+
+# ---------- System prompt y herramientas para Gemini Live (voz-a-voz) ----------
+
+SYSTEM_PROMPT_GEMINI_LIVE = """Eres el asistente vocal de SISAGENT, un sistema bancario y de ventas en Perú. Respondes hablando.
+
+Modelo de datos:
+- Operaciones bancarias: monto (S/), comision (S/), medio (EFECTIVO, YAPE, PLIN, TARJETA, BCP, IBK, BBVA, etc. — segun lo habilitado por sucursal). NO existe campo "tipo de operacion".
+- Productos: nombre, descripcion, precio, stock, foto, sucursal asignada.
+- Ventas: producto x cantidad, descuenta stock, suma a caja diaria.
+- Sucursales: nombre, direccion, medios de pago habilitados.
+- Usuarios: rol (admin global, admin de sucursal, usuario regular).
+
+Tu rol:
+1. Consultar informacion (productos, operaciones, ventas, usuarios, sucursales, medios de pago).
+2. Ejecutar acciones (registrar/eliminar venta u operacion, crear/editar/eliminar producto, crear usuario, crear sucursal, etc.) — PERO con confirmacion verbal del usuario.
+
+Reglas criticas para acciones que MUTAN datos (registrar/eliminar/crear/editar):
+1. Llamas PRIMERO a la funcion `proponer_*` correspondiente (ej: `proponer_venta`, `proponer_eliminar_operacion`). El servidor valida y guarda la propuesta. Devuelve un preview con los datos exactos.
+2. ANUNCIAS verbalmente lo que vas a hacer y preguntas "¿Confirmas?", "¿Quieres que lo haga?", "¿Lo registro?".
+3. ESPERAS a que el usuario responda.
+4. Si el usuario dice "si", "confirma", "dale", "hazlo", "ejecuta", "esta bien" → llamas a `confirmar_ultima_accion` (SIN argumentos — el servidor recuerda la propuesta).
+5. Si el usuario dice "no", "cancela", "espera", "nada", "olvidalo" → llamas a `cancelar_ultima_accion` (SIN argumentos) y respondes "Cancelado".
+- Habla siempre en español natural, conciso, amable. Como un colega que te ayuda.
+- Si falta informacion para una accion (ej: "registra una venta" sin decir producto), pregunta amablemente "¿Cual producto y cuanta cantidad?".
+- Los permisos los maneja el servidor automaticamente. Si una accion falla por permisos, transmite el mensaje al usuario con tono empatico.
+- Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc.
+- NO inventes IDs ni datos. Si no sabes el ID, busca primero.
+
+Cuando termines una accion exitosa, confirma brevemente: "Listo, registre la venta" o "Eliminada la operacion de cincuenta soles". Sin ser repetitivo."""
+
+
+def _convertir_schema_a_gemini(schema):
+    """Convierte JSON Schema de formato Anthropic (lowercase) a Gemini (uppercase)."""
+    if not isinstance(schema, dict):
+        return schema
+    new = {}
+    for k, v in schema.items():
+        if k == "type" and isinstance(v, str):
+            new["type"] = v.upper()
+        elif k == "properties" and isinstance(v, dict):
+            new[k] = {pname: _convertir_schema_a_gemini(pdef) for pname, pdef in v.items()}
+        elif k == "items" and isinstance(v, dict):
+            new[k] = _convertir_schema_a_gemini(v)
+        elif isinstance(v, dict):
+            new[k] = _convertir_schema_a_gemini(v)
+        elif isinstance(v, list):
+            new[k] = [_convertir_schema_a_gemini(x) if isinstance(x, dict) else x for x in v]
+        else:
+            new[k] = v
+    return new
+
+
+def _build_gemini_function_declarations():
+    """Convierte las declaraciones Anthropic a formato Gemini Function Calling."""
+    funcs = []
+    for decl in _HERRAMIENTAS_DECLARACIONES:
+        funcs.append({
+            "name": decl["name"],
+            "description": decl["description"],
+            "parameters": _convertir_schema_a_gemini(decl.get("input_schema", {"type": "OBJECT"})),
+        })
+    # Función SIN args para confirmar: el servidor recuerda la última propuesta del usuario.
+    # Esto evita que Gemini tenga que reconstruir un objeto args complejo (fuente de bugs).
+    funcs.append({
+        "name": "confirmar_ultima_accion",
+        "description": (
+            "Ejecuta la última acción que propusiste (mediante un proponer_*) DESPUÉS de que el usuario "
+            "haya CONFIRMADO verbalmente. Solo llámala cuando el usuario diga explícitamente sí, "
+            "confirma, dale, hazlo, ejecuta, está bien. NO requiere argumentos — el servidor recuerda "
+            "la propuesta que hiciste."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}},
+    })
+    funcs.append({
+        "name": "cancelar_ultima_accion",
+        "description": (
+            "Cancela la última propuesta sin ejecutarla. Llámala si el usuario dice no, cancela, "
+            "espera, nada, olvídalo."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}},
+    })
+    return funcs
+
+
+# Cache en memoria de la última propuesta de cada usuario (clave = user_id).
+# El TTL implícito es la vida del proceso; no es estricto porque el usuario puede pedir otra propuesta nueva.
+_ultima_propuesta_por_usuario = {}
+
+
+def _registrar_propuesta(user_id, accion, args):
+    """Guarda la última propuesta del usuario para uso posterior por confirmar_ultima_accion."""
+    _ultima_propuesta_por_usuario[user_id] = {
+        "accion": accion,
+        "args": dict(args) if args else {},
+        "timestamp": time.time(),
+    }
+
+
+def _confirmar_ultima_accion_voz(user_id):
+    """Ejecuta la última propuesta que el modelo le hizo al usuario."""
+    propuesta = _ultima_propuesta_por_usuario.get(user_id)
+    if not propuesta:
+        return {"error": "No hay ninguna propuesta pendiente para confirmar. Pide al usuario una acción primero."}
+    # Validez: máximo 5 minutos
+    if time.time() - propuesta["timestamp"] > 300:
+        _ultima_propuesta_por_usuario.pop(user_id, None)
+        return {"error": "La propuesta expiró (más de 5 minutos). Vuelve a proponer la acción."}
+    resultado = _ejecutar_accion_confirmada_voz(propuesta["accion"], propuesta["args"], user_id)
+    if not (isinstance(resultado, dict) and resultado.get("error")):
+        # Limpiar tras ejecución exitosa
+        _ultima_propuesta_por_usuario.pop(user_id, None)
+    return resultado
+
+
+def _cancelar_ultima_accion_voz(user_id):
+    """Descarta la última propuesta."""
+    if _ultima_propuesta_por_usuario.pop(user_id, None):
+        return {"mensaje": "Propuesta cancelada."}
+    return {"mensaje": "No había nada que cancelar."}
+
+
+def _ejecutar_tool_voz(tool_name, args, user_id):
+    """Ejecuta una herramienta del chatbot en el contexto de Flask para llamadas WebSocket."""
+    with app.app_context():
+        usuario = Usuario.query.get(user_id)
+        if not usuario:
+            return {"error": "Usuario no encontrado"}
+        spec = CHATBOT_TOOLS.get(tool_name)
+        if not spec:
+            return {"error": f"Herramienta '{tool_name}' no existe"}
+        try:
+            resultado = spec["handler"](args or {}, usuario)
+            return resultado if isinstance(resultado, dict) else {"resultado": resultado}
+        except ValueError as e:
+            return {"error": str(e)}
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {"error": f"Error interno: {str(e)}"}
+
+
+def _ejecutar_accion_confirmada_voz(accion, args, user_id):
+    """Ejecuta una acción confirmada por voz. Dispatcher similar al de api_chat_confirmar_accion."""
+    with app.app_context():
+        usuario = Usuario.query.get(user_id)
+        if not usuario:
+            return {"error": "Usuario no encontrado"}
+        if not accion or accion not in CHATBOT_TOOLS:
+            return {"error": f"Acción '{accion}' desconocida"}
+        if not CHATBOT_TOOLS[accion].get("requires_confirmation"):
+            return {"error": "Esta acción no requiere confirmación"}
+        dispatcher = {
+            'proponer_venta':              _ejecutar_venta_validada,
+            'proponer_operacion':          _ejecutar_operacion_validada,
+            'proponer_crear_producto':     _ejecutar_crear_producto_validado,
+            'proponer_editar_producto':    _ejecutar_editar_producto_validado,
+            'proponer_eliminar_producto':  _ejecutar_eliminar_producto_validado,
+            'proponer_eliminar_operacion': _ejecutar_eliminar_operacion_validada,
+            'proponer_eliminar_venta':     _ejecutar_eliminar_venta_validada,
+            'proponer_crear_usuario':      _ejecutar_crear_usuario_validado,
+            'proponer_crear_sucursal':     _ejecutar_crear_sucursal_validada,
+        }
+        ejecutor = dispatcher.get(accion)
+        if not ejecutor:
+            return {"error": f"Acción '{accion}' no implementada"}
+        try:
+            resultado = ejecutor(args or {}, usuario)
+            return resultado if isinstance(resultado, dict) else {"resultado": resultado}
+        except ValueError as e:
+            return {"error": str(e)}
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            return {"error": f"Error ejecutando: {str(e)}"}
+
+
+# ---------- Gemini Live API WebSocket proxy (transcripción streaming) ----------
+
+@sock.route('/ws/chat/voice_live')
+def ws_voice_live(browser_ws):
+    """WebSocket bidireccional que reenvía audio del navegador a Gemini Live
+    y devuelve las transcripciones en vivo. Mantiene la API key del lado servidor.
+
+    Protocolo navegador→servidor:
+      - bytes: chunks PCM 16-bit little-endian, mono, 16kHz
+      - JSON: {"type":"close"} para cerrar; {"type":"end_input"} para señalar fin de turno
+
+    Protocolo servidor→navegador (todo JSON):
+      - {"type":"ready"} → conexión a Gemini lista
+      - {"type":"input_transcription","text":"...","finished":bool}
+      - {"type":"turn_complete"}
+      - {"type":"interrupted"}
+      - {"type":"error","message":"..."}
+    """
+    # Autenticación: Flask-Sock comparte el ciclo de Flask, current_user funciona vía cookie de sesión
+    if not current_user.is_authenticated:
+        try:
+            browser_ws.send(json.dumps({"type": "error", "message": "No autenticado"}))
+        except Exception:
+            pass
+        return
+
+    api_key = app.config.get('GEMINI_API_KEY')
+    if not api_key:
+        try:
+            browser_ws.send(json.dumps({
+                "type": "error",
+                "message": "GEMINI_API_KEY no configurada en el servidor."
+            }))
+        except Exception:
+            pass
+        return
+
+    import websocket as _ws  # websocket-client (lib distinta a flask-sock)
+
+    url = f"{GEMINI_LIVE_WS_URL}?key={api_key}"
+    try:
+        gemini_ws = _ws.create_connection(url, timeout=20)
+    except Exception as e:
+        print(f"[live] No se pudo conectar a Gemini: {e}")
+        try:
+            browser_ws.send(json.dumps({
+                "type": "error",
+                "message": f"No se pudo conectar con Gemini Live: {str(e)[:200]}"
+            }))
+        except Exception:
+            pass
+        return
+
+    # Captura el user_id ANTES de los threads (Flask-Login proxy no funciona fuera del contexto)
+    user_id = current_user.id
+
+    # Envío del setup inicial — DEBE ser el primer mensaje. Incluye:
+    # - Modelo de audio nativo
+    # - Voz "Aoede" (femenina, natural en español)
+    # - System instruction con contexto SISAGENT
+    # - Función calling con las 17 herramientas + ejecutar_accion_confirmada
+    # - Transcripción de input Y output (para mostrar texto en chat)
+    setup_msg = {
+        "setup": {
+            "model": GEMINI_LIVE_MODEL,
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {"voiceName": "Aoede"}
+                    },
+                    "languageCode": "es-US",
+                },
+            },
+            "systemInstruction": {
+                "parts": [{"text": SYSTEM_PROMPT_GEMINI_LIVE}],
+            },
+            "tools": [{
+                "functionDeclarations": _build_gemini_function_declarations(),
+            }],
+            "inputAudioTranscription": {},
+            "outputAudioTranscription": {},
+        }
+    }
+    try:
+        gemini_ws.send(json.dumps(setup_msg))
+    except Exception as e:
+        print(f"[live] Setup falló: {e}")
+        try:
+            browser_ws.send(json.dumps({"type": "error", "message": f"Setup falló: {e}"}))
+        except Exception:
+            pass
+        try:
+            gemini_ws.close()
+        except Exception:
+            pass
+        return
+
+    # Notificar al navegador
+    try:
+        browser_ws.send(json.dumps({"type": "ready"}))
+    except Exception:
+        try:
+            gemini_ws.close()
+        except Exception:
+            pass
+        return
+
+    stop_event = threading.Event()
+
+    def browser_to_gemini():
+        """Lee del navegador y envía a Gemini Live como realtimeInput."""
+        try:
+            while not stop_event.is_set():
+                try:
+                    data = browser_ws.receive(timeout=2)
+                except Exception:
+                    break
+                if data is None:
+                    continue
+                if isinstance(data, (bytes, bytearray)):
+                    # Audio PCM crudo del navegador
+                    msg = {
+                        "realtimeInput": {
+                            "mediaChunks": [{
+                                "mimeType": "audio/pcm;rate=16000",
+                                "data": base64.b64encode(bytes(data)).decode('ascii'),
+                            }]
+                        }
+                    }
+                    try:
+                        gemini_ws.send(json.dumps(msg))
+                    except Exception:
+                        break
+                else:
+                    # Mensaje de control en texto
+                    try:
+                        ctl = json.loads(data)
+                    except Exception:
+                        continue
+                    if ctl.get('type') == 'close':
+                        break
+                    elif ctl.get('type') == 'end_input':
+                        try:
+                            gemini_ws.send(json.dumps({"realtimeInput": {"audioStreamEnd": True}}))
+                        except Exception:
+                            break
+        except Exception as e:
+            print(f"[live] browser_to_gemini error: {type(e).__name__}: {e}")
+        finally:
+            stop_event.set()
+
+    def gemini_to_browser():
+        """Lee de Gemini y reenvía al navegador: transcripciones, audio, tool_calls."""
+        try:
+            while not stop_event.is_set():
+                try:
+                    raw = gemini_ws.recv()
+                except Exception:
+                    break
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw if isinstance(raw, str) else raw.decode('utf-8'))
+                except Exception:
+                    continue
+
+                # === Tool calls: Gemini quiere ejecutar una función ===
+                tool_call = data.get('toolCall')
+                if tool_call:
+                    function_responses = []
+                    for fc in tool_call.get('functionCalls', []):
+                        fc_id = fc.get('id')
+                        fc_name = fc.get('name', '')
+                        fc_args = fc.get('args', {}) or {}
+                        print(f"[live] Tool call: {fc_name}({fc_args})")
+                        try:
+                            if fc_name == 'confirmar_ultima_accion':
+                                resultado = _confirmar_ultima_accion_voz(user_id)
+                            elif fc_name == 'cancelar_ultima_accion':
+                                resultado = _cancelar_ultima_accion_voz(user_id)
+                            else:
+                                resultado = _ejecutar_tool_voz(fc_name, fc_args, user_id)
+                                # Si fue un proponer_* exitoso, cachear para confirmar despues
+                                if (fc_name.startswith('proponer_')
+                                        and isinstance(resultado, dict)
+                                        and not resultado.get('error')):
+                                    _registrar_propuesta(user_id, fc_name, fc_args)
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            resultado = {"error": str(e)}
+                        print(f"[live] Tool result: {str(resultado)[:200]}")
+                        function_responses.append({
+                            "id": fc_id,
+                            "name": fc_name,
+                            "response": resultado,
+                        })
+                        try:
+                            browser_ws.send(json.dumps({
+                                "type": "tool_executed",
+                                "name": fc_name,
+                                "args": fc_args,
+                                "result": resultado,
+                            }))
+                        except Exception:
+                            pass
+                    try:
+                        gemini_ws.send(json.dumps({
+                            "toolResponse": {"functionResponses": function_responses}
+                        }))
+                    except Exception:
+                        break
+                    continue
+
+                # === Server content: audio, texto, turn boundaries ===
+                sc = data.get('serverContent') or {}
+
+                # Transcripción del INPUT del usuario (lo que dijo)
+                input_trans = sc.get('inputTranscription')
+                if input_trans and input_trans.get('text'):
+                    try:
+                        browser_ws.send(json.dumps({
+                            "type": "input_transcription",
+                            "text": input_trans.get('text', ''),
+                            "finished": bool(input_trans.get('finished', False)),
+                        }))
+                    except Exception:
+                        break
+
+                # Transcripción del OUTPUT del modelo (lo que va a decir)
+                output_trans = sc.get('outputTranscription')
+                if output_trans and output_trans.get('text'):
+                    try:
+                        browser_ws.send(json.dumps({
+                            "type": "output_transcription",
+                            "text": output_trans.get('text', ''),
+                            "finished": bool(output_trans.get('finished', False)),
+                        }))
+                    except Exception:
+                        break
+
+                # Audio del modelo (PCM 24kHz mono base64)
+                model_turn = sc.get('modelTurn')
+                if model_turn:
+                    for part in model_turn.get('parts', []) or []:
+                        inline = part.get('inlineData')
+                        if inline and 'audio' in (inline.get('mimeType') or '').lower():
+                            try:
+                                browser_ws.send(json.dumps({
+                                    "type": "audio_chunk",
+                                    "data": inline.get('data', ''),
+                                    "mime_type": inline.get('mimeType', 'audio/pcm;rate=24000'),
+                                }))
+                            except Exception:
+                                break
+
+                if sc.get('turnComplete'):
+                    try:
+                        browser_ws.send(json.dumps({"type": "turn_complete"}))
+                    except Exception:
+                        break
+
+                if sc.get('interrupted'):
+                    try:
+                        browser_ws.send(json.dumps({"type": "interrupted"}))
+                    except Exception:
+                        break
+        except Exception as e:
+            print(f"[live] gemini_to_browser error: {type(e).__name__}: {e}")
+        finally:
+            stop_event.set()
+
+    t1 = threading.Thread(target=browser_to_gemini, daemon=True)
+    t2 = threading.Thread(target=gemini_to_browser, daemon=True)
+    t1.start()
+    t2.start()
+
+    # Esperar hasta que cualquier dirección termine
+    stop_event.wait()
+
+    try:
+        gemini_ws.close()
+    except Exception:
+        pass
+
+
+# ========== FIN MÓDULO DE CHATBOT IA ==========
 
 
 # Healthcheck optimizado

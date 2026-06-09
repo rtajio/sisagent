@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Registrar Venta - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h4"><i class="fas fa-receipt me-2"></i> Registrar Nueva Venta</h1>
+    <a href="{{ url_for('ventas') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold">Datos de la Venta</h6>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <!-- Sucursal (solo si es admin) -->
+                    {% if current_user.es_admin and sucursales|length > 1 %}
+                    <div class="mb-3">
+                        <label for="sucursal_id" class="form-label">Sucursal</label>
+                        <select class="form-control" id="sucursal_id" name="sucursal_id" required>
+                            <option value="">-- Seleccionar Sucursal --</option>
+                            {% for sucursal in sucursales %}
+                            <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% elif sucursales %}
+                    <div class="mb-3">
+                        <label class="form-label">Sucursal</label>
+                        <input type="hidden" name="sucursal_id" value="{{ sucursales[0].id }}">
+                        <input type="text" class="form-control" value="{{ sucursales[0].nombre }}" readonly>
+                    </div>
+                    {% endif %}
+
+                    {% if productos %}
+                    <!-- Producto -->
+                    <div class="mb-3">
+                        <label for="producto_id" class="form-label">Producto</label>
+                        <select class="form-control" id="producto_id" name="producto_id" required>
+                            <option value="">-- Selecciona un producto --</option>
+                            {% for producto in productos %}
+                            <option value="{{ producto.id }}"
+                                    data-precio="{{ producto.precio }}"
+                                    data-stock="{{ producto.stock }}"
+                                    {% if producto.stock <= 0 %}disabled{% endif %}>
+                                {{ producto.nombre }} (S/ {{ '%.2f'|format(producto.precio) }} · stock: {{ producto.stock }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text" id="stock-info">Selecciona el producto vendido del inventario</small>
+                    </div>
+
+                    <!-- Cantidad -->
+                    <div class="mb-3">
+                        <label for="cantidad" class="form-label">Cantidad</label>
+                        <input type="number" class="form-control" id="cantidad" name="cantidad"
+                               placeholder="1" step="1" min="1" required value="1">
+                        <small class="form-text">El stock se descuenta automáticamente al registrar la venta</small>
+                    </div>
+
+                    <!-- Total estimado -->
+                    <div class="mb-3">
+                        <label for="total-estimado" class="form-label">Total estimado (S/)</label>
+                        <input type="text" class="form-control" id="total-estimado" readonly value="0.00">
+                        <small class="form-text">Se calcula como precio unitario × cantidad</small>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No hay productos en el inventario{% if not current_user.es_admin %} de tu sucursal{% endif %}.
+                        Primero debes <a href="{{ url_for('nuevo_producto') }}">agregar productos al inventario</a> para poder registrar ventas.
+                    </div>
+                    {% endif %}
+
+                    <!-- Botones -->
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-grow-1" {% if not productos %}disabled{% endif %}>
+                            <i class="fas fa-check me-2"></i>Registrar Venta
+                        </button>
+                        <a href="{{ url_for('ventas') }}" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Información útil -->
+        <div class="card shadow mt-3">
+            <div class="card-body">
+                <h6 class="font-weight-bold text-gray-800 mb-2"><i class="fas fa-lightbulb me-2"></i>Importante</h6>
+                <ul class="small text-muted mb-0">
+                    <li>Las ventas se registran con <strong>fecha y hora automática</strong> (hora Perú)</li>
+                    <li>El dinero se suma a la <strong>caja de ventas</strong> del día</li>
+                    <li>Las ventas <strong>NO afectan las comisiones</strong></li>
+                    <li>Puedes ver el resumen diario en el dashboard</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectProducto = document.getElementById('producto_id');
+    const inputCantidad = document.getElementById('cantidad');
+    const totalEstimado = document.getElementById('total-estimado');
+    const stockInfo = document.getElementById('stock-info');
+
+    if (!selectProducto || !inputCantidad || !totalEstimado) {
+        return;
+    }
+
+    function actualizarTotal() {
+        const opcion = selectProducto.options[selectProducto.selectedIndex];
+        const precio = parseFloat(opcion ? opcion.dataset.precio : 0) || 0;
+        const stock = parseInt(opcion ? opcion.dataset.stock : 0, 10) || 0;
+        const cantidad = parseInt(inputCantidad.value, 10) || 0;
+
+        totalEstimado.value = (precio * cantidad).toFixed(2);
+
+        if (opcion && opcion.value) {
+            stockInfo.textContent = 'Stock disponible: ' + stock + ' unidad(es)';
+            inputCantidad.max = stock > 0 ? stock : 1;
+        } else {
+            stockInfo.textContent = 'Selecciona el producto vendido del inventario';
+            inputCantidad.removeAttribute('max');
+        }
+    }
+
+    selectProducto.addEventListener('change', actualizarTotal);
+    inputCantidad.addEventListener('input', actualizarTotal);
+    actualizarTotal();
+});
+</script>
+{% endblock %}

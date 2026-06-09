@@ -592,12 +592,433 @@
             border-radius: 4px;
             padding: 0.1em 0.4em;
         }
+
+        /* ===== Chatbot widget ===== */
+        .chatbot-widget {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9998;
+            font-family: var(--font-body);
+        }
+        .chatbot-bubble {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            cursor: pointer;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, background 0.2s;
+        }
+        .chatbot-bubble:hover {
+            background: var(--accent-hover);
+            transform: scale(1.05);
+        }
+        .chatbot-panel {
+            position: fixed;
+            bottom: 96px;
+            right: 24px;
+            width: 380px;
+            max-width: calc(100vw - 32px);
+            height: 540px;
+            max-height: calc(100vh - 120px);
+            background: var(--bg-paper);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .chatbot-panel.d-none { display: none !important; }
+        .chatbot-header {
+            padding: 12px 16px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chatbot-header h6 {
+            margin: 0;
+            color: var(--text-primary);
+            font-family: var(--font-heading);
+            font-size: 1.05rem;
+        }
+        .chatbot-header .chatbot-actions { display: flex; gap: 6px; }
+        .chatbot-header button {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.95rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: color 0.15s, background 0.15s;
+        }
+        .chatbot-header button:hover { color: var(--text-primary); background: var(--bg-inset); }
+        .chatbot-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: var(--bg-paper);
+        }
+        .chatbot-msg {
+            max-width: 85%;
+            padding: 8px 12px;
+            border-radius: 10px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        .chatbot-msg.user { align-self: flex-end; background: var(--accent); color: #fff; }
+        .chatbot-msg.bot {
+            align-self: flex-start;
+            background: var(--bg-inset);
+            color: var(--text-primary);
+            border-left: 3px solid var(--accent);
+        }
+        .chatbot-msg.error {
+            align-self: flex-start;
+            background: rgba(220,53,69,0.15);
+            color: var(--danger);
+            border-left: 3px solid var(--danger);
+        }
+        .chatbot-img-msg {
+            max-width: 200px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            border: 1px solid var(--border);
+            display: block;
+        }
+        .chatbot-product-card {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 8px;
+            margin: 4px 0;
+        }
+        .chatbot-product-card img {
+            width: 56px;
+            height: 56px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+            background: var(--bg-inset);
+        }
+        .chatbot-product-card .info { flex: 1; min-width: 0; font-size: 0.82rem; }
+        .chatbot-product-card .info .name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chatbot-product-card .info .meta { color: var(--text-secondary); font-size: 0.78rem; }
+        .chatbot-proposal {
+            align-self: stretch;
+            background: var(--bg-surface);
+            border: 2px solid var(--accent);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.88rem;
+            color: var(--text-primary);
+        }
+        .chatbot-proposal .title {
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 8px;
+            font-family: var(--font-heading);
+        }
+        .chatbot-proposal .summary {
+            background: var(--bg-inset);
+            border-radius: 6px;
+            padding: 6px 8px;
+            margin-bottom: 10px;
+            font-size: 0.82rem;
+        }
+        .chatbot-proposal .summary div { margin: 2px 0; }
+        .chatbot-proposal .actions { display: flex; gap: 6px; }
+        .chatbot-proposal .actions button {
+            flex: 1;
+            padding: 6px 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .chatbot-proposal .actions .confirm { background: var(--success); color: #fff; }
+        .chatbot-proposal .actions .confirm:hover { opacity: 0.9; }
+        .chatbot-proposal .actions .confirm:disabled { opacity: 0.5; cursor: wait; }
+        .chatbot-proposal .actions .cancel { background: var(--bg-inset); color: var(--text-secondary); }
+        .chatbot-proposal .actions .cancel:hover { background: var(--border); }
+        .chatbot-image-preview {
+            padding: 8px 12px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chatbot-image-preview.d-none { display: none !important; }
+        .chatbot-image-preview img {
+            height: 40px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+        .chatbot-image-preview .remove {
+            background: transparent;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .chatbot-form {
+            display: flex;
+            padding: 8px;
+            gap: 6px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-surface);
+            align-items: center;
+        }
+        .chatbot-form input[type="text"] {
+            flex: 1;
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .chatbot-form input[type="text"]:focus { border-color: var(--accent); }
+        .chatbot-form button {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+        .chatbot-form button.attach { background: var(--bg-inset); color: var(--text-secondary); }
+        .chatbot-form button.attach:hover { color: var(--accent); }
+        .chatbot-form button.send:hover { background: var(--accent-hover); }
+        .chatbot-form button:disabled { opacity: 0.5; cursor: wait; }
+        .chatbot-form button.mic { background: var(--bg-inset); color: var(--text-secondary); }
+        .chatbot-form button.mic:hover { color: var(--accent); }
+        .chatbot-form button.mic.recording {
+            background: var(--danger);
+            color: #fff;
+            animation: chatbot-mic-pulse 1.2s ease-in-out infinite;
+        }
+        @keyframes chatbot-mic-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(220,53,69,0.5); }
+            50% { box-shadow: 0 0 0 6px rgba(220,53,69,0); }
+        }
+        .chatbot-listening-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            background: var(--success);
+            color: #fff;
+            border-radius: 50%;
+            font-size: 0.65rem;
+            margin-left: 8px;
+            animation: chatbot-listening-pulse 2s ease-in-out infinite;
+        }
+        .chatbot-listening-badge.d-none { display: none !important; }
+        @keyframes chatbot-listening-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(40,167,69,0.5); }
+            50% { box-shadow: 0 0 0 4px rgba(40,167,69,0); }
+        }
+        .chatbot-settings-panel {
+            flex: 1;
+            padding: 14px;
+            background: var(--bg-paper);
+            overflow-y: auto;
+        }
+        .chatbot-settings-panel.d-none { display: none !important; }
+        .chatbot-panel.settings-open .chatbot-messages,
+        .chatbot-panel.settings-open .chatbot-image-preview,
+        .chatbot-panel.settings-open .chatbot-form { display: none !important; }
+        .chatbot-mic-status {
+            align-self: flex-start;
+            background: rgba(40,167,69,0.15);
+            color: var(--success);
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            font-style: italic;
+            border-left: 3px solid var(--success);
+        }
+        .chatbot-typing {
+            align-self: flex-start;
+            background: var(--bg-inset);
+            color: var(--text-muted);
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-style: italic;
+            font-size: 0.85rem;
+        }
+        .chatbot-mic-test-section {
+            background: var(--bg-inset);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 12px;
+        }
+        .chatbot-mic-test-bar-bg {
+            width: 100%;
+            height: 14px;
+            background: var(--bg-paper);
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        .chatbot-mic-test-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(to right, var(--success), var(--warning), var(--danger));
+            transition: width 0.05s linear;
+        }
+        .chatbot-mic-devices {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            background: var(--bg-paper);
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin-top: 6px;
+            max-height: 80px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+        .chatbot-mic-devices .device { padding: 2px 0; }
+        .chatbot-mic-devices .device.default { color: var(--accent); font-weight: 600; }
+        @media (max-width: 576px) {
+            .chatbot-panel {
+                right: 8px;
+                left: 8px;
+                bottom: 88px;
+                width: auto;
+                max-width: none;
+                height: calc(100vh - 110px);
+            }
+            .chatbot-widget { right: 16px; bottom: 16px; }
+        }
     </style>
 </head>
 <body>
     <div id="notification-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
     <!-- Elementos de audio removidos - usando Web Audio API -->
-    
+
+    {% if current_user.is_authenticated %}
+    <!-- Widget de chatbot IA -->
+    <div class="chatbot-widget">
+        <div id="chatbot-panel" class="chatbot-panel d-none" role="dialog" aria-label="Asistente IA">
+            <div class="chatbot-header">
+                <h6>
+                    <i class="fas fa-robot me-2"></i>Asistente SISAGENT
+                    <span id="chatbot-listening-badge" class="chatbot-listening-badge d-none" title="Escuchando frase activadora"><i class="fas fa-ear-listen"></i></span>
+                </h6>
+                <div class="chatbot-actions">
+                    <button type="button" id="chatbot-settings" title="Configuración (voz)"><i class="fas fa-cog"></i></button>
+                    <button type="button" id="chatbot-clear" title="Limpiar conversación"><i class="fas fa-trash"></i></button>
+                    <button type="button" id="chatbot-close" title="Cerrar"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+            <div id="chatbot-messages" class="chatbot-messages"></div>
+            <div id="chatbot-settings-panel" class="chatbot-settings-panel d-none">
+                <h6 style="margin:0 0 10px 0;color:var(--accent);font-family:var(--font-heading);font-size:0.95rem;">
+                    <i class="fas fa-microphone me-2"></i>Configuración de voz
+                </h6>
+                <div id="chatbot-voice-unsupported" class="d-none" style="background:rgba(220,53,69,0.15);color:var(--danger);padding:8px;border-radius:6px;font-size:0.82rem;margin-bottom:10px;">
+                    Tu navegador no soporta reconocimiento de voz. Usa Chrome, Edge o Safari.
+                </div>
+                <div style="background:var(--bg-inset);border-left:3px solid var(--accent);border-radius:4px;padding:8px 10px;margin-bottom:12px;font-size:0.82rem;color:var(--text-secondary);">
+                    <strong style="color:var(--text-primary);">Dictado por voz (Google Gemini)</strong><br>
+                    Click en 🎤 para grabar tu voz hasta 10 min. <strong>Para automáticamente al detectar silencio (1.5s)</strong> y manda al chat. Usa la capa gratuita de Gemini.
+                </div>
+                <label style="display:block;font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px;">Frase para activar el dictado:</label>
+                <input type="text" id="chatbot-trigger-input" placeholder="REGISTRAR" maxlength="40"
+                       style="width:100%;background:var(--bg-inset);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text-primary);font-size:0.88rem;outline:none;margin-bottom:4px;">
+                <small style="display:block;color:var(--text-muted);font-size:0.75rem;margin-bottom:10px;">
+                    Si está activada la escucha continua, al detectar esta palabra/frase se abre el chat e inicia el dictado.
+                </small>
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-primary);cursor:pointer;margin-bottom:12px;">
+                    <input type="checkbox" id="chatbot-continuous-toggle" style="accent-color:var(--accent);">
+                    Escucha continua de la frase activadora
+                </label>
+                <small style="display:block;color:var(--text-muted);font-size:0.72rem;margin-bottom:12px;font-style:italic;">
+                    Nota: con escucha continua activada el navegador estará usando el mic permanentemente (verás el indicador rojo en la pestaña). Solo enviamos audio a Gemini cuando detectamos voz real (no silencio).
+                </small>
+                <div style="display:flex;gap:6px;">
+                    <button type="button" id="chatbot-settings-save" style="flex:1;padding:8px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.88rem;">Guardar</button>
+                    <button type="button" id="chatbot-settings-cancel" style="flex:1;padding:8px 12px;background:var(--bg-inset);color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.88rem;">Cancelar</button>
+                </div>
+
+                <div class="chatbot-mic-test-section">
+                    <strong style="font-size:0.85rem;color:var(--text-primary);">
+                        <i class="fas fa-volume-high me-1"></i>Diagnóstico de micrófono
+                    </strong>
+                    <p style="font-size:0.75rem;color:var(--text-muted);margin:4px 0 8px 0;">
+                        Si el dictado no funciona, verifica que tu micrófono envía audio. La barra debe moverse cuando hables.
+                    </p>
+                    <button type="button" id="chatbot-mic-test-btn" style="width:100%;padding:6px 10px;background:var(--bg-paper);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.82rem;">
+                        <i class="fas fa-play me-1"></i>Probar micrófono (10s)
+                    </button>
+                    <div class="chatbot-mic-test-bar-bg"><div class="chatbot-mic-test-bar" id="chatbot-mic-test-bar"></div></div>
+                    <div id="chatbot-mic-test-status" style="font-size:0.75rem;color:var(--text-muted);text-align:center;">
+                        Click en "Probar micrófono" para empezar.
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:8px;font-weight:600;">
+                        Micrófonos detectados:
+                    </div>
+                    <div id="chatbot-mic-devices" class="chatbot-mic-devices">
+                        <em style="color:var(--text-muted);">Otorga permiso de mic para ver la lista.</em>
+                    </div>
+                </div>
+            </div>
+            <div id="chatbot-image-preview" class="chatbot-image-preview d-none">
+                <img id="chatbot-image-preview-img" alt="Vista previa">
+                <span id="chatbot-image-preview-name" style="font-size:0.8rem;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                <button type="button" class="remove" id="chatbot-image-remove" title="Quitar imagen"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="chatbot-form" class="chatbot-form" autocomplete="off">
+                <button type="button" class="attach" id="chatbot-attach" title="Adjuntar foto"><i class="fas fa-image"></i></button>
+                <input type="file" id="chatbot-file-input" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" style="display:none;">
+                <button type="button" class="mic" id="chatbot-mic" title="Dictar por voz" aria-label="Dictar por voz"><i class="fas fa-microphone"></i></button>
+                <input type="text" id="chatbot-input" placeholder="Pregúntame sobre productos, ventas, operaciones..." autocomplete="off">
+                <button type="submit" class="send" id="chatbot-send" title="Enviar"><i class="fas fa-paper-plane"></i></button>
+            </form>
+        </div>
+        <button type="button" class="chatbot-bubble" id="chatbot-toggle" title="Asistente IA" aria-label="Abrir asistente IA">
+            <i class="fas fa-robot"></i>
+        </button>
+    </div>
+    {% endif %}
+
     {% if current_user.is_authenticated %}
     <!-- Botón de toggle para móvil -->
             <button class="sidebar-toggle" onclick="toggleSidebar()" title="Ocultar/Mostrar Menú">
@@ -631,6 +1052,18 @@
                             <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-list me-2"></i>
                                 Operaciones
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'ventas' %}active{% endif %}" href="{{ url_for('ventas') }}">
+                                <i class="fas fa-shopping-cart me-2"></i>
+                                Ventas
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'inventario' %}active{% endif %}" href="{{ url_for('inventario') }}">
+                                <i class="fas fa-boxes-stacked me-2"></i>
+                                Inventario
                             </a>
                         </li>
                         <li class="nav-item">
@@ -673,6 +1106,18 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'ventas' %}active{% endif %}" href="{{ url_for('ventas') }}">
+                                <i class="fas fa-shopping-cart me-2"></i>
+                                Ventas
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'inventario' %}active{% endif %}" href="{{ url_for('inventario') }}">
+                                <i class="fas fa-boxes-stacked me-2"></i>
+                                Inventario
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'admin_usuarios' %}active{% endif %}" href="{{ url_for('admin_usuarios') }}">
                                 <i class="fas fa-users me-2"></i>
                                 Usuarios
@@ -696,6 +1141,18 @@
                             <a class="nav-link {% if request.endpoint == 'operaciones' %}active{% endif %}" href="{{ url_for('operaciones') }}">
                                 <i class="fas fa-list me-2"></i>
                                 Operaciones
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'ventas' %}active{% endif %}" href="{{ url_for('ventas') }}">
+                                <i class="fas fa-shopping-cart me-2"></i>
+                                Ventas
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'inventario' %}active{% endif %}" href="{{ url_for('inventario') }}">
+                                <i class="fas fa-boxes-stacked me-2"></i>
+                                Inventario
                             </a>
                         </li>
                         {% endif %}
@@ -1368,7 +1825,1914 @@
     });
     {% endif %}
     </script>
-    
+
+    {% if current_user.is_authenticated %}
+    <script>
+    (function() {
+        'use strict';
+
+        const MAX_HISTORY = 20;
+        const REQUEST_TIMEOUT_MS = 35000;
+        const MAX_IMAGE_MB = 10;
+        // Las claves se scopean por user_id para que dos usuarios distintos en el
+        // mismo navegador NO compartan historial ni configuración.
+        const SISAGENT_USER_ID = "{{ current_user.id }}";
+        const STORAGE_KEY = 'sisagentChatHistory_u' + SISAGENT_USER_ID;
+        const TRIGGER_STORAGE_KEY = 'sisagentChatTriggerPhrase_u' + SISAGENT_USER_ID;
+        const CONTINUOUS_STORAGE_KEY = 'sisagentChatContinuousListening_u' + SISAGENT_USER_ID;
+        const LEGACY_KEYS = ['sisagentChatHistory', 'sisagentChatTriggerPhrase', 'sisagentChatContinuousListening'];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const panel = document.getElementById('chatbot-panel');
+            const toggleBtn = document.getElementById('chatbot-toggle');
+            const closeBtn = document.getElementById('chatbot-close');
+            const clearBtn = document.getElementById('chatbot-clear');
+            const messagesEl = document.getElementById('chatbot-messages');
+            const form = document.getElementById('chatbot-form');
+            const input = document.getElementById('chatbot-input');
+            const sendBtn = document.getElementById('chatbot-send');
+            const attachBtn = document.getElementById('chatbot-attach');
+            const fileInput = document.getElementById('chatbot-file-input');
+            const imgPreview = document.getElementById('chatbot-image-preview');
+            const imgPreviewImg = document.getElementById('chatbot-image-preview-img');
+            const imgPreviewName = document.getElementById('chatbot-image-preview-name');
+            const imgRemoveBtn = document.getElementById('chatbot-image-remove');
+            const micBtn = document.getElementById('chatbot-mic');
+            const settingsBtn = document.getElementById('chatbot-settings');
+            const settingsPanel = document.getElementById('chatbot-settings-panel');
+            const settingsSaveBtn = document.getElementById('chatbot-settings-save');
+            const settingsCancelBtn = document.getElementById('chatbot-settings-cancel');
+            const triggerInput = document.getElementById('chatbot-trigger-input');
+            const continuousToggle = document.getElementById('chatbot-continuous-toggle');
+            const listeningBadge = document.getElementById('chatbot-listening-badge');
+            const voiceUnsupportedNotice = document.getElementById('chatbot-voice-unsupported');
+            const micTestBtn = document.getElementById('chatbot-mic-test-btn');
+            const micTestBar = document.getElementById('chatbot-mic-test-bar');
+            const micTestStatus = document.getElementById('chatbot-mic-test-status');
+            const micDevicesEl = document.getElementById('chatbot-mic-devices');
+
+            if (!panel) return;
+
+            let history = [];
+            let pendingImage = null;
+            let pending = false;
+            let triggerPhrase = 'REGISTRAR';
+            let triggerListeningEnabled = false;
+            let triggerRecognition = null;
+            let dictation = null;
+            let dictationActive = false;
+            const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            function loadHistory() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed)) return parsed;
+                    }
+                } catch (e) {}
+                return [];
+            }
+            function saveHistory() {
+                try {
+                    const trimmed = history.slice(-MAX_HISTORY);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+                } catch (e) {}
+            }
+            function clearHistory() {
+                history = [];
+                try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+                messagesEl.innerHTML = '';
+                renderWelcome();
+            }
+
+            function renderWelcome() {
+                const div = document.createElement('div');
+                div.className = 'chatbot-msg bot';
+                div.textContent = '¡Hola! Soy tu asistente. Puedes preguntarme cómo registrar operaciones, buscar productos por nombre/descripción/foto, o pedirme que proponga una venta u operación.';
+                messagesEl.appendChild(div);
+            }
+            function escapeHtml(s) {
+                return String(s).replace(/[&<>"']/g, function(c) {
+                    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+                });
+            }
+            function renderTextMessage(text, role, imageDataUrl) {
+                const wrap = document.createElement('div');
+                wrap.className = 'chatbot-msg ' + (role === 'user' ? 'user' : 'bot');
+                if (imageDataUrl) {
+                    const img = document.createElement('img');
+                    img.src = imageDataUrl;
+                    img.className = 'chatbot-img-msg';
+                    img.alt = 'Imagen enviada';
+                    wrap.appendChild(img);
+                }
+                if (text) {
+                    const span = document.createElement('div');
+                    span.textContent = text;
+                    wrap.appendChild(span);
+                }
+                messagesEl.appendChild(wrap);
+                scrollToBottom();
+            }
+            function renderErrorMessage(text) {
+                const div = document.createElement('div');
+                div.className = 'chatbot-msg error';
+                div.textContent = text;
+                messagesEl.appendChild(div);
+                scrollToBottom();
+            }
+            function renderProducts(productos) {
+                if (!productos || !productos.length) return;
+                productos.forEach(function(p) {
+                    const card = document.createElement('div');
+                    card.className = 'chatbot-product-card';
+                    const img = document.createElement('img');
+                    if (p.foto_url) {
+                        img.src = p.foto_url;
+                        img.alt = p.nombre;
+                    } else {
+                        img.alt = '';
+                    }
+                    card.appendChild(img);
+                    const info = document.createElement('div');
+                    info.className = 'info';
+                    const name = document.createElement('div');
+                    name.className = 'name';
+                    name.textContent = p.nombre;
+                    info.appendChild(name);
+                    const meta = document.createElement('div');
+                    meta.className = 'meta';
+                    const precio = (typeof p.precio === 'number') ? p.precio.toFixed(2) : p.precio;
+                    meta.textContent = 'S/ ' + precio + ' · stock: ' + p.stock + (p.sucursal_nombre ? ' · ' + p.sucursal_nombre : '');
+                    info.appendChild(meta);
+                    card.appendChild(info);
+                    messagesEl.appendChild(card);
+                });
+                scrollToBottom();
+            }
+            function titleEl(text) {
+                const t = document.createElement('div');
+                t.className = 'title';
+                t.textContent = text;
+                return t;
+            }
+            function renderProposal(payload) {
+                if (payload.texto) renderTextMessage(payload.texto, 'bot');
+                const card = document.createElement('div');
+                card.className = 'chatbot-proposal';
+                const summary = document.createElement('div');
+                summary.className = 'summary';
+                const p = payload.preview || {};
+                if (payload.accion === 'proponer_venta') {
+                    card.appendChild(titleEl('Confirmar venta'));
+                    summary.innerHTML =
+                        '<div><strong>Producto:</strong> ' + escapeHtml(p.producto_nombre) + '</div>' +
+                        '<div><strong>Cantidad:</strong> ' + p.cantidad + '</div>' +
+                        '<div><strong>Precio unit.:</strong> S/ ' + Number(p.precio_unitario).toFixed(2) + '</div>' +
+                        '<div><strong>Total:</strong> S/ ' + Number(p.monto).toFixed(2) + '</div>' +
+                        '<div><strong>Sucursal:</strong> ' + escapeHtml(p.sucursal_nombre) + '</div>';
+                } else if (payload.accion === 'proponer_operacion') {
+                    card.appendChild(titleEl('Confirmar operación bancaria'));
+                    summary.innerHTML =
+                        '<div><strong>Monto:</strong> S/ ' + Number(p.monto).toFixed(2) + '</div>' +
+                        '<div><strong>Comisión:</strong> S/ ' + Number(p.comision).toFixed(2) + '</div>' +
+                        '<div><strong>Medio:</strong> ' + escapeHtml(p.medio) + '</div>' +
+                        '<div><strong>Sucursal:</strong> ' + escapeHtml(p.sucursal_nombre) + '</div>';
+                } else {
+                    // Formato genérico para las acciones nuevas (crear/editar/eliminar producto, usuario, sucursal, etc.)
+                    card.appendChild(titleEl(p._titulo || 'Confirmar acción'));
+                    if (Array.isArray(p.campos) && p.campos.length) {
+                        let html = '';
+                        p.campos.forEach(function(c) {
+                            html += '<div><strong>' + escapeHtml(c.label) + ':</strong> ' + escapeHtml(c.valor) + '</div>';
+                        });
+                        summary.innerHTML = html;
+                    } else {
+                        summary.textContent = JSON.stringify(p, null, 2);
+                    }
+                    if (p._advertencia) {
+                        const warn = document.createElement('div');
+                        warn.style.cssText = 'margin-top:8px;padding:6px 8px;background:rgba(255,193,7,0.15);border-left:3px solid var(--warning);color:var(--warning);font-size:0.78rem;border-radius:4px;';
+                        warn.innerHTML = '<i class="fas fa-triangle-exclamation me-1"></i>' + escapeHtml(p._advertencia);
+                        card.appendChild(warn);
+                    }
+                }
+                card.appendChild(summary);
+                const actions = document.createElement('div');
+                actions.className = 'actions';
+                const confirmBtn = document.createElement('button');
+                confirmBtn.className = 'confirm';
+                confirmBtn.type = 'button';
+                confirmBtn.textContent = 'Confirmar';
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'cancel';
+                cancelBtn.type = 'button';
+                cancelBtn.textContent = 'Cancelar';
+                actions.appendChild(confirmBtn);
+                actions.appendChild(cancelBtn);
+                card.appendChild(actions);
+                messagesEl.appendChild(card);
+                scrollToBottom();
+
+                cancelBtn.addEventListener('click', function() {
+                    actions.remove();
+                    const note = document.createElement('div');
+                    note.style.fontSize = '0.78rem';
+                    note.style.color = 'var(--text-muted)';
+                    note.style.fontStyle = 'italic';
+                    note.style.marginTop = '4px';
+                    note.textContent = 'Acción cancelada.';
+                    card.appendChild(note);
+                });
+
+                confirmBtn.addEventListener('click', function() {
+                    confirmBtn.disabled = true;
+                    cancelBtn.disabled = true;
+                    confirmBtn.textContent = 'Procesando...';
+                    confirmAction(payload.accion, payload.args).then(function(result) {
+                        actions.remove();
+                        const note = document.createElement('div');
+                        note.style.fontSize = '0.82rem';
+                        note.style.color = result.success ? 'var(--success)' : 'var(--danger)';
+                        note.style.fontWeight = '500';
+                        note.style.marginTop = '4px';
+                        note.textContent = (result.success ? '✓ ' : '✗ ') + (result.mensaje || result.message || '');
+                        card.appendChild(note);
+                        if (result.success) {
+                            history.push({ role: 'assistant', content: result.mensaje });
+                            saveHistory();
+                            if (typeof showNotification === 'function') {
+                                showNotification(result.mensaje, 'success');
+                            }
+                        }
+                    }).catch(function(err) {
+                        actions.remove();
+                        const note = document.createElement('div');
+                        note.style.fontSize = '0.82rem';
+                        note.style.color = 'var(--danger)';
+                        note.style.marginTop = '4px';
+                        note.textContent = '✗ ' + (err.message || 'Error desconocido');
+                        card.appendChild(note);
+                    });
+                });
+            }
+            function showTyping() {
+                const div = document.createElement('div');
+                div.className = 'chatbot-typing';
+                div.id = 'chatbot-typing-indicator';
+                div.textContent = 'Escribiendo...';
+                messagesEl.appendChild(div);
+                scrollToBottom();
+            }
+            function hideTyping() {
+                const el = document.getElementById('chatbot-typing-indicator');
+                if (el) el.remove();
+            }
+            function scrollToBottom() {
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+            function repaintHistory() {
+                messagesEl.innerHTML = '';
+                if (!history.length) {
+                    renderWelcome();
+                    return;
+                }
+                history.forEach(function(m) {
+                    if (m.role === 'user') renderTextMessage(m.content, 'user');
+                    else if (m.role === 'assistant') renderTextMessage(m.content, 'bot');
+                });
+            }
+
+            function sendMessage(text, imageFile) {
+                return new Promise(function(resolve, reject) {
+                    const fd = new FormData();
+                    fd.append('mensaje', text);
+                    fd.append('historial', JSON.stringify(history));
+                    if (imageFile) fd.append('imagen', imageFile);
+
+                    const ctrl = new AbortController();
+                    const timeout = setTimeout(function() { ctrl.abort(); }, REQUEST_TIMEOUT_MS);
+
+                    fetch('/api/chat/mensaje', { method: 'POST', body: fd, signal: ctrl.signal })
+                        .then(function(resp) {
+                            clearTimeout(timeout);
+                            const ct = resp.headers.get('content-type') || '';
+                            if (!ct.includes('application/json')) {
+                                throw new Error('Respuesta inesperada del servidor (no JSON). HTTP ' + resp.status);
+                            }
+                            return resp.json();
+                        })
+                        .then(resolve)
+                        .catch(function(err) {
+                            clearTimeout(timeout);
+                            if (err.name === 'AbortError') {
+                                reject(new Error('La IA tardó demasiado en responder. Intenta de nuevo.'));
+                            } else {
+                                reject(err);
+                            }
+                        });
+                });
+            }
+            function confirmAction(accion, args) {
+                return new Promise(function(resolve, reject) {
+                    const ctrl = new AbortController();
+                    const timeout = setTimeout(function() { ctrl.abort(); }, REQUEST_TIMEOUT_MS);
+
+                    fetch('/api/chat/confirmar_accion', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ accion: accion, args: args }),
+                        signal: ctrl.signal,
+                    })
+                        .then(function(resp) {
+                            clearTimeout(timeout);
+                            return resp.json();
+                        })
+                        .then(resolve)
+                        .catch(function(err) {
+                            clearTimeout(timeout);
+                            if (err.name === 'AbortError') {
+                                reject(new Error('La acción tardó demasiado. Verifica si se aplicó.'));
+                            } else {
+                                reject(err);
+                            }
+                        });
+                });
+            }
+
+            toggleBtn.addEventListener('click', function() {
+                panel.classList.toggle('d-none');
+                if (!panel.classList.contains('d-none')) input.focus();
+            });
+            closeBtn.addEventListener('click', function() { panel.classList.add('d-none'); });
+            clearBtn.addEventListener('click', function() {
+                if (confirm('¿Borrar la conversación?')) clearHistory();
+            });
+            attachBtn.addEventListener('click', function() { fileInput.click(); });
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                if (!file.type.startsWith('image/')) {
+                    if (typeof showNotification === 'function') showNotification('Solo se permiten imágenes.', 'error');
+                    fileInput.value = '';
+                    return;
+                }
+                if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+                    if (typeof showNotification === 'function') showNotification('La imagen excede ' + MAX_IMAGE_MB + ' MB.', 'error');
+                    fileInput.value = '';
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    pendingImage = { file: file, dataUrl: ev.target.result };
+                    imgPreviewImg.src = ev.target.result;
+                    imgPreviewName.textContent = file.name;
+                    imgPreview.classList.remove('d-none');
+                };
+                reader.readAsDataURL(file);
+            });
+            imgRemoveBtn.addEventListener('click', function() {
+                pendingImage = null;
+                fileInput.value = '';
+                imgPreview.classList.add('d-none');
+            });
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (pending) return;
+                const text = input.value.trim();
+                if (!text && !pendingImage) return;
+
+                pending = true;
+                sendBtn.disabled = true;
+                attachBtn.disabled = true;
+
+                const imgForRender = pendingImage ? pendingImage.dataUrl : null;
+                const fileForUpload = pendingImage ? pendingImage.file : null;
+
+                renderTextMessage(text, 'user', imgForRender);
+                history.push({ role: 'user', content: text || '(imagen adjunta)' });
+                saveHistory();
+                input.value = '';
+                pendingImage = null;
+                fileInput.value = '';
+                imgPreview.classList.add('d-none');
+                showTyping();
+
+                sendMessage(text, fileForUpload).then(function(data) {
+                    hideTyping();
+                    if (!data.success) {
+                        renderErrorMessage(data.message || 'Error desconocido.');
+                    } else if (data.tipo === 'texto') {
+                        if (data.texto) renderTextMessage(data.texto, 'bot');
+                        if (data.productos && data.productos.length) renderProducts(data.productos);
+                        if (data.texto) {
+                            history.push({ role: 'assistant', content: data.texto });
+                            saveHistory();
+                        }
+                    } else if (data.tipo === 'propuesta') {
+                        renderProposal(data);
+                    } else {
+                        renderErrorMessage('Tipo de respuesta inesperado: ' + data.tipo);
+                    }
+                }).catch(function(err) {
+                    hideTyping();
+                    renderErrorMessage(err.message || 'Error de red.');
+                }).then(function() {
+                    pending = false;
+                    sendBtn.disabled = false;
+                    attachBtn.disabled = false;
+                    input.focus();
+                });
+            });
+
+            // ===== Configuración (frase activadora + escucha continua) =====
+            function loadVoiceSettings() {
+                try {
+                    const phrase = localStorage.getItem(TRIGGER_STORAGE_KEY);
+                    if (phrase && phrase.trim()) triggerPhrase = phrase.trim();
+                    triggerListeningEnabled = localStorage.getItem(CONTINUOUS_STORAGE_KEY) === '1';
+                } catch (e) {}
+            }
+            function saveVoiceSettings() {
+                try {
+                    localStorage.setItem(TRIGGER_STORAGE_KEY, triggerPhrase);
+                    localStorage.setItem(CONTINUOUS_STORAGE_KEY, triggerListeningEnabled ? '1' : '0');
+                } catch (e) {}
+            }
+            function openSettings() {
+                triggerInput.value = triggerPhrase;
+                continuousToggle.checked = triggerListeningEnabled;
+                settingsPanel.classList.remove('d-none');
+                panel.classList.add('settings-open');
+                triggerInput.focus();
+            }
+            function closeSettings() {
+                settingsPanel.classList.add('d-none');
+                panel.classList.remove('settings-open');
+            }
+
+            // ===== Dictado por voz vía MediaRecorder + OpenAI Whisper =====
+            // (Reemplaza la Web Speech API del navegador, que falla con error de red
+            //  en entornos donde speech.googleapis.com no es alcanzable.)
+            const MAX_RECORDING_MS = 600000;  // tope de 10 minutos por grabación
+            // VAD (Voice Activity Detection): paramos automáticamente al detectar silencio.
+            const VAD_THRESHOLD = 18;          // 0-255, umbral promedio que distingue voz de silencio
+            const VAD_SILENCE_MS = 1500;       // ms de silencio continuo para auto-stop del dictado manual
+            const TRIGGER_VAD_THRESHOLD = 14;   // más sensible: detecta voz aun con micrófono lejano
+            const TRIGGER_SILENCE_MS = 350;     // BAJADO de 700→350ms — corta antes el chunk
+            const TRIGGER_MIN_SPEECH_MS = 250;  // BAJADO de 300→250ms
+            const TRIGGER_MAX_CHUNK_MS = 3000;  // BAJADO de 6000→3000ms — chunks más cortos = transcripción más rápida
+
+            let mediaRecorder = null;
+            let recordingStream = null;
+            let recordingChunks = [];
+            let recordingActive = false;
+            let recordingStartTime = 0;
+            let recordingTimerId = null;
+            let recordingMaxTimeoutId = null;
+            let recordingMimeType = 'audio/webm';
+
+            // Estado VAD del dictado manual
+            let vadAudioContext = null;
+            let vadAnalyser = null;
+            let vadRafId = null;
+            let vadSilenceStart = null;
+            let vadSpeechDetected = false;
+
+            // Estado del listener de frase activadora
+            let triggerStream = null;
+            let triggerCtx = null;
+            let triggerAnalyser = null;
+            let triggerRafId = null;
+            let triggerRecorder = null;
+            let triggerChunks = [];
+            let triggerIsSpeaking = false;
+            let triggerSpeechStart = 0;
+            let triggerSilenceStart = 0;
+            let triggerActive = false;
+
+            // === Reproducción del audio del modelo (Gemini Live habla de vuelta) ===
+            let livePlaybackCtx = null;
+            let livePlaybackNextTime = 0;
+            let livePlaybackSources = [];       // para cancelar (barge-in)
+            let liveModelTranscript = '';       // texto que el modelo está diciendo
+            let liveCurrentBotMessageDiv = null;
+            let liveUserMessageCommitted = false; // bandera para commit del mensaje del usuario una sola vez por turno
+
+            function pickRecordingMimeType() {
+                const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+                if (typeof MediaRecorder === 'undefined') return null;
+                for (let i = 0; i < candidates.length; i++) {
+                    if (MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+                }
+                return '';  // navegador elige
+            }
+
+            function fmtRecordingTime(ms) {
+                const s = Math.floor(ms / 1000);
+                return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+            }
+
+            async function startRecording() {
+                if (recordingActive) return;
+                if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('Tu navegador no soporta grabación de audio (MediaRecorder/getUserMedia).', 'error');
+                    }
+                    return;
+                }
+                // Pausar el listener de trigger si estaba corriendo — usa el mismo mic
+                if (triggerActive) {
+                    stopTriggerListener();
+                    await new Promise(function(r) { setTimeout(r, 100); });
+                }
+                try {
+                    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (e) {
+                    console.error('[chatbot] getUserMedia falló:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('No se pudo acceder al micrófono: ' + (e.message || e.name), 'error');
+                    }
+                    return;
+                }
+                recordingMimeType = pickRecordingMimeType() || '';
+                console.log('[chatbot] MediaRecorder mimeType=', recordingMimeType || '(default)');
+                try {
+                    mediaRecorder = recordingMimeType
+                        ? new MediaRecorder(recordingStream, { mimeType: recordingMimeType })
+                        : new MediaRecorder(recordingStream);
+                } catch (e) {
+                    console.error('[chatbot] MediaRecorder() falló:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('No se pudo iniciar la grabación: ' + (e.message || e), 'error');
+                    }
+                    cleanupRecording();
+                    return;
+                }
+                recordingChunks = [];
+                mediaRecorder.ondataavailable = function(ev) {
+                    if (ev.data && ev.data.size > 0) recordingChunks.push(ev.data);
+                };
+                mediaRecorder.onstop = function() {
+                    handleRecordingStopped();
+                };
+                mediaRecorder.onerror = function(ev) {
+                    console.error('[chatbot] MediaRecorder error:', ev);
+                    if (typeof showNotification === 'function') {
+                        showNotification('Error grabando audio: ' + (ev.error ? ev.error.name : 'desconocido'), 'error');
+                    }
+                };
+
+                try {
+                    mediaRecorder.start();
+                } catch (e) {
+                    console.error('[chatbot] mediaRecorder.start() falló:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('No se pudo iniciar la grabación: ' + (e.message || e), 'error');
+                    }
+                    cleanupRecording();
+                    return;
+                }
+
+                recordingActive = true;
+                recordingStartTime = Date.now();
+                micBtn.classList.add('recording');
+                micBtn.title = 'Detener grabación (click)';
+                input.focus();
+
+                // VAD: auto-stop al detectar silencio sostenido
+                setupVADForDictation();
+
+                // Actualizar el placeholder con timer en vivo
+                const origPlaceholder = input.placeholder;
+                input.dataset.origPlaceholder = origPlaceholder;
+                recordingTimerId = setInterval(function() {
+                    if (!recordingActive) return;
+                    const elapsed = Date.now() - recordingStartTime;
+                    input.placeholder = '🔴 Grabando ' + fmtRecordingTime(elapsed) + ' — auto-stop al callar (1.5s)';
+                }, 250);
+
+                // Auto-detener al llegar al límite
+                recordingMaxTimeoutId = setTimeout(function() {
+                    if (recordingActive) {
+                        if (typeof showNotification === 'function') {
+                            showNotification('Grabación detenida automáticamente al llegar al límite de ' + (MAX_RECORDING_MS / 1000) + ' segundos.', 'info');
+                        }
+                        stopRecording();
+                    }
+                }, MAX_RECORDING_MS);
+
+                if (typeof showNotification === 'function') {
+                    showNotification('🔴 Grabando — habla ahora. Click en 🎤 otra vez para detener.', 'info');
+                }
+            }
+
+            function stopRecording() {
+                if (!recordingActive || !mediaRecorder) return;
+                try {
+                    mediaRecorder.stop();
+                } catch (e) {
+                    console.warn('[chatbot] mediaRecorder.stop() falló:', e);
+                    cleanupRecording();
+                }
+            }
+
+            function setupVADForDictation() {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx || !recordingStream) return;
+                try {
+                    vadAudioContext = new AudioCtx();
+                    const source = vadAudioContext.createMediaStreamSource(recordingStream);
+                    vadAnalyser = vadAudioContext.createAnalyser();
+                    vadAnalyser.fftSize = 512;
+                    source.connect(vadAnalyser);
+                } catch (e) {
+                    console.warn('[chatbot] VAD setup failed:', e);
+                    return;
+                }
+                const data = new Uint8Array(vadAnalyser.frequencyBinCount);
+                vadSilenceStart = null;
+                vadSpeechDetected = false;
+
+                function tick() {
+                    if (!recordingActive || !vadAnalyser) return;
+                    vadAnalyser.getByteFrequencyData(data);
+                    let sum = 0;
+                    for (let i = 0; i < data.length; i++) sum += data[i];
+                    const avg = sum / data.length;
+
+                    if (avg > VAD_THRESHOLD) {
+                        vadSilenceStart = null;
+                        if (!vadSpeechDetected) vadSpeechDetected = true;
+                    } else if (vadSpeechDetected) {
+                        // Solo cuenta silencio DESPUÉS de haber detectado voz al menos una vez
+                        if (vadSilenceStart === null) {
+                            vadSilenceStart = Date.now();
+                        } else if (Date.now() - vadSilenceStart > VAD_SILENCE_MS) {
+                            console.log('[chatbot] VAD: silencio sostenido, auto-stop');
+                            stopRecording();
+                            return;
+                        }
+                    }
+                    vadRafId = requestAnimationFrame(tick);
+                }
+                tick();
+            }
+
+            function cleanupVAD() {
+                if (vadRafId) { cancelAnimationFrame(vadRafId); vadRafId = null; }
+                if (vadAudioContext) {
+                    try { vadAudioContext.close(); } catch (e) {}
+                    vadAudioContext = null;
+                }
+                vadAnalyser = null;
+                vadSilenceStart = null;
+                vadSpeechDetected = false;
+            }
+
+            function cleanupRecording() {
+                recordingActive = false;
+                cleanupVAD();
+                if (recordingTimerId) { clearInterval(recordingTimerId); recordingTimerId = null; }
+                if (recordingMaxTimeoutId) { clearTimeout(recordingMaxTimeoutId); recordingMaxTimeoutId = null; }
+                if (recordingStream) {
+                    try { recordingStream.getTracks().forEach(function(t) { t.stop(); }); } catch (e) {}
+                    recordingStream = null;
+                }
+                mediaRecorder = null;
+                micBtn.classList.remove('recording');
+                micBtn.title = 'Dictar por voz';
+                if (input.dataset.origPlaceholder !== undefined) {
+                    input.placeholder = input.dataset.origPlaceholder;
+                    delete input.dataset.origPlaceholder;
+                }
+            }
+
+            async function handleRecordingStopped() {
+                const wasRecordingMs = Date.now() - recordingStartTime;
+                const chunks = recordingChunks.slice();
+                cleanupRecording();
+
+                if (!chunks.length) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('No se capturó audio. Intenta de nuevo.', 'warning');
+                    }
+                    return;
+                }
+                if (wasRecordingMs < 500) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('Grabación demasiado corta. Mantén presionado mientras hablas.', 'warning');
+                    }
+                    return;
+                }
+
+                const blob = new Blob(chunks, { type: recordingMimeType || 'audio/webm' });
+                console.log('[chatbot] Audio capturado:', blob.size, 'bytes,', wasRecordingMs, 'ms,', recordingMimeType);
+
+                if (typeof showNotification === 'function') {
+                    showNotification('Transcribiendo audio...', 'info');
+                }
+                micBtn.style.opacity = '0.5';
+                micBtn.disabled = true;
+
+                const fd = new FormData();
+                const ext = (recordingMimeType.indexOf('webm') !== -1) ? 'webm'
+                          : (recordingMimeType.indexOf('mp4') !== -1)  ? 'm4a'
+                          : (recordingMimeType.indexOf('ogg') !== -1)  ? 'ogg'
+                          : 'webm';
+                fd.append('audio', blob, 'dictado.' + ext);
+
+                const ctrl = new AbortController();
+                const timeout = setTimeout(function() { ctrl.abort(); }, 65000);
+
+                try {
+                    const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd, signal: ctrl.signal });
+                    clearTimeout(timeout);
+                    const ct = resp.headers.get('content-type') || '';
+                    if (!ct.includes('application/json')) {
+                        throw new Error('Respuesta no JSON del servidor (HTTP ' + resp.status + ')');
+                    }
+                    const data = await resp.json();
+                    if (!data.success) {
+                        if (typeof showNotification === 'function') {
+                            showNotification(data.message || 'Error al transcribir.', 'error');
+                        }
+                        return;
+                    }
+                    const texto = (data.texto || '').trim();
+                    if (!texto) {
+                        if (typeof showNotification === 'function') {
+                            showNotification('No se detectó voz en el audio.', 'warning');
+                        }
+                        return;
+                    }
+                    // Si el input está vacío, auto-enviamos al chat (UX tipo "voice assistant").
+                    // Si el usuario ya tenía texto escrito, lo anexamos para no perderlo.
+                    const cur = (input.value || '').trim();
+                    if (cur) {
+                        input.value = (cur + ' ' + texto).trim();
+                        input.focus();
+                        if (typeof showNotification === 'function') {
+                            showNotification('✓ Transcripción anexada. Edita o envía.', 'success');
+                        }
+                    } else {
+                        input.value = texto;
+                        // Auto-submit del formulario para que el chat procese sin esperar otro click
+                        const submitEvent = new Event('submit', { cancelable: true, bubbles: true });
+                        form.dispatchEvent(submitEvent);
+                    }
+                } catch (e) {
+                    clearTimeout(timeout);
+                    console.error('[chatbot] Error transcribiendo:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification(e.name === 'AbortError'
+                            ? 'La transcripción tardó demasiado. Intenta con audio más corto.'
+                            : 'Error de red al transcribir: ' + (e.message || e),
+                            'error');
+                    }
+                } finally {
+                    micBtn.style.opacity = '';
+                    micBtn.disabled = false;
+                    // Reactivar listener solo si la sesión Live se perdió.
+                    // En el modo fluido, la WS persiste entre turnos por lo que
+                    // normalmente esto no se ejecuta.
+                    if (triggerListeningEnabled && liveMode === 'off') {
+                        setTimeout(startTriggerListener, 1500);
+                    }
+                }
+            }
+
+            // ===== Stubs: el código viejo de MediaRecorder ya no se usa, pero algunas referencias internas siguen aquí =====
+            function startDictation() { liveStart('dictating'); }
+            function stopDictation() { liveStop('manual'); }
+
+            // ===== Gemini Live API (WebSocket streaming, sustituye al enfoque anterior) =====
+            // Esta sesión maneja TANTO la escucha continua de frase activadora COMO el dictado.
+            // Un único WebSocket por sesión: transcripción en vivo, latencia ~200ms tras hablar.
+            let liveWs = null;
+            let liveAudioCtx = null;
+            let liveProcessor = null;
+            let liveSource = null;
+            let liveStream = null;
+            let liveMode = 'off';        // 'off' | 'listening' | 'dictating' | 'starting'
+            let liveTranscript = '';     // Acumulador del input_transcription
+            let liveReady = false;
+            let liveLastSendTime = 0;
+
+            async function liveStart(mode) {
+                if (liveMode !== 'off') {
+                    console.warn('[live] Ya activo en modo', liveMode);
+                    return;
+                }
+                liveMode = 'starting';
+                liveTranscript = '';
+                liveReady = false;
+
+                // 1. Pedir el stream del mic
+                try {
+                    liveStream = await navigator.mediaDevices.getUserMedia({
+                        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    });
+                } catch (e) {
+                    console.error('[live] getUserMedia falló:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('No se pudo acceder al micrófono: ' + (e.message || e.name), 'error');
+                    }
+                    liveMode = 'off';
+                    return;
+                }
+
+                // 2. Abrir WebSocket a /ws/chat/voice_live
+                const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = wsProto + '//' + location.host + '/ws/chat/voice_live';
+                console.log('[live] Intentando WebSocket:', wsUrl);
+                try {
+                    liveWs = new WebSocket(wsUrl);
+                    liveWs.binaryType = 'arraybuffer';
+                } catch (e) {
+                    console.error('[live] WebSocket constructor falló:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('No se pudo abrir conexión de voz: ' + e.message, 'error');
+                    }
+                    liveCleanup();
+                    return;
+                }
+
+                let lastCloseCode = null;
+                let lastCloseReason = null;
+                let lastServerError = null;
+
+                liveWs.onopen = function() {
+                    console.log('[live] WS OPEN — esperando "ready" del servidor');
+                };
+                liveWs.onmessage = function(ev) {
+                    // Interceptamos para capturar mensajes de error del servidor antes de pasar al handler
+                    try {
+                        const msg = JSON.parse(ev.data);
+                        if (msg && msg.type === 'error' && msg.message) {
+                            lastServerError = msg.message;
+                        }
+                    } catch (e) {}
+                    onLiveMessage(ev);
+                };
+                liveWs.onerror = function(e) {
+                    console.error('[live] WS onerror disparado. readyState=' + (liveWs ? liveWs.readyState : 'null'),
+                                  'lastClose=', lastCloseCode, lastCloseReason,
+                                  'serverError=', lastServerError);
+                    if (typeof showNotification === 'function') {
+                        let detail;
+                        if (lastServerError) detail = lastServerError;
+                        else if (lastCloseCode) detail = `WS cerrado código ${lastCloseCode}` + (lastCloseReason ? ': ' + lastCloseReason : '');
+                        else detail = 'No se pudo establecer conexión WebSocket. Revisa consola DevTools.';
+                        showNotification('Live API: ' + detail, 'error');
+                    }
+                    liveCleanup();
+                };
+                liveWs.onclose = function(e) {
+                    lastCloseCode = e.code;
+                    lastCloseReason = e.reason;
+                    console.log('[live] WS cerrado, code=' + e.code + ', reason="' + e.reason + '", wasClean=' + e.wasClean,
+                                'lastServerError=', lastServerError);
+                    // Si cerró antes de recibir ready y NO hubo onerror, mostrar info al usuario
+                    if (!liveReady && liveMode !== 'off' && typeof showNotification === 'function' && !lastServerError) {
+                        showNotification(`Live API: conexión cerrada (código ${e.code})` +
+                                         (e.reason ? `: ${e.reason}` : ''), 'warning');
+                    } else if (lastServerError && typeof showNotification === 'function') {
+                        showNotification('Live API: ' + lastServerError, 'error');
+                    }
+                    liveCleanup();
+                };
+
+                // 3. Esperar a "ready" del servidor + WebSocket OPEN
+                const waitReady = await new Promise(function(resolve) {
+                    const timeout = setTimeout(function() { resolve(false); }, 12000);
+                    const check = setInterval(function() {
+                        if (liveReady && liveWs && liveWs.readyState === WebSocket.OPEN) {
+                            clearTimeout(timeout); clearInterval(check); resolve(true);
+                        }
+                        if (!liveWs || liveWs.readyState === WebSocket.CLOSED) {
+                            clearTimeout(timeout); clearInterval(check); resolve(false);
+                        }
+                    }, 50);
+                });
+                if (!waitReady) {
+                    console.error('[live] Gemini no respondió ready a tiempo');
+                    if (typeof showNotification === 'function') {
+                        showNotification('Gemini Live no respondió a tiempo.', 'error');
+                    }
+                    liveCleanup();
+                    return;
+                }
+
+                // 4. Configurar captura de audio PCM 16kHz mono
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('AudioContext no disponible en este navegador.', 'error');
+                    }
+                    liveCleanup();
+                    return;
+                }
+                try {
+                    liveAudioCtx = new AudioCtx({ sampleRate: 16000 });
+                    liveSource = liveAudioCtx.createMediaStreamSource(liveStream);
+                    // ScriptProcessor: 4096 samples ≈ 256ms a 16kHz, balance latencia/CPU
+                    liveProcessor = liveAudioCtx.createScriptProcessor(4096, 1, 1);
+                    liveProcessor.onaudioprocess = onLiveAudioFrame;
+                    liveSource.connect(liveProcessor);
+                    liveProcessor.connect(liveAudioCtx.destination);
+                } catch (e) {
+                    console.error('[live] Audio setup falló:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('Fallo en captura de audio: ' + e.message, 'error');
+                    }
+                    liveCleanup();
+                    return;
+                }
+
+                liveMode = mode;
+                if (mode === 'dictating') {
+                    micBtn.classList.add('recording');
+                    micBtn.title = 'Detener dictado';
+                    const orig = input.placeholder;
+                    input.dataset.origPlaceholder = orig;
+                    input.placeholder = '🔴 Habla — texto en vivo';
+                    input.focus();
+                } else if (mode === 'listening') {
+                    listeningBadge.classList.remove('d-none');
+                    listeningBadge.title = 'Escuchando: "' + triggerPhrase + '"';
+                    micBtn.title = 'Dictar (o di "' + triggerPhrase + '")';
+                    console.log('[live] Modo listening activo, frase=', triggerPhrase);
+                }
+            }
+
+            function onLiveAudioFrame(ev) {
+                if (!liveWs || liveWs.readyState !== WebSocket.OPEN) return;
+                const input = ev.inputBuffer.getChannelData(0);
+                const int16 = new Int16Array(input.length);
+                for (let i = 0; i < input.length; i++) {
+                    const s = Math.max(-1, Math.min(1, input[i]));
+                    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+                try {
+                    liveWs.send(int16.buffer);
+                    liveLastSendTime = Date.now();
+                } catch (e) {
+                    console.warn('[live] send falló:', e);
+                }
+            }
+
+            function onLiveMessage(ev) {
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch (e) { return; }
+
+                if (msg.type === 'ready') {
+                    liveReady = true;
+                    console.log('[live] Gemini READY');
+                    return;
+                }
+                if (msg.type === 'error') {
+                    console.error('[live] Server error:', msg.message);
+                    if (typeof showNotification === 'function') {
+                        showNotification(msg.message || 'Error en Live API', 'error');
+                    }
+                    liveCleanup();
+                    return;
+                }
+                if (msg.type === 'input_transcription' && msg.text) {
+                    liveTranscript += msg.text;
+                    console.log('[live] chunk="' + msg.text + '" modo=' + liveMode + ' acum="' + liveTranscript + '"');
+
+                    if (liveMode === 'dictating') {
+                        input.value = liveTranscript.trim();
+                        // Si el modelo había comenzado a responder y el usuario habla → barge-in
+                        if (liveCurrentBotMessageDiv) {
+                            liveStopPlayback();
+                        }
+                    } else if (liveMode === 'listening') {
+                        // Chequear frase activadora (mismo WS — solo cambia UI)
+                        const trig = (triggerPhrase || '').toLowerCase().trim();
+                        if (!trig) return;
+                        const normT = liveTranscript.toLowerCase()
+                            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                            .replace(/[.,!?¿¡]/g, '');
+                        const normTrig = trig.normalize('NFD').replace(/[̀-ͯ]/g, '');
+                        const hit = normT.indexOf(normTrig);
+                        console.log('[live] trigger check: busca "' + normTrig + '" en "' + normT + '" → ' + (hit !== -1 ? 'MATCH@'+hit : 'no match'));
+                        if (hit !== -1) {
+                            console.log('[live] ★ FRASE ACTIVADORA DETECTADA → modo dictating');
+                            switchLiveToDictating();
+                        }
+                    } else {
+                        console.log('[live] transcripción recibida pero modo es "' + liveMode + '" (ignorada)');
+                    }
+                    return;
+                }
+                if (msg.type === 'turn_complete') {
+                    console.log('[live] TURN_COMPLETE en modo', liveMode);
+                    if (liveMode === 'dictating') {
+                        // turn_complete = el MODELO terminó su respuesta. Commiteamos
+                        // tanto el mensaje del usuario (si hubo) como el del bot al historial.
+                        const userText = liveTranscript.trim();
+                        if (userText && !liveUserMessageCommitted) {
+                            renderTextMessage(userText, 'user');
+                            history.push({ role: 'user', content: userText });
+                            liveUserMessageCommitted = true;
+                        }
+                        if (liveModelTranscript && liveCurrentBotMessageDiv) {
+                            history.push({ role: 'assistant', content: liveModelTranscript });
+                            saveHistory();
+                        }
+                        // Reset para el próximo turno (mantenemos modo dictating)
+                        liveTranscript = '';
+                        input.value = '';
+                        liveModelTranscript = '';
+                        liveCurrentBotMessageDiv = null;
+                        liveUserMessageCommitted = false;
+                    } else if (liveMode === 'listening') {
+                        liveTranscript = '';
+                    }
+                    return;
+                }
+                if (msg.type === 'interrupted') {
+                    console.log('[live] interrupted — cortando playback');
+                    liveStopPlayback();
+                    return;
+                }
+                if (msg.type === 'audio_chunk' && msg.data) {
+                    livePlayAudioChunk(msg.data);
+                    return;
+                }
+                if (msg.type === 'output_transcription' && msg.text) {
+                    // El modelo está respondiendo → commitear primero el mensaje del usuario al chat
+                    if (!liveUserMessageCommitted && liveTranscript.trim()) {
+                        renderTextMessage(liveTranscript.trim(), 'user');
+                        history.push({ role: 'user', content: liveTranscript.trim() });
+                        liveUserMessageCommitted = true;
+                        input.value = '';  // limpiar el "live preview" del input
+                    }
+                    // Acumular respuesta del modelo
+                    liveModelTranscript += msg.text;
+                    if (!liveCurrentBotMessageDiv) {
+                        liveCurrentBotMessageDiv = document.createElement('div');
+                        liveCurrentBotMessageDiv.className = 'chatbot-msg bot';
+                        messagesEl.appendChild(liveCurrentBotMessageDiv);
+                    }
+                    liveCurrentBotMessageDiv.textContent = liveModelTranscript;
+                    scrollToBottom();
+                    return;
+                }
+                if (msg.type === 'tool_executed') {
+                    console.log('[live] tool ejecutado:', msg.name, '→', msg.result);
+                    // Renderizar tarjeta visual para acciones (proponer_*) o productos buscados
+                    liveRenderToolResult(msg.name, msg.args, msg.result);
+                    return;
+                }
+            }
+
+            function livePlayAudioChunk(base64Audio) {
+                try {
+                    if (!livePlaybackCtx || livePlaybackCtx.state === 'closed') {
+                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                        livePlaybackCtx = new AudioCtx({ sampleRate: 24000 });
+                        livePlaybackNextTime = livePlaybackCtx.currentTime;
+                        livePlaybackSources = [];
+                    }
+                    // Decode base64 → bytes
+                    const binary = atob(base64Audio);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    // PCM 16-bit signed → Float32 [-1, 1]
+                    const samples = new Int16Array(bytes.buffer);
+                    const float32 = new Float32Array(samples.length);
+                    for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768;
+
+                    const buffer = livePlaybackCtx.createBuffer(1, float32.length, 24000);
+                    buffer.getChannelData(0).set(float32);
+                    const source = livePlaybackCtx.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(livePlaybackCtx.destination);
+                    const startTime = Math.max(livePlaybackNextTime, livePlaybackCtx.currentTime);
+                    source.start(startTime);
+                    livePlaybackNextTime = startTime + buffer.duration;
+                    livePlaybackSources.push(source);
+                    // Limpieza periódica de sources terminados
+                    if (livePlaybackSources.length > 50) {
+                        livePlaybackSources = livePlaybackSources.slice(-30);
+                    }
+                } catch (e) {
+                    console.warn('[live] Error reproduciendo audio:', e);
+                }
+            }
+
+            function liveStopPlayback() {
+                // Barge-in: cortar todo audio pendiente
+                livePlaybackSources.forEach(function(s) {
+                    try { s.stop(); } catch (e) {}
+                });
+                livePlaybackSources = [];
+                if (livePlaybackCtx) {
+                    try { livePlaybackCtx.close(); } catch (e) {}
+                    livePlaybackCtx = null;
+                }
+                livePlaybackNextTime = 0;
+                // Si había una respuesta a medio camino, dejar lo dicho hasta ahora
+                if (liveCurrentBotMessageDiv) {
+                    if (liveModelTranscript) {
+                        history.push({ role: 'assistant', content: liveModelTranscript });
+                        saveHistory();
+                    }
+                    liveCurrentBotMessageDiv = null;
+                    liveModelTranscript = '';
+                }
+            }
+
+            function liveRenderToolResult(toolName, toolArgs, result) {
+                // Renderiza resultados visuales según el tipo de tool
+                if (!result || result.error) {
+                    // Error de la tool — se mostrará en el texto del modelo
+                    return;
+                }
+                // Búsqueda de productos → tarjetas con foto
+                if (toolName === 'buscar_productos' && result.productos && result.productos.length) {
+                    renderProducts(result.productos);
+                    return;
+                }
+                if (toolName === 'consultar_precio_stock' && result.producto) {
+                    renderProducts([result.producto]);
+                    return;
+                }
+                // Propuestas → tarjeta de confirmación visual (además del audio del modelo)
+                if (toolName && toolName.indexOf('proponer_') === 0) {
+                    renderProposal({
+                        accion: toolName,
+                        args: toolArgs,
+                        preview: result,
+                        texto: '',
+                    });
+                    return;
+                }
+                if ((toolName === 'confirmar_ultima_accion' || toolName === 'ejecutar_accion_confirmada')
+                        && result.mensaje) {
+                    // Confirmación visual de éxito
+                    const div = document.createElement('div');
+                    div.className = 'chatbot-msg bot';
+                    div.style.borderLeftColor = 'var(--success)';
+                    div.innerHTML = '<i class="fas fa-check-circle me-1" style="color:var(--success);"></i>' + escapeHtml(result.mensaje);
+                    messagesEl.appendChild(div);
+                    scrollToBottom();
+                    if (typeof showNotification === 'function') {
+                        showNotification(result.mensaje, 'success');
+                    }
+                }
+                if (toolName === 'cancelar_ultima_accion') {
+                    const div = document.createElement('div');
+                    div.className = 'chatbot-msg bot';
+                    div.style.borderLeftColor = 'var(--text-muted)';
+                    div.style.fontStyle = 'italic';
+                    div.style.opacity = '0.75';
+                    div.textContent = '✗ Acción cancelada';
+                    messagesEl.appendChild(div);
+                    scrollToBottom();
+                }
+            }
+
+            function switchLiveToDictating() {
+                // Cambio de UI sin cerrar la WebSocket — sigue capturando audio
+                liveTranscript = '';
+                input.value = '';
+                liveMode = 'dictating';
+                listeningBadge.classList.add('d-none');
+                micBtn.classList.add('recording');
+                micBtn.title = 'Dictando — habla normal';
+                if (panel.classList.contains('d-none')) {
+                    panel.classList.remove('d-none');
+                }
+                if (panel.classList.contains('settings-open')) closeSettings();
+                input.focus();
+                if (input.dataset.origPlaceholder === undefined) {
+                    input.dataset.origPlaceholder = input.placeholder;
+                }
+                input.placeholder = '🔴 Dictando — habla normal';
+            }
+
+            function switchLiveToListening() {
+                // Volver a modo listening sin cerrar la WebSocket
+                liveTranscript = '';
+                liveMode = 'listening';
+                listeningBadge.classList.remove('d-none');
+                listeningBadge.title = 'Escuchando: "' + triggerPhrase + '"';
+                micBtn.classList.remove('recording');
+                micBtn.title = 'Dictar por voz (o di "' + triggerPhrase + '")';
+                if (input.dataset.origPlaceholder !== undefined) {
+                    input.placeholder = input.dataset.origPlaceholder;
+                    delete input.dataset.origPlaceholder;
+                }
+            }
+
+            function sendMessageInBackground(text) {
+                // Envía el mensaje al chat AI SIN tocar la sesión Live activa.
+                // Renderiza la respuesta cuando llegue.
+                console.log('[live] Enviando al chat en background:', text);
+                renderTextMessage(text, 'user');
+                history.push({ role: 'user', content: text });
+                saveHistory();
+                showTyping();
+
+                sendMessage(text, null).then(function(data) {
+                    hideTyping();
+                    if (!data.success) {
+                        renderErrorMessage(data.message || 'Error desconocido.');
+                    } else if (data.tipo === 'texto') {
+                        if (data.texto) renderTextMessage(data.texto, 'bot');
+                        if (data.productos && data.productos.length) renderProducts(data.productos);
+                        if (data.texto) {
+                            history.push({ role: 'assistant', content: data.texto });
+                            saveHistory();
+                        }
+                    } else if (data.tipo === 'propuesta') {
+                        renderProposal(data);
+                    } else {
+                        renderErrorMessage('Tipo de respuesta inesperado: ' + data.tipo);
+                    }
+                }).catch(function(err) {
+                    hideTyping();
+                    renderErrorMessage(err.message || 'Error de red.');
+                });
+            }
+
+            function liveStop(reason) {
+                console.log('[live] Stop, razón:', reason);
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    try { liveWs.send(JSON.stringify({type: 'close'})); } catch (e) {}
+                    try { liveWs.close(); } catch (e) {}
+                }
+                liveCleanup();
+            }
+
+            function liveCleanup() {
+                // Detener cualquier audio del modelo en reproducción (barge-in completo)
+                liveStopPlayback();
+                if (liveProcessor) {
+                    try { liveProcessor.disconnect(); } catch (e) {}
+                    liveProcessor = null;
+                }
+                if (liveSource) {
+                    try { liveSource.disconnect(); } catch (e) {}
+                    liveSource = null;
+                }
+                if (liveAudioCtx) {
+                    try { liveAudioCtx.close(); } catch (e) {}
+                    liveAudioCtx = null;
+                }
+                if (liveStream) {
+                    try { liveStream.getTracks().forEach(function(t) { t.stop(); }); } catch (e) {}
+                    liveStream = null;
+                }
+                liveWs = null;
+                liveReady = false;
+                liveMode = 'off';
+                liveTranscript = '';
+                liveModelTranscript = '';
+                liveCurrentBotMessageDiv = null;
+                liveUserMessageCommitted = false;
+                micBtn.classList.remove('recording');
+                micBtn.title = 'Dictar por voz';
+                listeningBadge.classList.add('d-none');
+                if (input.dataset.origPlaceholder !== undefined) {
+                    input.placeholder = input.dataset.origPlaceholder;
+                    delete input.dataset.origPlaceholder;
+                }
+            }
+
+            // ===== Listener de frase activadora (VAD + chunks a Gemini) =====
+            // Estado interno (cerrado sobre el tick):
+            let _trigProcessingChunk = false;
+            let _trigLastLogTime = 0;
+            let _trigMaxLevelSeen = 0;
+            const TRIGGER_VAD_DYNAMIC = { threshold: TRIGGER_VAD_THRESHOLD };
+
+            async function startTriggerListener() {
+                // REDIRIGE al sistema Live API (transcripción streaming, latencia ~200ms)
+                if (liveMode === 'off') {
+                    await liveStart('listening');
+                }
+                return;
+            }
+            async function _LEGACY_startTriggerListener() {
+                if (triggerActive || recordingActive) return;
+                if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices) return;
+                try {
+                    triggerStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (e) {
+                    console.error('[chatbot] Trigger: getUserMedia falló:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('Permiso de micrófono denegado. Escucha continua desactivada.', 'warning');
+                    }
+                    triggerListeningEnabled = false;
+                    saveVoiceSettings();
+                    return;
+                }
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                try {
+                    triggerCtx = new AudioCtx();
+                    const source = triggerCtx.createMediaStreamSource(triggerStream);
+                    triggerAnalyser = triggerCtx.createAnalyser();
+                    triggerAnalyser.fftSize = 512;
+                    source.connect(triggerAnalyser);
+                } catch (e) {
+                    console.error('[chatbot] Trigger: AudioContext falló:', e);
+                    stopTriggerListener();
+                    return;
+                }
+                const data = new Uint8Array(triggerAnalyser.frequencyBinCount);
+                triggerActive = true;
+                triggerIsSpeaking = false;
+                triggerSpeechStart = 0;
+                triggerSilenceStart = 0;
+                triggerChunks = [];
+                _trigProcessingChunk = false;
+                _trigMaxLevelSeen = 0;
+                _trigLastLogTime = 0;
+                listeningBadge.classList.remove('d-none');
+                listeningBadge.title = 'Escuchando: "' + triggerPhrase + '"';
+                console.log('[chatbot] Trigger listener iniciado, frase="' + triggerPhrase + '", umbral=' + TRIGGER_VAD_DYNAMIC.threshold);
+
+                function tick() {
+                    if (!triggerActive || !triggerAnalyser) return;
+                    triggerAnalyser.getByteFrequencyData(data);
+                    let sum = 0;
+                    for (let i = 0; i < data.length; i++) sum += data[i];
+                    const avg = sum / data.length;
+                    const now = Date.now();
+
+                    if (avg > _trigMaxLevelSeen) _trigMaxLevelSeen = avg;
+                    // Log periódico cada 3 segundos para que el usuario vea actividad
+                    if (now - _trigLastLogTime > 3000) {
+                        console.log('[chatbot] Trigger nivel actual=' + avg.toFixed(1) +
+                                    ' | máx visto=' + _trigMaxLevelSeen.toFixed(1) +
+                                    ' | umbral=' + TRIGGER_VAD_DYNAMIC.threshold +
+                                    ' | hablando=' + triggerIsSpeaking +
+                                    ' | procesando=' + _trigProcessingChunk);
+                        _trigLastLogTime = now;
+                    }
+
+                    if (avg > TRIGGER_VAD_DYNAMIC.threshold && !_trigProcessingChunk) {
+                        triggerSilenceStart = 0;
+                        if (!triggerIsSpeaking) {
+                            triggerIsSpeaking = true;
+                            triggerSpeechStart = now;
+                            triggerChunks = [];
+                            try {
+                                // Pick a supported mime type for best compatibility
+                                const mt = (typeof MediaRecorder.isTypeSupported === 'function' &&
+                                            MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
+                                            ? 'audio/webm;codecs=opus' : '';
+                                triggerRecorder = mt
+                                    ? new MediaRecorder(triggerStream, { mimeType: mt })
+                                    : new MediaRecorder(triggerStream);
+                                triggerRecorder.ondataavailable = function(ev) {
+                                    if (ev.data && ev.data.size > 0) triggerChunks.push(ev.data);
+                                };
+                                triggerRecorder.onstop = function() {
+                                    // AQUÍ se procesan los chunks — DESPUÉS del flush final
+                                    const collected = triggerChunks.slice();
+                                    triggerChunks = [];
+                                    const dur = Date.now() - triggerSpeechStart;
+                                    console.log('[chatbot] Trigger chunk capturado: ' + collected.length + ' partes, ' + dur + 'ms de voz');
+                                    if (dur < TRIGGER_MIN_SPEECH_MS) {
+                                        console.log('[chatbot] Chunk descartado (muy corto)');
+                                        _trigProcessingChunk = false;
+                                        return;
+                                    }
+                                    if (!collected.length) {
+                                        console.warn('[chatbot] Chunk sin datos');
+                                        _trigProcessingChunk = false;
+                                        return;
+                                    }
+                                    procesarChunkTrigger(collected, mt || 'audio/webm');
+                                };
+                                // timeslice=250ms → flush periódico de datos al buffer
+                                triggerRecorder.start(250);
+                                console.log('[chatbot] Trigger: voz detectada (avg=' + avg.toFixed(1) + '), grabando chunk');
+                            } catch (e) {
+                                console.error('[chatbot] Trigger MediaRecorder error:', e);
+                                triggerIsSpeaking = false;
+                            }
+                        } else if (now - triggerSpeechStart > TRIGGER_MAX_CHUNK_MS) {
+                            console.log('[chatbot] Chunk alcanzó tamaño máximo, cerrando');
+                            cerrarChunkTrigger();
+                        }
+                    } else if (triggerIsSpeaking) {
+                        if (triggerSilenceStart === 0) triggerSilenceStart = now;
+                        else if (now - triggerSilenceStart > TRIGGER_SILENCE_MS) {
+                            cerrarChunkTrigger();
+                        }
+                    }
+                    triggerRafId = requestAnimationFrame(tick);
+                }
+                tick();
+            }
+
+            function cerrarChunkTrigger() {
+                triggerIsSpeaking = false;
+                triggerSilenceStart = 0;
+                _trigProcessingChunk = true;  // bloquea iniciar otro chunk hasta que termine
+                if (triggerRecorder && triggerRecorder.state !== 'inactive') {
+                    try { triggerRecorder.stop(); } catch (e) { _trigProcessingChunk = false; }
+                } else {
+                    _trigProcessingChunk = false;
+                }
+                // El procesamiento real ocurre en triggerRecorder.onstop (ver tick)
+            }
+
+            async function procesarChunkTrigger(chunks, mimeType) {
+                const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+                console.log('[chatbot] Trigger: enviando ' + blob.size + ' bytes a Gemini');
+                const fd = new FormData();
+                fd.append('audio', blob, 'trigger.webm');
+                try {
+                    const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd });
+                    const data = await resp.json();
+                    if (!data.success) {
+                        console.warn('[chatbot] Trigger transcribir falló:', data.message);
+                        return;
+                    }
+                    const transcript = (data.texto || '').toLowerCase().trim();
+                    const trigger = (triggerPhrase || '').toLowerCase().trim();
+                    console.log('[chatbot] ★ Trigger oyó: "' + transcript + '" | busca: "' + trigger + '"');
+                    if (!trigger || !transcript) return;
+                    // Normalización suave: tolera tildes y signos de puntuación
+                    const norm = function(s) {
+                        return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡]/g, '').toLowerCase();
+                    };
+                    if (norm(transcript).indexOf(norm(trigger)) === -1) {
+                        return;  // no contenía la frase
+                    }
+                    console.log('[chatbot] ✓✓✓ FRASE ACTIVADORA DETECTADA');
+                    stopTriggerListener();
+                    if (panel.classList.contains('d-none')) {
+                        panel.classList.remove('d-none');
+                    }
+                    if (panel.classList.contains('settings-open')) closeSettings();
+                    if (typeof showNotification === 'function') {
+                        showNotification('🎙 Frase detectada — habla ahora', 'success');
+                    }
+                    setTimeout(function() { startRecording(); }, 400);
+                } catch (e) {
+                    console.warn('[chatbot] Trigger transcripción error:', e);
+                } finally {
+                    _trigProcessingChunk = false;
+                }
+            }
+
+            function stopTriggerListener() {
+                // REDIRIGE al sistema Live API
+                if (liveMode === 'listening') {
+                    liveStop('manual');
+                }
+                listeningBadge.classList.add('d-none');
+            }
+
+            // === Comienzo del bloque legacy de Web Speech API (queda como placeholder no-op) ===
+            /* WEB_SPEECH_LEGACY_REMOVED — el código viejo de SpeechRecognition fue removido en favor de MediaRecorder + Whisper.
+            function _LEGACY_startDictation() {
+                if (!SpeechRecognitionImpl) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('Tu navegador no soporta reconocimiento de voz.', 'error');
+                    }
+                    return;
+                }
+                if (dictationActive) return;
+                // Pausar la escucha continua si está activa
+                if (triggerRecognition) {
+                    try { triggerRecognition.stop(); } catch (e) {}
+                }
+                dictation = new SpeechRecognitionImpl();
+                dictation.lang = DICTATION_LANGS[dictationLangIdx] || 'es-ES';
+                dictation.continuous = true;        // Modo dictado largo: no se detiene tras 1 frase
+                dictation.interimResults = true;
+                let baseValue = input.value || '';
+                let lastFinalText = '';
+                let audioReceived = false;
+                let speechDetected = false;
+                let resultReceived = false;
+
+                console.log('[chatbot] Iniciando dictado con lang=', dictation.lang);
+
+                // ----- Diagnóstico: handlers de TODOS los eventos de audio -----
+                dictation.onaudiostart  = function() { console.log('[chatbot] onaudiostart  — micrófono activo'); };
+                dictation.onaudioend    = function() {
+                    console.log('[chatbot] onaudioend    — micrófono cerrado | audioReceived=', audioReceived, 'speechDetected=', speechDetected, 'resultReceived=', resultReceived);
+                    audioReceived = true;  // hubo flujo de audio aunque sea silencio
+                };
+                dictation.onsoundstart  = function() {
+                    console.log('[chatbot] onsoundstart  — sonido detectado (puede ser ruido o voz)');
+                    audioReceived = true;
+                    micBtn.title = 'Dictando... (sonido detectado)';
+                };
+                dictation.onsoundend    = function() { console.log('[chatbot] onsoundend    — fin del sonido'); };
+                dictation.onspeechstart = function() {
+                    console.log('[chatbot] onspeechstart — VOZ detectada, transcribiendo...');
+                    speechDetected = true;
+                    micBtn.title = 'Dictando... (voz detectada)';
+                };
+                dictation.onspeechend   = function() { console.log('[chatbot] onspeechend   — fin de la voz'); };
+                dictation.onnomatch     = function() {
+                    console.warn('[chatbot] onnomatch — el motor no pudo reconocer la frase');
+                    if (typeof showNotification === 'function') {
+                        showNotification('No reconocí lo que dijiste. Habla más despacio o cerca del micrófono.', 'warning');
+                    }
+                };
+
+                // ----- Resultados -----
+                dictation.onresult = function(event) {
+                    resultReceived = true;
+                    let finalText = '';
+                    let interimText = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const t = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) finalText += t;
+                        else interimText += t;
+                    }
+                    console.log('[chatbot] onresult — final="' + finalText + '" interim="' + interimText + '"');
+                    if (finalText && finalText !== lastFinalText) {
+                        baseValue = (baseValue + ' ' + finalText.trim()).trim();
+                        lastFinalText = finalText;
+                    }
+                    input.value = (baseValue + (interimText ? ' ' + interimText.trim() : '')).trim();
+                };
+
+                // ----- Errores -----
+                dictation.onerror = function(ev) {
+                    console.warn('[chatbot] onerror:', ev.error, ev);
+                    const friendly = {
+                        'no-speech': 'No detecté tu voz. Verifica el micrófono y habla más fuerte.',
+                        'audio-capture': 'No se pudo acceder al micrófono. Verifica que tengas uno conectado.',
+                        'not-allowed': 'Permiso de micrófono denegado. Click en el candado de la URL → Permisos del sitio → Micrófono → Permitir, y recarga.',
+                        'service-not-allowed': 'Servicio de voz no disponible (bloqueado por sistema o privacidad).',
+                        'network': 'Error de red al procesar el audio. Verifica conexión a internet.',
+                        'language-not-supported': null, // manejo abajo
+                        'aborted': null,
+                    };
+                    if (ev.error === 'language-not-supported') {
+                        // Probar siguiente idioma
+                        dictationLangIdx++;
+                        if (dictationLangIdx < DICTATION_LANGS.length) {
+                            console.log('[chatbot] Idioma no soportado, probando:', DICTATION_LANGS[dictationLangIdx]);
+                            if (typeof showNotification === 'function') {
+                                showNotification('Cambiando idioma de voz a ' + DICTATION_LANGS[dictationLangIdx] + '...', 'info');
+                            }
+                            // El onend reinicia con el nuevo idioma
+                            return;
+                        } else {
+                            if (typeof showNotification === 'function') {
+                                showNotification('Tu navegador no tiene ningún pack de español instalado para dictado.', 'error');
+                            }
+                            dictationLangIdx = 0;
+                            return;
+                        }
+                    }
+                    const msg = friendly[ev.error];
+                    if (msg && typeof showNotification === 'function') {
+                        showNotification(msg, ev.error === 'no-speech' ? 'warning' : 'error');
+                    }
+                };
+
+                dictation.onend = function() {
+                    console.log('[chatbot] onend — sesión de dictado terminada. audioReceived=', audioReceived, 'speechDetected=', speechDetected, 'resultReceived=', resultReceived);
+                    const wasActiveBefore = dictationActive;
+                    dictationActive = false;
+                    micBtn.classList.remove('recording');
+                    micBtn.title = 'Dictar por voz';
+                    // Si onend ocurrió porque cambiamos idioma → reintentar
+                    if (wasActiveBefore && dictationLangIdx > 0 && !resultReceived && dictationLangIdx < DICTATION_LANGS.length) {
+                        setTimeout(startDictation, 200);
+                        return;
+                    }
+                    // Diagnóstico final si no hubo resultado alguno
+                    if (wasActiveBefore && !resultReceived) {
+                        let hint;
+                        if (!audioReceived) {
+                            hint = 'El navegador no recibió audio del micrófono. Verifica que el micrófono correcto esté seleccionado en Configuración → Privacidad → Micrófono (Windows) y que no esté silenciado.';
+                        } else if (!speechDetected) {
+                            hint = 'El micrófono recibió audio pero no detectó voz. ¿Estás muy lejos del mic? ¿Está el volumen de entrada muy bajo?';
+                        } else {
+                            hint = 'Detecté tu voz pero no pude transcribirla. Puede que falte el pack de idioma de español en Chrome.';
+                        }
+                        if (typeof showNotification === 'function') {
+                            showNotification(hint, 'warning');
+                        }
+                    }
+                    if (triggerListeningEnabled) {
+                        setTimeout(startTriggerListener, 300);
+                    }
+                };
+
+                try {
+                    dictation.start();
+                    dictationActive = true;
+                    micBtn.classList.add('recording');
+                    micBtn.title = 'Detener dictado (click)';
+                    input.focus();
+                    if (typeof showNotification === 'function') {
+                        showNotification('🎙 Escuchando — habla ahora (click en el mic para detener)', 'info');
+                    }
+                } catch (e) {
+                    console.error('[chatbot] failed to start dictation:', e);
+                    if (typeof showNotification === 'function') {
+                        showNotification('No se pudo iniciar el dictado: ' + (e.message || e), 'error');
+                    }
+                }
+            }
+            function stopDictation() {
+                if (dictation && dictationActive) {
+                    try { dictation.stop(); } catch (e) {}
+                }
+            }
+            function startTriggerListener() {
+                if (!SpeechRecognitionImpl || !triggerListeningEnabled || dictationActive) return;
+                if (triggerRecognition) {
+                    try { triggerRecognition.stop(); } catch (e) {}
+                }
+                triggerRecognition = new SpeechRecognitionImpl();
+                triggerRecognition.lang = 'es-ES';
+                triggerRecognition.continuous = true;
+                triggerRecognition.interimResults = true;
+                triggerRecognition.onresult = function(event) {
+                    const trigger = (triggerPhrase || '').toLowerCase().trim();
+                    if (!trigger) return;
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript.toLowerCase().trim();
+                        if (transcript.indexOf(trigger) !== -1) {
+                            try { triggerRecognition.stop(); } catch (e) {}
+                            if (panel.classList.contains('d-none')) {
+                                panel.classList.remove('d-none');
+                            }
+                            if (panel.classList.contains('settings-open')) closeSettings();
+                            setTimeout(startDictation, 250);
+                            return;
+                        }
+                    }
+                };
+                triggerRecognition.onerror = function(ev) {
+                    console.warn('[chatbot] trigger recognition error:', ev.error);
+                    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+                        triggerListeningEnabled = false;
+                        saveVoiceSettings();
+                        listeningBadge.classList.add('d-none');
+                        if (typeof showNotification === 'function') {
+                            showNotification('Permiso de micrófono denegado. Escucha continua desactivada. Otorga el permiso desde el candado en la barra de URL y vuelve a activarla.', 'warning');
+                        }
+                    } else if (ev.error === 'audio-capture') {
+                        triggerListeningEnabled = false;
+                        saveVoiceSettings();
+                        listeningBadge.classList.add('d-none');
+                        if (typeof showNotification === 'function') {
+                            showNotification('Sin micrófono detectado. Escucha continua desactivada.', 'warning');
+                        }
+                    }
+                    // 'no-speech', 'aborted', 'network' se reintentan via onend.
+                };
+                triggerRecognition.onend = function() {
+                    if (triggerListeningEnabled && !dictationActive) {
+                        // Auto-reinicio (el API se detiene periódicamente)
+                        setTimeout(function() {
+                            if (triggerListeningEnabled && !dictationActive) {
+                                try { triggerRecognition.start(); } catch (e) {}
+                            }
+                        }, 500);
+                    }
+                };
+                try {
+                    triggerRecognition.start();
+                    listeningBadge.classList.remove('d-none');
+                    listeningBadge.title = 'Escuchando: "' + triggerPhrase + '"';
+                } catch (e) {
+                    // ya estaba corriendo
+                }
+            }
+            function _LEGACY_stopTriggerListener() {
+                if (triggerRecognition) {
+                    try { triggerRecognition.stop(); } catch (e) {}
+                }
+                listeningBadge.classList.add('d-none');
+            }
+            */
+            // === Fin del bloque legacy ===
+
+            // ===== Wire up event handlers =====
+            // Limpieza one-shot: borra claves legacy (sin scope por usuario) que
+            // pueden tener datos de OTRO usuario que usó este navegador antes.
+            try {
+                LEGACY_KEYS.forEach(function(k) { localStorage.removeItem(k); });
+            } catch (e) {}
+
+            if (!SpeechRecognitionImpl) {
+                micBtn.style.opacity = '0.5';
+                micBtn.title = 'Reconocimiento de voz no soportado (usa Chrome/Edge/Safari)';
+                if (voiceUnsupportedNotice) voiceUnsupportedNotice.classList.remove('d-none');
+            }
+            micBtn.addEventListener('click', function() {
+                if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('Tu navegador no soporta grabación de audio. Usa Chrome, Edge, Firefox o Safari actualizados.', 'error');
+                    }
+                    return;
+                }
+                if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    if (typeof showNotification === 'function') {
+                        showNotification('La grabación de audio requiere HTTPS (o localhost). Tu conexión es HTTP.', 'error');
+                    }
+                    return;
+                }
+                // Usar Gemini Live (WebSocket streaming) para latencia ~200ms
+                if (liveMode === 'dictating') {
+                    // Click durante dictado = pasar a listening (sigue WS abierta) o cerrar
+                    if (triggerListeningEnabled) {
+                        switchLiveToListening();
+                    } else {
+                        liveStop('manual');
+                    }
+                } else if (liveMode === 'listening') {
+                    // Click durante listening = dictado manual inmediato (sin esperar trigger)
+                    switchLiveToDictating();
+                } else {
+                    // No hay sesión activa → arrancar una
+                    liveStart('dictating');
+                }
+            });
+            settingsBtn.addEventListener('click', function() {
+                if (panel.classList.contains('settings-open')) closeSettings();
+                else openSettings();
+            });
+            settingsCancelBtn.addEventListener('click', closeSettings);
+            settingsSaveBtn.addEventListener('click', function() {
+                const newPhrase = (triggerInput.value || '').trim();
+                if (!newPhrase) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('La frase activadora no puede estar vacía.', 'error');
+                    }
+                    return;
+                }
+                const wasListening = triggerListeningEnabled;
+                triggerPhrase = newPhrase;
+                triggerListeningEnabled = continuousToggle.checked;
+                saveVoiceSettings();
+                closeSettings();
+
+                // Aplicar el nuevo estado: parar listener previo si lo había, reiniciar si toca
+                if (wasListening) stopTriggerListener();
+                if (triggerListeningEnabled) {
+                    setTimeout(startTriggerListener, 300);
+                }
+                if (typeof showNotification === 'function') {
+                    showNotification(
+                        triggerListeningEnabled
+                            ? 'Escucha continua activada — di "' + triggerPhrase + '" para abrir el chat'
+                            : 'Configuración guardada (escucha continua desactivada)',
+                        'success'
+                    );
+                }
+            });
+
+            // ===== Diagnóstico de micrófono (volumen + lista de dispositivos) =====
+            let micTestStream = null;
+            let micTestCtx = null;
+            let micTestActive = false;
+
+            async function listMicDevices() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                    micDevicesEl.innerHTML = '<em style="color:var(--danger);">enumerateDevices no soportado</em>';
+                    return;
+                }
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const inputs = devices.filter(function(d) { return d.kind === 'audioinput'; });
+                    if (!inputs.length) {
+                        micDevicesEl.innerHTML = '<em style="color:var(--danger);">⚠ Chrome no detecta NINGÚN micrófono.</em>';
+                        return;
+                    }
+                    const html = inputs.map(function(d, i) {
+                        const label = d.label || '(sin nombre — requiere permiso para ver)';
+                        const isDefault = (d.deviceId === 'default') || (i === 0 && !inputs.find(function(x){return x.deviceId==='default';}));
+                        return '<div class="device' + (isDefault ? ' default' : '') + '">' +
+                               (isDefault ? '★ ' : '· ') + label + '</div>';
+                    }).join('');
+                    micDevicesEl.innerHTML = html + '<div style="margin-top:4px;color:var(--text-muted);font-size:0.7rem;">★ = predeterminado de Chrome</div>';
+                } catch (e) {
+                    micDevicesEl.innerHTML = '<em style="color:var(--danger);">Error: ' + e.message + '</em>';
+                }
+            }
+
+            async function startMicTest() {
+                if (micTestActive) {
+                    stopMicTest('Cancelado por el usuario.');
+                    return;
+                }
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    micTestStatus.textContent = '⚠ getUserMedia no disponible en este navegador.';
+                    return;
+                }
+                micTestStatus.textContent = 'Solicitando permiso de micrófono...';
+                try {
+                    micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (e) {
+                    console.error('[chatbot] getUserMedia falló:', e);
+                    micTestStatus.innerHTML = '<span style="color:var(--danger);">❌ ' + (e.name || 'Error') + ': ' + (e.message || '') + '</span>';
+                    return;
+                }
+                // Refresh device list now that we have permission (labels become visible)
+                listMicDevices();
+
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) {
+                    micTestStatus.innerHTML = '<span style="color:var(--danger);">AudioContext no disponible</span>';
+                    micTestStream.getTracks().forEach(function(t) { t.stop(); });
+                    return;
+                }
+                micTestCtx = new AudioCtx();
+                const source = micTestCtx.createMediaStreamSource(micTestStream);
+                const analyser = micTestCtx.createAnalyser();
+                analyser.fftSize = 512;
+                source.connect(analyser);
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                micTestActive = true;
+                micTestBtn.innerHTML = '<i class="fas fa-stop me-1"></i>Detener prueba';
+                micTestBtn.style.background = 'var(--danger)';
+                micTestBtn.style.color = '#fff';
+                micTestStatus.textContent = '🎙 Habla ahora... (la barra debe moverse)';
+
+                let maxLevel = 0;
+                const stopAt = Date.now() + 10000; // 10 segundos
+
+                function frame() {
+                    if (!micTestActive) return;
+                    if (Date.now() > stopAt) {
+                        stopMicTest(maxLevel > 8
+                            ? '✓ Micrófono OK — nivel máximo: ' + Math.round(maxLevel) + '/255. SpeechRecognition debería funcionar.'
+                            : '⚠ Casi sin audio detectado en 10s (nivel máx: ' + Math.round(maxLevel) + '/255). El mic puede estar silenciado, lejos, o Chrome está usando otro dispositivo.');
+                        return;
+                    }
+                    analyser.getByteFrequencyData(dataArray);
+                    let sum = 0;
+                    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                    const avg = sum / dataArray.length;
+                    if (avg > maxLevel) maxLevel = avg;
+                    micTestBar.style.width = Math.min(100, avg * 3) + '%';
+                    requestAnimationFrame(frame);
+                }
+                frame();
+            }
+
+            function stopMicTest(statusMsg) {
+                micTestActive = false;
+                if (micTestStream) {
+                    micTestStream.getTracks().forEach(function(t) { t.stop(); });
+                    micTestStream = null;
+                }
+                if (micTestCtx) {
+                    try { micTestCtx.close(); } catch (e) {}
+                    micTestCtx = null;
+                }
+                micTestBtn.innerHTML = '<i class="fas fa-play me-1"></i>Probar micrófono (10s)';
+                micTestBtn.style.background = '';
+                micTestBtn.style.color = '';
+                micTestBar.style.width = '0%';
+                if (statusMsg) {
+                    const isOk = statusMsg.startsWith('✓');
+                    micTestStatus.innerHTML = '<span style="color:' + (isOk ? 'var(--success)' : 'var(--warning)') + ';">' + statusMsg + '</span>';
+                }
+            }
+
+            if (micTestBtn) {
+                micTestBtn.addEventListener('click', startMicTest);
+            }
+            // Pre-popular la lista de dispositivos al abrir el settings (sin permiso → labels vacíos)
+            const origOpenSettings = openSettings;
+            openSettings = function() {
+                origOpenSettings();
+                listMicDevices();
+            };
+
+            // ===== Init =====
+            loadVoiceSettings();
+            history = loadHistory();
+            repaintHistory();
+            listeningBadge.classList.add('d-none');
+            // Si el usuario tenía escucha continua activada, la reactivamos automáticamente.
+            if (triggerListeningEnabled) {
+                setTimeout(startTriggerListener, 1000);
+            }
+        });
+    })();
+    </script>
+    {% endif %}
+
     {% block scripts %}{% endblock %}
 {% if get_flashed_messages(with_categories=true) %}
 <script>

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Editar Venta - SISAGENT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h4"><i class="fas fa-edit me-2"></i> Editar Venta</h1>
+    <a href="{{ url_for('ventas') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold">Datos de la Venta</h6>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <!-- Sucursal (no se puede cambiar al editar) -->
+                    <div class="mb-3">
+                        <label class="form-label">Sucursal</label>
+                        <input type="text" class="form-control" value="{{ venta.sucursal.nombre }}" readonly>
+                    </div>
+
+                    <!-- Producto -->
+                    <div class="mb-3">
+                        <label for="producto_id" class="form-label">Producto</label>
+                        <select class="form-control" id="producto_id" name="producto_id" required>
+                            {% for producto in productos %}
+                            <option value="{{ producto.id }}"
+                                    data-precio="{{ producto.precio }}"
+                                    data-stock="{{ producto.stock }}"
+                                    {% if producto.id == venta.producto_id %}selected{% endif %}>
+                                {{ producto.nombre }} (S/ {{ '%.2f'|format(producto.precio) }} · stock: {{ producto.stock }}{% if producto.id == venta.producto_id %} + {{ venta.cantidad }} de esta venta{% endif %})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text">El stock mostrado ya incluye lo reservado por esta misma venta.</small>
+                    </div>
+
+                    <!-- Cantidad -->
+                    <div class="mb-3">
+                        <label for="cantidad" class="form-label">Cantidad</label>
+                        <input type="number" class="form-control" id="cantidad" name="cantidad"
+                               step="1" min="1" required value="{{ venta.cantidad }}">
+                    </div>
+
+                    <!-- Total estimado (solo informativo, se recalcula en el servidor) -->
+                    <div class="mb-3">
+                        <label for="total-estimado" class="form-label">Total estimado (S/)</label>
+                        <input type="text" class="form-control" id="total-estimado" readonly
+                               value="{{ '%.2f'|format(venta.monto) }}">
+                        <small class="form-text">Se recalcula como precio unitario × cantidad al guardar.</small>
+                    </div>
+
+                    <!-- Botones -->
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-grow-1">
+                            <i class="fas fa-check me-2"></i>Guardar Cambios
+                        </button>
+                        <a href="{{ url_for('ventas') }}" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow mt-3">
+            <div class="card-body">
+                <h6 class="font-weight-bold text-gray-800 mb-2"><i class="fas fa-lightbulb me-2"></i>Importante</h6>
+                <ul class="small text-muted mb-0">
+                    <li>Al cambiar el producto o la cantidad, el <strong>stock del inventario</strong> se ajusta automáticamente</li>
+                    <li>El <strong>total de la caja de ventas</strong> del día se recalcula con el nuevo monto</li>
+                    <li>El precio aplicado es el precio <strong>actual</strong> del producto seleccionado</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectProducto = document.getElementById('producto_id');
+    const inputCantidad = document.getElementById('cantidad');
+    const totalEstimado = document.getElementById('total-estimado');
+
+    function actualizarTotal() {
+        const opcion = selectProducto.options[selectProducto.selectedIndex];
+        const precio = parseFloat(opcion ? opcion.dataset.precio : 0) || 0;
+        const cantidad = parseInt(inputCantidad.value, 10) || 0;
+        totalEstimado.value = (precio * cantidad).toFixed(2);
+    }
+
+    selectProducto.addEventListener('change', actualizarTotal);
+    inputCantidad.addEventListener('input', actualizarTotal);
+});
+</script>
+{% endblock %}
