@@ -4242,7 +4242,8 @@ def api_chat_transcribir():
 
         # Llamar a Gemini con audio embebido (inline_data + base64)
         import httpx as _httpx_local
-        url = f'{GEMINI_API_URL}/{GEMINI_TRANSCRIPTION_MODEL}:generateContent?key={app.config["GEMINI_API_KEY"]}'
+        url = f'{GEMINI_API_URL}/{GEMINI_TRANSCRIPTION_MODEL}:generateContent'
+        gemini_headers = {"x-goog-api-key": app.config["GEMINI_API_KEY"]}
         payload = {
             'contents': [{
                 'parts': [
@@ -4273,7 +4274,7 @@ def api_chat_transcribir():
         last_error = None
         for intento in range(3):
             try:
-                resp = _httpx_local.post(url, json=payload, timeout=90.0)
+                resp = _httpx_local.post(url, json=payload, headers=gemini_headers, timeout=90.0)
                 break  # éxito
             except _httpx_local.TimeoutException as e:
                 return jsonify({
@@ -4579,9 +4580,13 @@ def ws_voice_live(browser_ws):
 
     import websocket as _ws  # websocket-client (lib distinta a flask-sock)
 
-    url = f"{GEMINI_LIVE_WS_URL}?key={api_key}"
+    # Auth por header x-goog-api-key (las nuevas keys AQ. de Gemini rechazan ?key= en la URL con 401)
     try:
-        gemini_ws = _ws.create_connection(url, timeout=20)
+        gemini_ws = _ws.create_connection(
+            GEMINI_LIVE_WS_URL,
+            timeout=20,
+            header=[f"x-goog-api-key: {api_key}"],
+        )
     except Exception as e:
         print(f"[live] No se pudo conectar a Gemini: {e}")
         try:
