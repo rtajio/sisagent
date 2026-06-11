@@ -147,6 +147,7 @@ ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-haiku-4-5')
 # Configuración de transcripción de voz (Google Gemini — capa gratuita 1500 req/día)
 app.config['GEMINI_API_KEY'] = os.getenv('GEMINI_API_KEY', '')
 GEMINI_TRANSCRIPTION_MODEL = os.getenv('GEMINI_TRANSCRIPTION_MODEL', 'gemini-2.5-flash-lite')
+GEMINI_CHAT_MODEL = os.getenv('GEMINI_CHAT_MODEL', 'gemini-2.5-flash-lite')  # cerebro del chat de texto (function-calling)
 GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 GEMINI_MAX_AUDIO_BYTES = 18 * 1024 * 1024  # 18 MB (Gemini admite hasta 20MB inline)
 
@@ -2576,7 +2577,7 @@ Modelo de datos del sistema:
 Tu rol — eres un asistente operativo COMPLETO. Puedes:
 1. Explicar cómo funciona el sistema.
 2. Buscar y consultar: productos, operaciones, ventas, usuarios, sucursales, medios de pago.
-3. Ejecutar acciones bajo confirmación (siempre pasan por una tarjeta que el usuario aprueba):
+3. Ejecutar acciones directamente cuando el usuario lo pida (el servidor valida permisos y ejecuta de inmediato, sin tarjeta de confirmación):
    - Registrar venta / operación bancaria
    - Crear / editar / eliminar productos
    - Eliminar operaciones o ventas
@@ -2584,13 +2585,13 @@ Tu rol — eres un asistente operativo COMPLETO. Puedes:
    - Crear sucursales nuevas
 
 Reglas críticas:
-- Para CUALQUIER mutación, usa siempre la herramienta `proponer_*` correspondiente. NUNCA digas "ya quedó registrado/eliminado/creado" — el sistema le mostrará al usuario una tarjeta de confirmación y solo entonces ejecuta.
+- Para CUALQUIER mutación, llama DIRECTAMENTE a la herramienta `proponer_*` correspondiente con los datos (en el MISMO turno, no solo la anuncies). El servidor la ejecuta de inmediato, sin pedir confirmación, y te devuelve el resultado. NUNCA preguntes "¿confirmas?".
 - Si necesitas el ID de una operación/venta para eliminarla, primero usa `buscar_operaciones` o `buscar_ventas` para que el usuario te confirme cuál.
 - Si te muestran una imagen, descríbela brevemente y usa `buscar_productos` con palabras clave.
 - No inventes valores: si falta información, pregunta en lenguaje natural ("¿en qué sucursal?", "¿qué precio?", "¿con qué stock inicial?").
 - Los permisos se respetan en el servidor automáticamente. Si el usuario no tiene acceso, la herramienta devolverá un error claro que debes transmitir.
 - Roles: admin global (puede TODO), admin de sucursal (gestiona su sucursal — productos, usuarios, operaciones de su sucursal), usuario regular (solo sus propias ventas/operaciones).
-- Responde SIEMPRE en español, conciso, amable y orientado a la acción. Cuando expliques lo que vas a hacer, anuncia primero: "Voy a proponer X" — luego invoca la herramienta.
+- Responde SIEMPRE en español, conciso, amable y orientado a la acción. En cuanto tengas los datos necesarios para una acción, invoca la herramienta `proponer_*` directamente en ese turno (el servidor anuncia el resultado).
 """
 
 
@@ -3892,11 +3893,12 @@ def _get_anthropic_client():
 
 
 def _construir_mensajes_chat(historial, mensaje_usuario, imagen_bytes=None, imagen_mimetype=None):
-    """Construye el array de mensajes para Anthropic, incluyendo el turno actual.
+    """Construye el array `contents` para Gemini (function-calling), incluyendo el turno actual.
 
-    El historial del cliente es texto plano (sin tool_use) — las imagenes pasadas no se reenvian.
+    El historial del cliente es texto plano (sin function_call) — las imagenes pasadas no se reenvian.
+    Gemini usa el rol "model" para las respuestas del asistente (no "assistant").
     """
-    mensajes = []
+    contents = []
 
     for turno in (historial or []):
         if not isinstance(turno, dict):
@@ -3905,27 +3907,20 @@ def _construir_mensajes_chat(historial, mensaje_usuario, imagen_bytes=None, imag
         contenido = turno.get("content")
         if rol not in ("user", "assistant") or not contenido or not isinstance(contenido, str):
             continue
-        mensajes.append({"role": rol, "content": contenido})
+        contents.append({
+            "role": "model" if rol == "assistant" else "user",
+            "parts": [{"text": contenido}],
+        })
 
     # Turno actual
+    parts = []
     if imagen_bytes and imagen_mimetype:
         b64 = base64.standard_b64encode(imagen_bytes).decode("ascii")
-        contenido_actual = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": imagen_mimetype,
-                    "data": b64,
-                },
-            },
-            {"type": "text", "text": mensaje_usuario or "(El usuario adjunto una imagen)"},
-        ]
-    else:
-        contenido_actual = mensaje_usuario or ""
+        parts.append({"inlineData": {"mimeType": imagen_mimetype, "data": b64}})
+    parts.append({"text": mensaje_usuario or "(El usuario adjunto una imagen)"})
 
-    mensajes.append({"role": "user", "content": contenido_actual})
-    return mensajes
+    contents.append({"role": "user", "parts": parts})
+    return contents
 
 
 def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
@@ -3934,7 +3929,10 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
     Acumula los productos vistos por la IA durante el turno (via `buscar_productos`)
     para que el frontend pueda renderizar tarjetas con fotos junto a la respuesta.
     """
-    cliente = _get_anthropic_client()
+    if not app.config.get("GEMINI_API_KEY"):
+        raise RuntimeError("El asistente IA no esta disponible: falta configurar GEMINI_API_KEY en el servidor.")
+    import httpx as _httpx
+
     productos_buscados = []
     productos_ids_vistos = set()
 
@@ -3946,48 +3944,54 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
             productos_ids_vistos.add(pid)
             productos_buscados.append(prod)
 
+    url = f"{GEMINI_API_URL}/{GEMINI_CHAT_MODEL}:generateContent"
+    headers = {"Content-Type": "application/json", "x-goog-api-key": app.config["GEMINI_API_KEY"]}
+    tools = [{"functionDeclarations": _build_gemini_function_declarations()}]
+    system_instruction = {"parts": [{"text": SYSTEM_PROMPT_CHATBOT}]}
+
     for _ in range(max_iteraciones):
-        respuesta = cliente.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=2048,
-            system=SYSTEM_PROMPT_CHATBOT,
-            tools=_HERRAMIENTAS_DECLARACIONES,
-            messages=mensajes,
-        )
-
-        if respuesta.stop_reason == "end_turn":
-            texto = "".join(b.text for b in respuesta.content if b.type == "text").strip()
-            return {
-                "tipo": "texto",
-                "texto": texto or "(Sin respuesta)",
-                "productos": productos_buscados,
-            }
-
-        if respuesta.stop_reason != "tool_use":
-            texto = "".join(b.text for b in respuesta.content if b.type == "text").strip()
-            return {
-                "tipo": "texto",
-                "texto": texto or f"(La IA no pudo continuar: {respuesta.stop_reason})",
-                "productos": productos_buscados,
-            }
-
-        tool_uses = [b for b in respuesta.content if b.type == "tool_use"]
-        if not tool_uses:
-            texto = "".join(b.text for b in respuesta.content if b.type == "text").strip()
-            return {
-                "tipo": "texto",
-                "texto": texto or "(Sin respuesta)",
-                "productos": productos_buscados,
-            }
-
-        # Todas las acciones que mutan datos se ejecutan directo, sin pedir confirmacion.
-        for tu in tool_uses:
-            spec = CHATBOT_TOOLS.get(tu.name)
-            if not spec:
+        payload = {
+            "contents": mensajes,
+            "tools": tools,
+            "systemInstruction": system_instruction,
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
+        }
+        # Reintentos para 503 (alta demanda) transitorios de Gemini.
+        data = None
+        for intento in range(3):
+            resp = _httpx.post(url, json=payload, headers=headers, timeout=60.0)
+            if resp.status_code == 503 and intento < 2:
+                time.sleep(0.8 + intento)
                 continue
-            if tu.name in EJECUTORES_DIRECTOS:
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+            break
+        if not data or data.get("error"):
+            msg = (data or {}).get("error", {}).get("message", "alta demanda, reintenta en un momento")
+            raise RuntimeError(f"Error de la IA: {msg}")
+
+        candidate = (data.get("candidates") or [{}])[0]
+        parts = (candidate.get("content") or {}).get("parts") or []
+        texto = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p).strip()
+        fcs = [p["functionCall"] for p in parts if isinstance(p, dict) and "functionCall" in p]
+
+        # Sin llamadas a herramienta -> respuesta final de texto.
+        if not fcs:
+            return {
+                "tipo": "texto",
+                "texto": texto or "(Sin respuesta)",
+                "productos": productos_buscados,
+            }
+
+        # Acciones que mutan datos (proponer_*) o confirmar/cancelar -> ejecutar directo y devolver.
+        for fc in fcs:
+            nombre = fc.get("name")
+            fargs = fc.get("args") or {}
+            if nombre in EJECUTORES_DIRECTOS:
                 try:
-                    resultado = EJECUTORES_DIRECTOS[tu.name](tu.input or {}, usuario)
+                    resultado = EJECUTORES_DIRECTOS[nombre](fargs, usuario)
                 except ValueError as e:
                     return {
                         "tipo": "texto",
@@ -3999,53 +4003,46 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                     "texto": resultado.get("mensaje", "Listo, se completo correctamente."),
                     "productos": productos_buscados,
                 }
-            if spec["requires_confirmation"]:
-                try:
-                    preview = spec["handler"](tu.input or {}, usuario)
-                except ValueError as e:
-                    return {
-                        "tipo": "texto",
-                        "texto": f"No puedo proponer esa accion: {str(e)}",
-                        "productos": productos_buscados,
-                    }
-                texto_previo = "".join(b.text for b in respuesta.content if b.type == "text").strip()
+            if nombre == "confirmar_ultima_accion":
+                resultado = _confirmar_ultima_accion_voz(usuario.id)
                 return {
-                    "tipo": "propuesta",
-                    "accion": tu.name,
-                    "args": tu.input or {},
-                    "preview": preview,
-                    "texto": texto_previo,
+                    "tipo": "texto",
+                    "texto": resultado.get("mensaje") or resultado.get("error") or "Listo.",
+                    "productos": productos_buscados,
+                }
+            if nombre == "cancelar_ultima_accion":
+                resultado = _cancelar_ultima_accion_voz(usuario.id)
+                return {
+                    "tipo": "texto",
+                    "texto": resultado.get("mensaje", "Cancelado."),
                     "productos": productos_buscados,
                 }
 
-        # Todas son de solo lectura — ejecutar y continuar el loop
-        mensajes.append({"role": "assistant", "content": respuesta.content})
-        resultados = []
-        for tu in tool_uses:
-            spec = CHATBOT_TOOLS.get(tu.name)
+        # Todas son de solo lectura — ejecutar, anexar functionResponses y continuar el loop.
+        mensajes.append({"role": "model", "parts": parts})
+        respuestas = []
+        for fc in fcs:
+            nombre = fc.get("name")
+            fargs = fc.get("args") or {}
+            spec = CHATBOT_TOOLS.get(nombre)
             try:
                 if not spec:
-                    raise ValueError(f"Herramienta desconocida: {tu.name}")
-                resultado = spec["handler"](tu.input or {}, usuario)
-                if tu.name == "buscar_productos" and isinstance(resultado, dict):
+                    raise ValueError(f"Herramienta desconocida: {nombre}")
+                resultado = spec["handler"](fargs, usuario)
+                if not isinstance(resultado, dict):
+                    resultado = {"resultado": resultado}
+                if nombre == "buscar_productos":
                     _registrar_productos(resultado.get("productos"))
-                elif tu.name == "consultar_precio_stock" and isinstance(resultado, dict):
+                elif nombre == "consultar_precio_stock":
                     prod = resultado.get("producto")
                     if prod:
                         _registrar_productos([prod])
-                resultados.append({
-                    "type": "tool_result",
-                    "tool_use_id": tu.id,
-                    "content": json.dumps(resultado, ensure_ascii=False),
-                })
+            except ValueError as e:
+                resultado = {"error": str(e)}
             except Exception as e:
-                resultados.append({
-                    "type": "tool_result",
-                    "tool_use_id": tu.id,
-                    "content": f"Error: {str(e)}",
-                    "is_error": True,
-                })
-        mensajes.append({"role": "user", "content": resultados})
+                resultado = {"error": f"Error interno: {str(e)}"}
+            respuestas.append({"functionResponse": {"name": nombre, "response": resultado}})
+        mensajes.append({"role": "user", "parts": respuestas})
 
     return {
         "tipo": "texto",
