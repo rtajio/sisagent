@@ -3491,14 +3491,14 @@
                     }
                     return;
                 }
-                // Usar Gemini Live (WebSocket streaming) para latencia ~200ms
-                if (liveMode === 'dictating') {
-                    // Click durante dictado = cerrar (la escucha de frase se reactiva en liveCleanup)
-                    liveStop('manual');
-                } else if (liveMode === 'off') {
-                    // No hay sesión activa → arrancar dictado, pausando la escucha de frase
+                // Dictado por voz vía transcripción REST que FUERZA español.
+                // (El modelo native-audio de Gemini Live detecta mal el idioma — limitación
+                //  conocida de Google — y transcribía "registrar" como ruso "Регистратор".)
+                if (recordingActive) {
+                    stopRecording();
+                } else {
                     stopTriggerListener();
-                    liveStart('dictating');
+                    startRecording();
                 }
             });
             settingsBtn.addEventListener('click', function() {
