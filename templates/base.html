@@ -2280,7 +2280,7 @@
             const MAX_RECORDING_MS = 600000;  // tope de 10 minutos por grabación
             // VAD (Voice Activity Detection): paramos automáticamente al detectar silencio.
             const VAD_THRESHOLD = 18;          // 0-255, umbral promedio que distingue voz de silencio
-            const VAD_SILENCE_MS = 1500;       // ms de silencio continuo para auto-stop del dictado manual
+            const VAD_SILENCE_MS = 2500;       // ms de silencio continuo para auto-stop (subido de 1500: tolera pausas naturales al hablar)
             const TRIGGER_VAD_THRESHOLD = 14;   // más sensible: detecta voz aun con micrófono lejano
             const TRIGGER_SILENCE_MS = 350;     // BAJADO de 700→350ms — corta antes el chunk
             const TRIGGER_MIN_SPEECH_MS = 250;  // BAJADO de 300→250ms
@@ -2412,7 +2412,7 @@
                 recordingTimerId = setInterval(function() {
                     if (!recordingActive) return;
                     const elapsed = Date.now() - recordingStartTime;
-                    input.placeholder = '🔴 Grabando ' + fmtRecordingTime(elapsed) + ' — auto-stop al callar (1.5s)';
+                    input.placeholder = '🔴 Grabando ' + fmtRecordingTime(elapsed) + ' — auto-stop al callar (2.5s)';
                 }, 250);
 
                 // Auto-detener al llegar al límite
