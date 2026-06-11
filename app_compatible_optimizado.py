@@ -2594,6 +2594,7 @@ Reglas críticas:
 - Los permisos se respetan en el servidor automáticamente. Si el usuario no tiene acceso, la herramienta devolverá un error claro que debes transmitir.
 - Roles: admin global (puede TODO), admin de sucursal (gestiona su sucursal — productos, usuarios, operaciones de su sucursal), usuario regular (solo sus propias ventas/operaciones).
 - Responde SIEMPRE en español, conciso, amable y orientado a la acción. En cuanto tengas los datos necesarios para una acción, invoca la herramienta `proponer_*` directamente en ese turno (el servidor anuncia el resultado).
+- FORMATO en texto: los montos van con símbolo y número ("S/ 200", no "doscientos soles"). Las horas van en formato 12h compacto "HH:MMam/pm" (ej: "04:29pm", "09:05am") — NO las escribas con palabras ("las cuatro con veintinueve de la tarde").
 """
 
 
@@ -4537,6 +4538,7 @@ Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar ven
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
 - Habla siempre en español latinoamericano natural (acento neutro de Latinoamérica/Perú), conciso, amable. Como un colega que te ayuda.
 - LECTURA DE MONTOS: el simbolo "S/" antes de un numero se pronuncia "soles" DESPUES del numero. "S/ 1" se dice "un sol"; "S/ 2" = "dos soles"; "S/ 100" = "cien soles"; "S/ 150.50" = "ciento cincuenta soles con cincuenta centimos". NUNCA digas "ese barra", "soles barra" ni leas el simbolo literal.
+- LECTURA DE HORAS: di la hora concisa, formato 12h. "16:29" se dice "cuatro con veintinueve pe eme"; "09:05" = "nueve con cinco a eme". Di "pe eme" para PM y "a eme" para AM. NO digas "las cuatro con veintinueve de la tarde" ni "de la noche/manana" — solo "pe eme"/"a eme".
 - AL CONFIRMAR una venta u operacion, di solo lo esencial (monto y medio). NO menciones la sucursal: el usuario esta asignado a una sola, es obvio. NO menciones la comision: es automatica. SOLO menciona la comision si fue MANUAL (el usuario dijo un monto de comision) y SOLO menciona la sucursal si el resultado que te devuelve el servidor la incluye (eso pasa cuando el usuario es admin).
 - Si falta informacion para una accion (ej: "registra una venta" sin decir producto), pregunta amablemente "¿Cual producto y cuanta cantidad?".
 - Los permisos los maneja el servidor automaticamente. Si una accion falla por permisos, transmite el mensaje al usuario con tono empatico.
