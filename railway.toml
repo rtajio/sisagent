@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --preload --access-logfile - --error-logfile - --log-level info"
+startCommand = "gunicorn app:app -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --access-logfile - --error-logfile - --log-level info"
 healthcheckPath = "/ping"
 healthcheckTimeout = 60
 healthcheckInterval = 10
