@@ -2822,8 +2822,8 @@
                         if (!trig) return;
                         const normT = liveTranscript.toLowerCase()
                             .normalize('NFD').replace(/[̀-ͯ]/g, '')
-                            .replace(/[.,!?¿¡]/g, '');
-                        const normTrig = trig.normalize('NFD').replace(/[̀-ͯ]/g, '');
+                            .replace(/[.,!?¿¡]/g, '').replace(/\s+/g, '');
+                        const normTrig = trig.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡]/g, '').replace(/\s+/g, '');
                         const hit = normT.indexOf(normTrig);
                         console.log('[live] trigger check: busca "' + normTrig + '" en "' + normT + '" → ' + (hit !== -1 ? 'MATCH@'+hit : 'no match'));
                         if (hit !== -1) {
@@ -3265,7 +3265,8 @@
                     if (!trigger || !transcript) return;
                     // Normalización suave: tolera tildes y signos de puntuación
                     const norm = function(s) {
-                        return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡]/g, '').toLowerCase();
+                        // quita tildes, puntuación Y espacios: "sí, sí" → "sisi" coincide con "sisi"
+                        return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡]/g, '').replace(/\s+/g, '').toLowerCase();
                     };
                     if (norm(transcript).indexOf(norm(trigger)) === -1) {
                         return;  // no contenía la frase
