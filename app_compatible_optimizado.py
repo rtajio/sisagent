@@ -4617,6 +4617,15 @@ def ws_voice_live(browser_ws):
                     # El idioma se controla por el system prompt (espanol latinoamericano).
                 },
             },
+            # VAD de Gemini: menos sensible al fin de turno + 2s de silencio antes de
+            # considerar que el usuario termino de hablar (tolera pausas naturales).
+            "realtimeInputConfig": {
+                "automaticActivityDetection": {
+                    "endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
+                    "silenceDurationMs": 2000,
+                    "prefixPaddingMs": 300,
+                },
+            },
             "systemInstruction": {
                 "parts": [{"text": SYSTEM_PROMPT_GEMINI_LIVE}],
             },

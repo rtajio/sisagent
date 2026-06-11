@@ -3280,7 +3280,8 @@
                     if (typeof showNotification === 'function') {
                         showNotification('🎙 Frase detectada — habla ahora', 'success');
                     }
-                    setTimeout(function() { startRecording(); }, 400);
+                    // Abrir el chat de voz EN VIVO (Gemini Live), no la grabación one-shot
+                    setTimeout(function() { liveStart('dictating'); }, 400);
                 } catch (e) {
                     console.warn('[chatbot] Trigger transcripción error:', e);
                 } finally {
@@ -3491,14 +3492,16 @@
                     }
                     return;
                 }
-                // Dictado por voz vía transcripción REST que FUERZA español.
-                // (El modelo native-audio de Gemini Live detecta mal el idioma — limitación
-                //  conocida de Google — y transcribía "registrar" como ruso "Регистратор".)
-                if (recordingActive) {
-                    stopRecording();
-                } else {
+                // Chat de voz EN VIVO (Gemini Live): conversación bidireccional con audio.
+                // Nota: el texto del globito del usuario a veces sale en otro idioma
+                // (bug conocido de Google en la transcripción de entrada) pero el modelo
+                // SÍ entiende el audio en español y responde correctamente.
+                if (liveMode === 'dictating') {
+                    // Click durante sesión = cerrar (la escucha de frase se reactiva en liveCleanup)
+                    liveStop('manual');
+                } else if (liveMode === 'off') {
                     stopTriggerListener();
-                    startRecording();
+                    liveStart('dictating');
                 }
             });
             settingsBtn.addEventListener('click', function() {
