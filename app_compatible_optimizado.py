@@ -4246,9 +4246,11 @@ def api_chat_transcribir():
                 'parts': [
                     {
                         'text': (
-                            'Transcribe el siguiente audio en espanol. Devuelve EXCLUSIVAMENTE el texto '
+                            'Transcribe el siguiente audio en espanol (Peru). Devuelve EXCLUSIVAMENTE el texto '
                             'transcrito tal cual se dijo, sin comentarios, sin notas, sin formato Markdown, '
-                            'sin prefijos como "Transcripcion:". Si no hay voz audible, devuelve cadena vacia.'
+                            'sin marcas de tiempo, sin formato de subtitulos (nada de "00:00" ni "-->"), '
+                            'sin prefijos como "Transcripcion:". Si no hay voz audible o solo hay ruido, '
+                            'devuelve cadena vacia.'
                         )
                     },
                     {
@@ -4617,12 +4619,11 @@ def ws_voice_live(browser_ws):
                     # El idioma se controla por el system prompt (espanol latinoamericano).
                 },
             },
-            # VAD de Gemini: menos sensible al fin de turno + 2s de silencio antes de
-            # considerar que el usuario termino de hablar (tolera pausas naturales).
+            # VAD de Gemini: ~1.2s de silencio antes de considerar que el usuario
+            # termino de hablar (tolera pausas naturales sin sentirse lento).
             "realtimeInputConfig": {
                 "automaticActivityDetection": {
-                    "endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
-                    "silenceDurationMs": 2000,
+                    "silenceDurationMs": 1200,
                     "prefixPaddingMs": 300,
                 },
             },

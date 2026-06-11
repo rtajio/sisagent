@@ -2820,13 +2820,11 @@
                         // Chequear frase activadora (mismo WS — solo cambia UI)
                         const trig = (triggerPhrase || '').toLowerCase().trim();
                         if (!trig) return;
-                        const normT = liveTranscript.toLowerCase()
-                            .normalize('NFD').replace(/[̀-ͯ]/g, '')
-                            .replace(/[.,!?¿¡]/g, '').replace(/\s+/g, '');
-                        const normTrig = trig.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡]/g, '').replace(/\s+/g, '');
-                        const hit = normT.indexOf(normTrig);
-                        console.log('[live] trigger check: busca "' + normTrig + '" en "' + normT + '" → ' + (hit !== -1 ? 'MATCH@'+hit : 'no match'));
-                        if (hit !== -1) {
+                        const normT = normFrase(liveTranscript);
+                        const normTrig = normFrase(trig);
+                        const hit = fuzzyContains(normT, normTrig);
+                        console.log('[live] trigger check: busca "' + normTrig + '" en "' + normT + '" → ' + (hit ? 'MATCH (fuzzy)' : 'no match'));
+                        if (hit) {
                             console.log('[live] ★ FRASE ACTIVADORA DETECTADA → modo dictating');
                             switchLiveToDictating();
                         }
@@ -3116,7 +3114,49 @@
             let _trigProcessingChunk = false;
             let _trigLastLogTime = 0;
             let _trigMaxLevelSeen = 0;
+            let _trigPrevTranscript = '';  // buffer rodante: último chunk transcrito (por si la frase queda partida en dos)
             const TRIGGER_VAD_DYNAMIC = { threshold: TRIGGER_VAD_THRESHOLD };
+
+            // Normaliza para comparar frases: minúsculas, sin tildes, sin puntuación, sin espacios.
+            function normFrase(s) {
+                return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡;:'"()-]/g, '').replace(/\s+/g, '').toLowerCase();
+            }
+
+            // Distancia de edición (Levenshtein) con tope: corta apenas supera `cap`.
+            function editDistance(a, b, cap) {
+                const m = a.length, n = b.length;
+                if (Math.abs(m - n) > cap) return cap + 1;
+                let prev = [];
+                for (let j = 0; j <= n; j++) prev[j] = j;
+                for (let i = 1; i <= m; i++) {
+                    const cur = [i];
+                    let rowMin = i;
+                    for (let j = 1; j <= n; j++) {
+                        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+                        if (cur[j] < rowMin) rowMin = cur[j];
+                    }
+                    if (rowMin > cap) return cap + 1;
+                    prev = cur;
+                }
+                return prev[n];
+            }
+
+            // ¿`haystack` contiene algo "suficientemente parecido" a `needle`?
+            // Tolera 1 error en frases de 5-7 letras y 2 errores en frases de 8+
+            // (transcripciones tipo "ey sisi"/"jey sisi" para "hey sisi").
+            function fuzzyContains(haystack, needle) {
+                if (!needle) return false;
+                if (haystack.indexOf(needle) !== -1) return true;
+                const maxDist = needle.length >= 8 ? 2 : (needle.length >= 5 ? 1 : 0);
+                if (maxDist === 0) return false;
+                for (let len = needle.length - maxDist; len <= needle.length + maxDist; len++) {
+                    if (len <= 0 || len > haystack.length) continue;
+                    for (let i = 0; i + len <= haystack.length; i++) {
+                        if (editDistance(haystack.substr(i, len), needle, maxDist) <= maxDist) return true;
+                    }
+                }
+                return false;
+            }
 
 
             async function startTriggerListener() {
@@ -3259,18 +3299,23 @@
                         console.warn('[chatbot] Trigger transcribir falló:', data.message);
                         return;
                     }
-                    const transcript = (data.texto || '').toLowerCase().trim();
+                    let transcript = (data.texto || '').toLowerCase().trim();
                     const trigger = (triggerPhrase || '').toLowerCase().trim();
                     console.log('[chatbot] ★ Trigger oyó: "' + transcript + '" | busca: "' + trigger + '"');
-                    if (!trigger || !transcript) return;
-                    // Normalización suave: tolera tildes y signos de puntuación
-                    const norm = function(s) {
-                        // quita tildes, puntuación Y espacios: "sí, sí" → "sisi" coincide con "sisi"
-                        return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡]/g, '').replace(/\s+/g, '').toLowerCase();
-                    };
-                    if (norm(transcript).indexOf(norm(trigger)) === -1) {
+                    // Descartar basura del modelo (marcas de tiempo de subtítulos, etc.)
+                    if (transcript.indexOf('-->') !== -1 || /^\d[\d:.\s]*$/.test(transcript)) {
+                        transcript = '';
+                    }
+                    if (!trigger || !transcript) { _trigPrevTranscript = ''; return; }
+                    // Buffer rodante: une el chunk anterior con el actual por si la frase quedó partida
+                    const combinado = (_trigPrevTranscript + ' ' + transcript).trim();
+                    _trigPrevTranscript = transcript;
+                    // Match tolerante: sin tildes/puntuación/espacios + distancia de edición
+                    // ("hey sisi" matchea "ey sisi", "jey sisi", "hey, sí sí", etc.)
+                    if (!fuzzyContains(normFrase(combinado), normFrase(trigger))) {
                         return;  // no contenía la frase
                     }
+                    _trigPrevTranscript = '';
                     console.log('[chatbot] ✓✓✓ FRASE ACTIVADORA DETECTADA');
                     stopTriggerListener();
                     if (panel.classList.contains('d-none')) {
