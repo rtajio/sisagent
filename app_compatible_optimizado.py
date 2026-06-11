@@ -3538,8 +3538,13 @@ def _ejecutar_venta_validada(args, usuario):
     db.session.commit()
     clear_cache()
 
+    # La sucursal solo se nombra a admins (un usuario regular tiene una sola).
+    _msg_venta = f'Venta registrada: {cantidad} x "{producto.nombre}" = S/ {monto:.2f}'
+    if getattr(usuario, 'es_admin', False):
+        _msg_venta += f' en {sucursal.nombre}'
+    _msg_venta += '.'
     return {
-        "mensaje": f'Venta registrada: {cantidad} x "{producto.nombre}" = S/ {monto:.2f} en {sucursal.nombre}.',
+        "mensaje": _msg_venta,
         "monto": monto,
         "producto_nombre": producto.nombre,
         "cantidad": cantidad,
@@ -3635,12 +3640,19 @@ def _ejecutar_operacion_validada(args, usuario):
     db.session.commit()
     clear_cache()
 
-    sufijo = f' (manual{", motivo: " + motivo if motivo else ""})' if es_manual else ' (auto)'
+    # La sucursal solo se nombra a admins (un usuario regular tiene una sola, sobra decirla).
+    # La comision solo se nombra si fue MANUAL (la automatica no hace falta mencionarla).
+    _msg = f'Operacion registrada: S/ {monto:.2f}'
+    if es_manual:
+        _msg += f' con comision manual de S/ {comision:.2f}'
+        if motivo:
+            _msg += f' (motivo: {motivo})'
+    _msg += f' via {medio_valido.nombre_abreviado}'
+    if getattr(usuario, 'es_admin', False):
+        _msg += f' en {sucursal.nombre}'
+    _msg += '.'
     return {
-        "mensaje": (
-            f'Operacion registrada: S/ {monto:.2f} con comision S/ {comision:.2f}{sufijo} '
-            f'via {medio_valido.nombre_abreviado} en {sucursal.nombre}.'
-        ),
+        "mensaje": _msg,
         "monto": monto,
         "comision": comision,
         "comision_sugerida": comision_sugerida,
@@ -4524,6 +4536,8 @@ Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar ven
 - Si el resultado viene con "error", informa el motivo al usuario sin reintentar solo.
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
 - Habla siempre en español latinoamericano natural (acento neutro de Latinoamérica/Perú), conciso, amable. Como un colega que te ayuda.
+- LECTURA DE MONTOS: el simbolo "S/" antes de un numero se pronuncia "soles" DESPUES del numero. "S/ 1" se dice "un sol"; "S/ 2" = "dos soles"; "S/ 100" = "cien soles"; "S/ 150.50" = "ciento cincuenta soles con cincuenta centimos". NUNCA digas "ese barra", "soles barra" ni leas el simbolo literal.
+- AL CONFIRMAR una venta u operacion, di solo lo esencial (monto y medio). NO menciones la sucursal: el usuario esta asignado a una sola, es obvio. NO menciones la comision: es automatica. SOLO menciona la comision si fue MANUAL (el usuario dijo un monto de comision) y SOLO menciona la sucursal si el resultado que te devuelve el servidor la incluye (eso pasa cuando el usuario es admin).
 - Si falta informacion para una accion (ej: "registra una venta" sin decir producto), pregunta amablemente "¿Cual producto y cuanta cantidad?".
 - Los permisos los maneja el servidor automaticamente. Si una accion falla por permisos, transmite el mensaje al usuario con tono empatico.
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc.
