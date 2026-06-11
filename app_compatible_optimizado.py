@@ -4243,6 +4243,58 @@ def _vocabulario_de(usuario):
         return [], []
 
 
+# Cache simple del vocabulario dinamico por usuario (se invalida por TTL corto).
+_vocab_dinamico_cache = {}
+
+
+def _vocabulario_dinamico(usuario):
+    """Vocabulario de reconocimiento de voz derivado AUTOMATICAMENTE de la BD del sistema
+    (sucursales, productos y medios de pago que el usuario ve). Es 'speech adaptation':
+    sesga el modelo hacia las entidades reales sin que el usuario escriba nada.
+
+    Cacheado 120s por usuario para no golpear la BD en cada chunk del wake-word.
+    """
+    try:
+        uid = getattr(usuario, 'id', None)
+        if uid is not None:
+            entry = _vocab_dinamico_cache.get(uid)
+            if entry and (time.time() - entry[0] < 120):
+                return entry[1]
+
+        terminos = []
+        sucursales = sucursales_visibles_para(usuario)
+        suc_ids = [s.id for s in sucursales if s]
+        for s in sucursales:
+            if s and s.nombre:
+                terminos.append(s.nombre.strip())
+        for m in MedioPago.query.filter_by(activo=True).all():
+            if m.nombre_abreviado:
+                terminos.append(m.nombre_abreviado.strip())
+            if m.nombre_completo:
+                terminos.append(m.nombre_completo.strip())
+        if suc_ids:
+            prods = (Producto.query
+                     .filter(Producto.activo == True, Producto.sucursal_id.in_(suc_ids))
+                     .order_by(Producto.nombre).limit(120).all())
+            for p in prods:
+                if p.nombre:
+                    terminos.append(p.nombre.strip())
+
+        vistos, out = set(), []
+        for t in terminos:
+            k = t.lower()
+            if t and k not in vistos:
+                vistos.add(k)
+                out.append(t)
+        out = out[:150]
+
+        if uid is not None:
+            _vocab_dinamico_cache[uid] = (time.time(), out)
+        return out
+    except Exception:
+        return []
+
+
 @app.route('/api/chat/vocabulario', methods=['GET', 'POST'])
 @login_required
 def api_chat_vocabulario():
@@ -4329,13 +4381,13 @@ def api_chat_transcribir():
                 f'Ante silencio, ruido, respiracion o audio dudoso, devuelve SIEMPRE cadena vacia — nunca adivines.'
             )
 
-        # "Entrenamiento" del usuario: vocabulario propio (nombres, jerga) sesga la transcripcion;
-        # las correcciones se aplican despues sobre el texto resultante.
-        vocab_terminos, vocab_correcciones = _vocabulario_de(current_user)
+        # Speech adaptation: vocabulario derivado AUTOMATICAMENTE de la BD (sucursales,
+        # productos, medios) — sesga al modelo hacia las entidades reales del sistema.
+        vocab_terminos = _vocabulario_dinamico(current_user)
         if vocab_terminos:
             prompt_transcripcion += (
-                ' VOCABULARIO PROPIO del usuario (reconocelo con prioridad y escribelo EXACTO como aqui): '
-                + ', '.join(vocab_terminos) + '.'
+                ' NOMBRES REALES del sistema (sucursales, productos y medios de pago); si oyes algo '
+                'parecido a uno de estos, escribelo EXACTAMENTE asi: ' + ', '.join(vocab_terminos) + '.'
             )
 
         payload = {
@@ -4437,10 +4489,6 @@ def api_chat_transcribir():
                 'success': False,
                 'message': f'Respuesta inesperada de Gemini: {str(e)}',
             }), 502
-
-        # Aplicar las correcciones aprendidas del usuario (mal => bien)
-        if vocab_correcciones:
-            texto = _aplicar_correcciones_voz(texto, vocab_correcciones)
 
         return jsonify({'success': True, 'texto': texto})
 
@@ -4735,21 +4783,16 @@ def ws_voice_live(browser_ws):
     # Captura el user_id ANTES de los threads (Flask-Login proxy no funciona fuera del contexto)
     user_id = _voice_user_id
 
-    # "Entrenamiento" de voz: cargar el vocabulario propio del usuario para sesgar
-    # la comprension del modelo (nombres de productos/sucursales, jerga, etc.).
+    # Speech adaptation: vocabulario derivado AUTOMATICAMENTE de la BD del sistema
+    # (sucursales, productos, medios) para sesgar la comprension del modelo.
     _system_prompt_voz = SYSTEM_PROMPT_GEMINI_LIVE
     try:
         _usuario_voz = Usuario.query.get(user_id)
-        _vterm, _vcorr = _vocabulario_de(_usuario_voz) if _usuario_voz else ([], [])
+        _vterm = _vocabulario_dinamico(_usuario_voz) if _usuario_voz else []
         if _vterm:
             _system_prompt_voz += (
-                '\n\nVOCABULARIO PROPIO del usuario (reconocelo con prioridad cuando lo oigas, '
-                'escribelo y entiendelo EXACTO): ' + ', '.join(_vterm) + '.'
-            )
-        if _vcorr:
-            _system_prompt_voz += (
-                '\nCorrecciones frecuentes (si oyes lo de la izquierda, el usuario quiso decir lo de la derecha): '
-                + '; '.join(f'"{m}" = "{b}"' for m, b in _vcorr) + '.'
+                '\n\nNOMBRES REALES del sistema (sucursales, productos y medios de pago). Cuando el '
+                'usuario los mencione, reconocelos y escribelos EXACTAMENTE asi: ' + ', '.join(_vterm) + '.'
             )
     except Exception:
         pass

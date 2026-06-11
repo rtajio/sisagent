@@ -972,14 +972,10 @@
                 <small style="display:block;color:var(--text-muted);font-size:0.75rem;margin-bottom:10px;">
                     Durante la conversación de voz, al decir esta frase se cierra el chat (y la escucha de la frase activadora se reanuda). Déjala vacía para desactivarla.
                 </small>
-                <label style="display:block;font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px;">
-                    <i class="fas fa-graduation-cap me-1"></i>Entrenamiento de voz (vocabulario y correcciones):
-                </label>
-                <textarea id="chatbot-vocab-input" rows="4" maxlength="4000" placeholder="Tecknovation&#10;INC Technology&#10;Yape&#10;tecnobeision => Tecknovation&#10;cien soles => 100 soles"
-                       style="width:100%;background:var(--bg-inset);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text-primary);font-size:0.85rem;outline:none;margin-bottom:4px;resize:vertical;font-family:inherit;"></textarea>
-                <small style="display:block;color:var(--text-muted);font-size:0.72rem;margin-bottom:12px;">
-                    Enseñale palabras, nombres y jerga que el asistente debe reconocer (una por línea). Para corregir algo que escucha mal, escribe <code>lo que escucha =&gt; lo correcto</code>. Se aplica al dictado y a la conversación en vivo. Se guarda en tu cuenta.
-                </small>
+                <div style="background:var(--bg-inset);border-left:3px solid var(--accent);border-radius:4px;padding:8px 10px;margin-bottom:12px;font-size:0.78rem;color:var(--text-secondary);">
+                    <i class="fas fa-graduation-cap me-1" style="color:var(--accent);"></i><strong style="color:var(--text-primary);">Reconocimiento adaptativo</strong><br>
+                    El asistente reconoce automáticamente los nombres de tus sucursales, productos y medios de pago — los aprende de la base de datos del sistema. No hay que configurar nada.
+                </div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-primary);cursor:pointer;margin-bottom:12px;">
                     <input type="checkbox" id="chatbot-continuous-toggle" style="accent-color:var(--accent);">
                     Escucha continua de la frase activadora
@@ -1880,7 +1876,6 @@
             const settingsCancelBtn = document.getElementById('chatbot-settings-cancel');
             const triggerInput = document.getElementById('chatbot-trigger-input');
             const endPhraseInput = document.getElementById('chatbot-endphrase-input');
-            const vocabInput = document.getElementById('chatbot-vocab-input');
             const continuousToggle = document.getElementById('chatbot-continuous-toggle');
             const listeningBadge = document.getElementById('chatbot-listening-badge');
             const voiceUnsupportedNotice = document.getElementById('chatbot-voice-unsupported');
@@ -2287,14 +2282,6 @@
                 triggerInput.value = triggerPhrase;
                 if (endPhraseInput) endPhraseInput.value = endPhrase;
                 continuousToggle.checked = triggerListeningEnabled;
-                // Cargar el vocabulario de voz guardado en la cuenta
-                if (vocabInput) {
-                    vocabInput.value = '';
-                    fetch('/api/chat/vocabulario', { credentials: 'same-origin' })
-                        .then(function(r) { return r.ok ? r.json() : null; })
-                        .then(function(d) { if (d && d.success) vocabInput.value = d.vocabulario || ''; })
-                        .catch(function() {});
-                }
                 settingsPanel.classList.remove('d-none');
                 panel.classList.add('settings-open');
                 triggerInput.focus();
@@ -3631,19 +3618,6 @@
                 endPhrase = endPhraseInput ? (endPhraseInput.value || '').trim() : endPhrase;
                 triggerListeningEnabled = continuousToggle.checked;
                 saveVoiceSettings();
-                // Guardar el vocabulario de voz en la cuenta (servidor)
-                if (vocabInput) {
-                    fetch('/api/chat/vocabulario', {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ vocabulario: vocabInput.value || '' })
-                    }).then(function(r) {
-                        if (r.ok && typeof showNotification === 'function') {
-                            showNotification('✓ Vocabulario de voz guardado', 'success');
-                        }
-                    }).catch(function() {});
-                }
                 closeSettings();
 
                 // Aplicar el nuevo estado: parar listener previo si lo había, reiniciar si toca
