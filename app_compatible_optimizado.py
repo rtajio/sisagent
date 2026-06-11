@@ -4562,6 +4562,37 @@ def _ejecutar_accion_confirmada_voz(accion, args, user_id):
 
 # ---------- Gemini Live API WebSocket proxy (transcripción streaming) ----------
 
+def _serializer_voz():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.config['SECRET_KEY'], salt='sisagent-voice-ws')
+
+
+def _generar_token_voz(uid):
+    return _serializer_voz().dumps({'uid': uid})
+
+
+def _verificar_token_voz(token, max_age=180):
+    """Devuelve el uid si el token firmado es válido y no expiró (<=180s), o None."""
+    if not token:
+        return None
+    try:
+        data = _serializer_voz().loads(token, max_age=max_age)
+        return data.get('uid')
+    except Exception:
+        return None
+
+
+@app.route('/api/chat/voice_token')
+@login_required
+def api_voice_token():
+    """Token de corta vida para autenticar el WebSocket de voz.
+
+    Fallback robusto: algunos proxies (p.ej. Railway) no reenvían la cookie de sesión
+    en el handshake del WebSocket. El token viaja en la URL (?token=), no en la cookie.
+    """
+    return jsonify({'token': _generar_token_voz(current_user.id)})
+
+
 @sock.route('/ws/chat/voice_live')
 def ws_voice_live(browser_ws):
     """WebSocket bidireccional que reenvía audio del navegador a Gemini Live
@@ -4578,8 +4609,13 @@ def ws_voice_live(browser_ws):
       - {"type":"interrupted"}
       - {"type":"error","message":"..."}
     """
-    # Autenticación: Flask-Sock comparte el ciclo de Flask, current_user funciona vía cookie de sesión
-    if not current_user.is_authenticated:
+    # Autenticación: por cookie de sesión (current_user) o, como fallback robusto detrás
+    # de proxies que NO reenvían la cookie en el handshake WS, por token firmado en ?token=.
+    if current_user.is_authenticated:
+        _voice_user_id = current_user.id
+    else:
+        _voice_user_id = _verificar_token_voz(request.args.get('token', ''))
+    if not _voice_user_id:
         try:
             browser_ws.send(json.dumps({"type": "error", "message": "No autenticado"}))
         except Exception:
@@ -4618,7 +4654,7 @@ def ws_voice_live(browser_ws):
         return
 
     # Captura el user_id ANTES de los threads (Flask-Login proxy no funciona fuera del contexto)
-    user_id = current_user.id
+    user_id = _voice_user_id
 
     # Envío del setup inicial — DEBE ser el primer mensaje. Incluye:
     # - Modelo de audio nativo

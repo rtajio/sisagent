@@ -2646,10 +2646,30 @@
                     return;
                 }
 
-                // 2. Abrir WebSocket a /ws/chat/voice_live
+                // 2. Pedir token de voz (auth del WS por URL, robusto si la cookie no
+                //    llega al handshake detrás del proxy de Railway)
+                let voiceToken = '';
+                try {
+                    const tkResp = await fetch('/api/chat/voice_token', { credentials: 'same-origin' });
+                    if (tkResp.ok) {
+                        const tkData = await tkResp.json();
+                        voiceToken = tkData.token || '';
+                    } else if (tkResp.status === 401 || tkResp.status === 302) {
+                        if (typeof showNotification === 'function') {
+                            showNotification('Tu sesión expiró. Recarga la página e inicia sesión de nuevo.', 'error');
+                        }
+                        liveCleanup();
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('[live] No se pudo obtener voice_token:', e);
+                }
+
+                // 3. Abrir WebSocket a /ws/chat/voice_live
                 const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = wsProto + '//' + location.host + '/ws/chat/voice_live';
-                console.log('[live] Intentando WebSocket:', wsUrl);
+                const wsUrl = wsProto + '//' + location.host + '/ws/chat/voice_live'
+                            + (voiceToken ? ('?token=' + encodeURIComponent(voiceToken)) : '');
+                console.log('[live] Intentando WebSocket (token=' + (voiceToken ? 'sí' : 'no') + ')');
                 try {
                     liveWs = new WebSocket(wsUrl);
                     liveWs.binaryType = 'arraybuffer';
