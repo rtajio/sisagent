@@ -251,6 +251,8 @@ class Usuario(UserMixin, db.Model):
     session_token  = db.Column(db.String(36), nullable=True)
     # Último acceso: se actualiza en cada request autenticado (para presencia en tiempo real)
     ultimo_acceso  = db.Column(db.DateTime, nullable=True)
+    # "Entrenamiento" de voz: vocabulario propio + correcciones (sesga la transcripción).
+    vocabulario_voz = db.Column(db.Text, nullable=True)
     sucursal = db.relationship('Sucursal', backref='usuarios', lazy='joined')
     operaciones = db.relationship('Operacion', backref='usuario', lazy='dynamic')
 
@@ -4197,6 +4199,70 @@ def _convertir_audio_a_wav_16k_mono(audio_bytes):
         input_container.close()
 
 
+# ---------- "Entrenamiento" de voz: vocabulario y correcciones por usuario ----------
+
+def _parsear_vocabulario_voz(texto):
+    """Separa el vocabulario del usuario en (terminos, correcciones).
+
+    Cada linea con 'mal => bien' (o 'mal -> bien') es una correccion;
+    el resto son terminos de vocabulario (nombres, jerga, frases).
+    """
+    terminos, correcciones = [], []
+    for linea in (texto or '').splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith('#'):
+            continue
+        sep = '=>' if '=>' in linea else ('->' if '->' in linea else None)
+        if sep:
+            izq, der = linea.split(sep, 1)
+            izq, der = izq.strip(), der.strip()
+            if izq and der:
+                correcciones.append((izq, der))
+        else:
+            terminos.append(linea)
+    return terminos[:80], correcciones[:80]
+
+
+def _aplicar_correcciones_voz(texto, correcciones):
+    """Reemplaza mistranscripciones conocidas (insensible a may/min)."""
+    import re
+    out = texto or ''
+    for mal, bien in correcciones:
+        try:
+            out = re.sub(re.escape(mal), bien, out, flags=re.IGNORECASE)
+        except Exception:
+            pass
+    return out
+
+
+def _vocabulario_de(usuario):
+    """Devuelve (terminos, correcciones) del usuario, tolerante a columna ausente."""
+    try:
+        return _parsear_vocabulario_voz(getattr(usuario, 'vocabulario_voz', '') or '')
+    except Exception:
+        return [], []
+
+
+@app.route('/api/chat/vocabulario', methods=['GET', 'POST'])
+@login_required
+def api_chat_vocabulario():
+    """Lee/guarda el vocabulario de voz ('entrenamiento') del usuario actual."""
+    try:
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or {}
+            texto = (data.get('vocabulario') or '').strip()[:4000]
+            current_user.vocabulario_voz = texto
+            db.session.commit()
+            return jsonify({'success': True})
+        return jsonify({'success': True, 'vocabulario': getattr(current_user, 'vocabulario_voz', '') or ''})
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'message': f'No se pudo guardar el vocabulario: {str(e)}'}), 500
+
+
 @app.route('/api/chat/transcribir', methods=['POST'])
 @login_required
 def api_chat_transcribir():
@@ -4261,6 +4327,15 @@ def api_chat_transcribir():
                 f' MUY IMPORTANTE: el audio puede contener la frase de activacion "{frase_hint}". '
                 f'Si lo que se oye se parece a esa frase aunque sea de forma aproximada, '
                 f'transcribela EXACTAMENTE como "{frase_hint}".'
+            )
+
+        # "Entrenamiento" del usuario: vocabulario propio (nombres, jerga) sesga la transcripcion;
+        # las correcciones se aplican despues sobre el texto resultante.
+        vocab_terminos, vocab_correcciones = _vocabulario_de(current_user)
+        if vocab_terminos:
+            prompt_transcripcion += (
+                ' VOCABULARIO PROPIO del usuario (reconocelo con prioridad y escribelo EXACTO como aqui): '
+                + ', '.join(vocab_terminos) + '.'
             )
 
         payload = {
@@ -4362,6 +4437,10 @@ def api_chat_transcribir():
                 'success': False,
                 'message': f'Respuesta inesperada de Gemini: {str(e)}',
             }), 502
+
+        # Aplicar las correcciones aprendidas del usuario (mal => bien)
+        if vocab_correcciones:
+            texto = _aplicar_correcciones_voz(texto, vocab_correcciones)
 
         return jsonify({'success': True, 'texto': texto})
 
@@ -4656,6 +4735,25 @@ def ws_voice_live(browser_ws):
     # Captura el user_id ANTES de los threads (Flask-Login proxy no funciona fuera del contexto)
     user_id = _voice_user_id
 
+    # "Entrenamiento" de voz: cargar el vocabulario propio del usuario para sesgar
+    # la comprension del modelo (nombres de productos/sucursales, jerga, etc.).
+    _system_prompt_voz = SYSTEM_PROMPT_GEMINI_LIVE
+    try:
+        _usuario_voz = Usuario.query.get(user_id)
+        _vterm, _vcorr = _vocabulario_de(_usuario_voz) if _usuario_voz else ([], [])
+        if _vterm:
+            _system_prompt_voz += (
+                '\n\nVOCABULARIO PROPIO del usuario (reconocelo con prioridad cuando lo oigas, '
+                'escribelo y entiendelo EXACTO): ' + ', '.join(_vterm) + '.'
+            )
+        if _vcorr:
+            _system_prompt_voz += (
+                '\nCorrecciones frecuentes (si oyes lo de la izquierda, el usuario quiso decir lo de la derecha): '
+                + '; '.join(f'"{m}" = "{b}"' for m, b in _vcorr) + '.'
+            )
+    except Exception:
+        pass
+
     # Envío del setup inicial — DEBE ser el primer mensaje. Incluye:
     # - Modelo de audio nativo
     # - Voz "Aoede" (femenina, natural en español)
@@ -4684,7 +4782,7 @@ def ws_voice_live(browser_ws):
                 },
             },
             "systemInstruction": {
-                "parts": [{"text": SYSTEM_PROMPT_GEMINI_LIVE}],
+                "parts": [{"text": _system_prompt_voz}],
             },
             "tools": [{
                 "functionDeclarations": _build_gemini_function_declarations(),
@@ -5036,6 +5134,8 @@ def init_db():
                                 "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS comision_manual BOOLEAN DEFAULT FALSE"))
                             _conn.execute(text(
                                 "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS motivo_descuento VARCHAR(200)"))
+                            _conn.execute(text(
+                                "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS vocabulario_voz TEXT"))
                         print("[OK] Columnas verificadas (PostgreSQL)")
                     except Exception as e:
                         if "already exists" in str(e) or "duplicate" in str(e).lower():
@@ -5051,6 +5151,7 @@ def init_db():
                         "ALTER TABLE operacion ADD COLUMN comision_sugerida NUMERIC(10,2)",
                         "ALTER TABLE operacion ADD COLUMN comision_manual BOOLEAN DEFAULT 0",
                         "ALTER TABLE operacion ADD COLUMN motivo_descuento VARCHAR(200)",
+                        "ALTER TABLE usuario ADD COLUMN vocabulario_voz TEXT",
                     ]:
                         try:
                             with db.engine.connect() as _conn:
