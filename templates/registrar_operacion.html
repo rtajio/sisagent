@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Registrar Operación - Sistema Bancario{% endblock %}
+{% block title %}Registrar Operación - SISAGENT{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2">
-        <i class="fas fa-plus me-2"></i>
+        <i class="fas fa-exchange-alt me-2"></i>
         Registrar Operación
     </h1>
     <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('operaciones') }}" class="btn btn-outline-secondary">
+        <a href="{{ url_for('operaciones') }}" class="btn btn-outline-secondary" tabindex="-1">
             <i class="fas fa-arrow-left me-1"></i>
             Volver
         </a>
@@ -20,152 +20,130 @@
     <div class="col-lg-8">
         <div class="card shadow">
             <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">
+                <h6 class="m-0 font-weight-bold">
                     <i class="fas fa-credit-card me-2"></i>
                     Nueva Operación Bancaria
                 </h6>
             </div>
             <div class="card-body">
                 <form method="POST" id="operacionForm">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="monto" class="form-label">
-                                <i class="fas fa-money-bill me-1"></i>
-                                Monto (S/)
-                            </label>
-                            <input type="number" 
-                                   class="form-control form-control-lg" 
-                                   id="monto" 
-                                   name="monto" 
-                                   step="0.01" 
-                                   min="0.01" 
-                                   required
-                                   placeholder="0.00"
-                                   tabindex="1"
-                                   autofocus>
-                            <div class="form-text">Ingrese el monto en soles peruanos</div>
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
-                            <label for="comision" class="form-label">
-                                <i class="fas fa-percentage me-1"></i>
-                                Comisión (S/)
-                            </label>
-                            <input type="number" 
-                                   class="form-control form-control-lg" 
-                                   id="comision" 
-                                   name="comision" 
-                                   step="0.01" 
-                                   min="0" 
-                                   required
-                                   placeholder="0.00"
-                                   tabindex="2">
-                            <div class="form-text">Ingrese la comisión en soles peruanos</div>
-                        </div>
+
+                    {% if current_user.es_admin and sucursales|length > 1 %}
+                    <div class="mb-3">
+                        <label for="sucursal_id" class="form-label">
+                            <i class="fas fa-building me-1"></i> Sucursal
+                        </label>
+                        <select class="form-control" id="sucursal_id" name="sucursal_id" required tabindex="-1">
+                            <option value="">-- Seleccionar sucursal --</option>
+                            {% for s in sucursales %}
+                            <option value="{{ s.id }}">{{ s.nombre }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                    
+                    {% else %}
+                    <div class="mb-3">
+                        <label class="form-label"><i class="fas fa-building me-1"></i> Sucursal</label>
+                        <input type="text" class="form-control" value="{{ current_user.sucursal.nombre if current_user.sucursal else 'Sin sucursal' }}" readonly tabindex="-1" style="background-color: rgba(0,0,0,0.15);">
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="monto" class="form-label">
+                            <i class="fas fa-money-bill me-1"></i> Monto (S/)
+                        </label>
+                        <input type="number"
+                               class="form-control form-control-lg"
+                               id="monto"
+                               name="monto"
+                               step="0.01"
+                               min="0.01"
+                               required
+                               placeholder="0.00"
+                               tabindex="1"
+                               autofocus>
+                    </div>
+
+                    <!-- Comisión sugerida (informativa, fuera del flujo de TAB) -->
+                    <div id="comisionAutoRow" class="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 py-2 mb-3 rounded"
+                         style="background: rgba(160,132,90,0.10); border-left: 3px solid var(--accent, #A0845A);">
+                        <div class="d-flex align-items-baseline flex-wrap gap-2">
+                            <span style="font-size: 11px; font-weight: 600; color: var(--accent, #A0845A); text-transform: uppercase; letter-spacing: 0.5px;">
+                                <i class="fas fa-calculator me-1"></i> Comisión sugerida:
+                            </span>
+                            <span id="comisionAutoMonto" style="font-family: var(--font-heading, 'Lora', serif); font-size: 1.5rem; font-weight: 500; color: var(--success, #28a745); line-height: 1;">S/ 0.00</span>
+                        </div>
+                        <button type="button" id="btnModificarComision" class="btn btn-sm btn-link p-0" tabindex="-1"
+                                style="color: var(--text-secondary, #C8B89A); text-decoration: underline; text-underline-offset: 3px; font-size: 12px;">
+                            <i class="fas fa-pen me-1"></i>modificar
+                        </button>
+                    </div>
+
+                    <!-- Modo manual (oculto por defecto, no rompe TAB porque solo se entra por click) -->
+                    <div id="comisionManualSection" class="px-3 py-2 mb-3 rounded" style="display:none; background: rgba(196,155,92,0.10); border-left: 3px solid var(--warning, #ffc107);">
+                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                            <span style="font-size: 11px; font-weight: 600; color: var(--warning, #ffc107); text-transform: uppercase; letter-spacing: 0.5px;">
+                                <i class="fas fa-pen me-1"></i> Manual:
+                            </span>
+                            <input type="number" id="comisionManualInput" name="comision"
+                                   step="0.01" min="0" value="0"
+                                   style="width: 110px; background: rgba(0,0,0,0.25); border: 1px solid var(--border, #504840); color: var(--warning, #ffc107); font-family: var(--font-heading, 'Lora', serif); font-weight: 500; font-size: 1.25rem; padding: 4px 10px; border-radius: 4px;">
+                            <span style="font-size: 12px; color: var(--text-secondary, #C8B89A);">
+                                vs sugerida <strong id="comisionVsSugerida" style="color: var(--text-primary, #E8DCC8); font-weight: 500;">S/ 0.00</strong>
+                            </span>
+                            <span id="comisionDiffBadge" class="badge"
+                                  style="background: rgba(0,0,0,0.25); color: var(--warning, #ffc107); font-size: 11px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border, #504840); font-weight: 500;">−S/ 0.00</span>
+                            <button type="button" id="btnRevertirSugerida" class="btn btn-sm btn-link p-0 ms-auto" tabindex="-1"
+                                    style="color: var(--warning, #ffc107); text-decoration: underline; font-size: 11px;">
+                                <i class="fas fa-rotate-left me-1"></i>usar sugerida
+                            </button>
+                        </div>
+                        <input type="text" name="motivo_descuento" id="motivoDescuento" maxlength="200"
+                               class="form-control form-control-sm"
+                               placeholder="Motivo (opcional): cliente recurrente, descuento promocional...">
+                        <p class="mt-2 mb-0" style="font-size: 11px; color: var(--warning, #ffc107); opacity: 0.85;">
+                            <i class="fas fa-circle-info me-1"></i>Esta operación quedará marcada para revisión del administrador
+                        </p>
+                    </div>
+
+                    <!-- Campo oculto que indica al backend si fue manual o no -->
+                    <input type="hidden" name="comision_manual" id="comisionManualFlag" value="false">
+
                     <div class="mb-3">
                         <label for="medio" class="form-label">
-                            <i class="fas fa-credit-card me-1"></i>
-                            Medio de Pago
+                            <i class="fas fa-credit-card me-1"></i> Medio de Pago
                         </label>
-                        <select class="form-select form-select-lg" id="medio" name="medio" required tabindex="3">
-                            <option value="">Seleccione un medio de pago</option>
-                            <option value="BCP">BCP</option>
-                            <option value="KS">KS</option>
-                            <option value="IBK">IBK</option>
-                            <option value="BN">BN</option>
-                            <option value="AQP">AQP</option>
-                            <option value="NIUBIZ">NIUBIZ</option>
-                            <option value="CONFIANZA">CONFIANZA</option>
-                            <option value="BBVA">BBVA</option>
-                            <option value="ICA">ICA</option>
-                            <option value="IZIPAY">IZIPAY</option>
-                            <option value="CULQI">CULQI</option>
-                            <option value="BIM">BIM</option>
+                        <select class="form-control form-control-lg" id="medio" name="medio" required tabindex="2">
+                            <option value="">-- Seleccionar --</option>
+                            {% for m in medios_pago %}
+                            <option value="{{ m.nombre_abreviado }}">{{ m.nombre_abreviado }}</option>
+                            {% endfor %}
                         </select>
                     </div>
 
                     <!-- Botones de acción -->
-                    <div class="row mt-4">
-                        <div class="col-12">
-                            <button type="submit" class="btn btn-primary btn-lg me-2" id="btnRegistrar" tabindex="4">
-                                <i class="fas fa-save me-2"></i>
-                                Registrar Operación
-                            </button>
-                            <a href="{{ url_for('operaciones') }}" class="btn btn-secondary btn-lg" tabindex="5">
-                                <i class="fas fa-times me-2"></i>
-                                Cancelar
-                            </a>
-                        </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-grow-1" id="btnRegistrar" tabindex="3">
+                            <i class="fas fa-check me-2"></i>Registrar Operación
+                        </button>
+                        <a href="{{ url_for('operaciones') }}" class="btn btn-secondary" tabindex="4">
+                            <i class="fas fa-times me-2"></i>Cancelar
+                        </a>
                     </div>
 
-                    <!-- Campos ocultos para hora y sucursal -->
                     <input type="hidden" name="hora_automatica" value="true">
-                    {% if not current_user.es_admin %}
-                        <input type="hidden" name="sucursal_id" value="{{ current_user.sucursal_id }}">
-                    {% endif %}
-                    
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Información:</strong> 
-                        Esta operación se registrará en la sucursal 
-                        <strong>{{ current_user.sucursal.nombre if current_user.sucursal else 'Sin sucursal asignada' }}</strong> 
-                        y la comisión se sumará automáticamente al total diario de esta sucursal.
-                        <br><small class="text-muted">La hora se registrará automáticamente en UTC-5 (Perú)</small>
-                    </div>
-
-                    <!-- Campo de sucursal fija para todos los usuarios -->
-                    <div class="mb-3">
-                        <label for="sucursal_info" class="form-label">
-                            <i class="fas fa-building me-1"></i>
-                            Sucursal
-                        </label>
-                        <input type="text" 
-                               class="form-control form-control-lg" 
-                               id="sucursal_info" 
-                               value="{{ current_user.sucursal.nombre if current_user.sucursal else 'Sin sucursal asignada' }}" 
-                               readonly
-                               style="background-color: #f8f9fa;">
-                        <div class="form-text">Operación se registrará en esta sucursal</div>
-                    </div>
                 </form>
             </div>
         </div>
-    </div>
-</div>
 
-<!-- Resumen de comisión diaria -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-success">
-                    <i class="fas fa-chart-line me-2"></i>
-                    Resumen de Comisión Diaria
-                </h6>
-            </div>
+        <div class="card shadow mt-3">
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h4 class="text-success" id="comisionActual">S/ 0.00</h4>
-                            <small class="text-muted">Comisión Actual</small>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h4 class="text-primary" id="comisionNueva">S/ 0.00</h4>
-                            <small class="text-muted">Nueva Comisión</small>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h4 class="text-info" id="comisionTotal">S/ 0.00</h4>
-                            <small class="text-muted">Total Después</small>
-                        </div>
-                    </div>
-                </div>
+                <h6 class="font-weight-bold mb-2"><i class="fas fa-lightbulb me-2"></i>Importante</h6>
+                <ul class="small text-muted mb-0">
+                    <li>La comisión se calcula automáticamente: <strong>{{ comision_por_rango }} sol cada {{ comision_rango }} soles</strong> de monto</li>
+                    <li>Puedes modificarla con el botón <em>modificar</em> si es necesario (queda registrado para auditoría)</li>
+                    <li>La sucursal se asigna automáticamente según tu usuario</li>
+                    <li>La hora se registra en horario Perú (UTC−5)</li>
+                </ul>
             </div>
         </div>
     </div>
@@ -174,124 +152,93 @@
 
 {% block scripts %}
 <script>
-// Cargar comisión actual al cargar la página
-document.addEventListener('DOMContentLoaded', function() {
-    cargarComisionActual();
-    
-    // Configurar el orden de tabulación
-    configurarTabulacion();
-    
-    // Configurar eventos de teclado
-    configurarEventosTeclado();
-});
-
-// Configurar el orden de tabulación
-function configurarTabulacion() {
+(function() {
+    const RANGO = {{ comision_rango }};
+    const POR_RANGO = {{ comision_por_rango }};
     const monto = document.getElementById('monto');
-    const comision = document.getElementById('comision');
     const medio = document.getElementById('medio');
-    const btnRegistrar = document.getElementById('btnRegistrar');
-    const btnCancelar = document.querySelector('a[href*="operaciones"]');
     const sucursal = document.getElementById('sucursal_id');
-    
-    // Orden de tabulación: Monto → Comisión → Medio → Botón Registrar → Cancelar → Sucursal (si es admin)
-    if (monto) monto.tabIndex = 1;
-    if (comision) comision.tabIndex = 2;
-    if (medio) medio.tabIndex = 3;
-    if (btnRegistrar) btnRegistrar.tabIndex = 4;
-    if (btnCancelar) btnCancelar.tabIndex = 5;
-    if (sucursal) sucursal.tabIndex = 6;
-}
+    const autoMonto = document.getElementById('comisionAutoMonto');
+    const autoRow = document.getElementById('comisionAutoRow');
+    const manualSection = document.getElementById('comisionManualSection');
+    const btnModificar = document.getElementById('btnModificarComision');
+    const btnRevertir = document.getElementById('btnRevertirSugerida');
+    const manualInput = document.getElementById('comisionManualInput');
+    const vsSugerida = document.getElementById('comisionVsSugerida');
+    const diffBadge = document.getElementById('comisionDiffBadge');
+    const motivoInput = document.getElementById('motivoDescuento');
+    const flag = document.getElementById('comisionManualFlag');
+    const form = document.getElementById('operacionForm');
 
-// Configurar eventos de teclado
-function configurarEventosTeclado() {
-    const monto = document.getElementById('monto');
-    const comision = document.getElementById('comision');
-    const medio = document.getElementById('medio');
-    const btnRegistrar = document.getElementById('btnRegistrar');
-    const sucursal = document.getElementById('sucursal_id');
-    
-    // ENTER en cualquier campo del formulario
-    [monto, comision, medio, sucursal].forEach(field => {
-        if (field) {
-            field.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    btnRegistrar.click();
-                }
-            });
+    function calcularSugerida(m) {
+        const n = parseFloat(m) || 0;
+        if (n <= 0) return 0;
+        return Math.ceil(n / RANGO) * POR_RANGO;
+    }
+    function fmt(n) { return 'S/ ' + Number(n).toFixed(2); }
+
+    function actualizar() {
+        const m = parseFloat(monto.value) || 0;
+        const sugerida = calcularSugerida(m);
+        autoMonto.textContent = fmt(sugerida);
+        vsSugerida.textContent = fmt(sugerida);
+
+        const esManual = manualSection.style.display !== 'none';
+        if (esManual) {
+            const c = parseFloat(manualInput.value) || 0;
+            const d = c - sugerida;
+            if (Math.abs(d) < 0.005) {
+                diffBadge.textContent = 'igual a sugerida';
+                diffBadge.style.color = 'var(--text-secondary, #C8B89A)';
+            } else if (d < 0) {
+                diffBadge.textContent = '−' + fmt(Math.abs(d));
+                diffBadge.style.color = 'var(--success, #28a745)';
+            } else {
+                diffBadge.textContent = '+' + fmt(d);
+                diffBadge.style.color = 'var(--danger, #dc3545)';
+            }
+        }
+    }
+
+    btnModificar.addEventListener('click', function() {
+        const sugerida = calcularSugerida(monto.value);
+        manualInput.value = sugerida.toFixed(2);
+        autoRow.style.display = 'none';
+        manualSection.style.display = '';
+        flag.value = 'true';
+        actualizar();
+        manualInput.focus();
+        manualInput.select();
+    });
+    btnRevertir.addEventListener('click', function() {
+        autoRow.style.display = '';
+        manualSection.style.display = 'none';
+        motivoInput.value = '';
+        flag.value = 'false';
+        actualizar();
+        monto.focus();
+    });
+
+    [monto, manualInput, motivoInput].forEach(function(el) {
+        if (el) el.addEventListener('input', actualizar);
+    });
+
+    form.addEventListener('submit', function(e) {
+        const m = parseFloat(monto.value);
+        if (!m || m <= 0) { e.preventDefault(); alert('Ingresa un monto válido mayor a 0'); monto.focus(); return; }
+        if (!medio.value) { e.preventDefault(); alert('Selecciona un medio de pago'); medio.focus(); return; }
+        if (sucursal && !sucursal.value) { e.preventDefault(); alert('Selecciona una sucursal'); sucursal.focus(); return; }
+        // Si NO está en modo manual, mandamos la comisión sugerida en un hidden
+        if (flag.value !== 'true') {
+            // El servidor recalcula igual, pero mandamos por consistencia visual
+            // Reemplazo el name del input manual o creo un hidden
+            if (manualInput.name !== 'comision') manualInput.name = 'comision';
+            manualInput.value = calcularSugerida(m).toFixed(2);
         }
     });
-    
-    // ENTER en el botón registrar
-    if (btnRegistrar) {
-        btnRegistrar.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('operacionForm').submit();
-            }
-        });
-    }
-}
 
-// Actualizar resumen cuando cambie la comisión
-document.getElementById('comision').addEventListener('input', function() {
-    actualizarResumen();
-});
-
-function cargarComisionActual() {
-    fetch('/api/comisiones?tipo=diaria')
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('comisionActual').textContent = 'S/ ' + data.total_comision.toFixed(2);
-            actualizarResumen();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-}
-
-function actualizarResumen() {
-    const comisionActual = parseFloat(document.getElementById('comisionActual').textContent.replace('S/ ', '')) || 0;
-    const comisionNueva = parseFloat(document.getElementById('comision').value) || 0;
-    const comisionTotal = comisionActual + comisionNueva;
-    
-    document.getElementById('comisionNueva').textContent = 'S/ ' + comisionNueva.toFixed(2);
-    document.getElementById('comisionTotal').textContent = 'S/ ' + comisionTotal.toFixed(2);
-}
-
-// Validación del formulario
-document.getElementById('operacionForm').addEventListener('submit', function(e) {
-    const monto = parseFloat(document.getElementById('monto').value);
-    const comision = parseFloat(document.getElementById('comision').value);
-    const medio = document.getElementById('medio').value;
-    
-    if (!monto || monto <= 0) {
-        e.preventDefault();
-        alert('Por favor ingrese un monto válido mayor a 0');
-        document.getElementById('monto').focus();
-        return false;
-    }
-    
-    if (!comision || comision < 0) {
-        e.preventDefault();
-        alert('Por favor ingrese una comisión válida');
-        document.getElementById('comision').focus();
-        return false;
-    }
-    
-    if (!medio) {
-        e.preventDefault();
-        alert('Por favor seleccione un medio de pago');
-        document.getElementById('medio').focus();
-        return false;
-    }
-    
-    // Confirmar antes de enviar
-    if (!confirm('¿Está seguro de registrar esta operación?')) {
-        e.preventDefault();
-        return false;
-    }
-});
+    actualizar();
+    monto.focus();
+})();
 </script>
-{% endblock %} 
+{% endblock %}

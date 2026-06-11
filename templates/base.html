@@ -1843,6 +1843,7 @@
         const LEGACY_KEYS = ['sisagentChatHistory', 'sisagentChatTriggerPhrase', 'sisagentChatContinuousListening'];
 
         document.addEventListener('DOMContentLoaded', function() {
+            console.error('[trigger] base.html JS cargado — version voiceTrigger-v3-esES');
             const panel = document.getElementById('chatbot-panel');
             const toggleBtn = document.getElementById('chatbot-toggle');
             const closeBtn = document.getElementById('chatbot-close');
@@ -2629,6 +2630,7 @@
                 liveMode = 'starting';
                 liveTranscript = '';
                 liveReady = false;
+                stopTriggerListener();
 
                 // 1. Pedir el stream del mic
                 try {
@@ -2777,7 +2779,10 @@
                     int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
                 try {
-                    liveWs.send(int16.buffer);
+                    const bytes = new Uint8Array(int16.buffer);
+                    let binary = '';
+                    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                    liveWs.send(JSON.stringify({ type: 'audio', data: btoa(binary) }));
                     liveLastSendTime = Date.now();
                 } catch (e) {
                     console.warn('[live] send falló:', e);
@@ -2964,14 +2969,9 @@
                     renderProducts([result.producto]);
                     return;
                 }
-                // Propuestas → tarjeta de confirmación visual (además del audio del modelo)
-                if (toolName && toolName.indexOf('proponer_') === 0) {
-                    renderProposal({
-                        accion: toolName,
-                        args: toolArgs,
-                        preview: result,
-                        texto: '',
-                    });
+                // Acciones proponer_* ahora se ejecutan directo — el modelo ya anuncia el resultado por voz/texto,
+                // no se muestra tarjeta adicional.
+                if (toolName && toolName.indexOf('proponer_') === 0 && result.mensaje) {
                     return;
                 }
                 if ((toolName === 'confirmar_ultima_accion' || toolName === 'ejecutar_accion_confirmada')
@@ -3105,6 +3105,10 @@
                     input.placeholder = input.dataset.origPlaceholder;
                     delete input.dataset.origPlaceholder;
                 }
+                // Reactivar la escucha de la frase activadora (Web Speech API)
+                if (triggerListeningEnabled) {
+                    setTimeout(startTriggerListener, 500);
+                }
             }
 
             // ===== Listener de frase activadora (VAD + chunks a Gemini) =====
@@ -3114,14 +3118,8 @@
             let _trigMaxLevelSeen = 0;
             const TRIGGER_VAD_DYNAMIC = { threshold: TRIGGER_VAD_THRESHOLD };
 
+
             async function startTriggerListener() {
-                // REDIRIGE al sistema Live API (transcripción streaming, latencia ~200ms)
-                if (liveMode === 'off') {
-                    await liveStart('listening');
-                }
-                return;
-            }
-            async function _LEGACY_startTriggerListener() {
                 if (triggerActive || recordingActive) return;
                 if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices) return;
                 try {
@@ -3290,10 +3288,21 @@
             }
 
             function stopTriggerListener() {
-                // REDIRIGE al sistema Live API
-                if (liveMode === 'listening') {
-                    liveStop('manual');
+                triggerActive = false;
+                if (triggerRafId) { try { cancelAnimationFrame(triggerRafId); } catch (e) {} triggerRafId = null; }
+                if (triggerRecorder && triggerRecorder.state !== 'inactive') {
+                    try { triggerRecorder.stop(); } catch (e) {}
                 }
+                triggerRecorder = null;
+                if (triggerStream) {
+                    try { triggerStream.getTracks().forEach(function(t) { t.stop(); }); } catch (e) {}
+                    triggerStream = null;
+                }
+                if (triggerCtx) {
+                    try { triggerCtx.close(); } catch (e) {}
+                    triggerCtx = null;
+                }
+                triggerAnalyser = null;
                 listeningBadge.classList.add('d-none');
             }
 
@@ -3453,74 +3462,6 @@
                     try { dictation.stop(); } catch (e) {}
                 }
             }
-            function startTriggerListener() {
-                if (!SpeechRecognitionImpl || !triggerListeningEnabled || dictationActive) return;
-                if (triggerRecognition) {
-                    try { triggerRecognition.stop(); } catch (e) {}
-                }
-                triggerRecognition = new SpeechRecognitionImpl();
-                triggerRecognition.lang = 'es-ES';
-                triggerRecognition.continuous = true;
-                triggerRecognition.interimResults = true;
-                triggerRecognition.onresult = function(event) {
-                    const trigger = (triggerPhrase || '').toLowerCase().trim();
-                    if (!trigger) return;
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const transcript = event.results[i][0].transcript.toLowerCase().trim();
-                        if (transcript.indexOf(trigger) !== -1) {
-                            try { triggerRecognition.stop(); } catch (e) {}
-                            if (panel.classList.contains('d-none')) {
-                                panel.classList.remove('d-none');
-                            }
-                            if (panel.classList.contains('settings-open')) closeSettings();
-                            setTimeout(startDictation, 250);
-                            return;
-                        }
-                    }
-                };
-                triggerRecognition.onerror = function(ev) {
-                    console.warn('[chatbot] trigger recognition error:', ev.error);
-                    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-                        triggerListeningEnabled = false;
-                        saveVoiceSettings();
-                        listeningBadge.classList.add('d-none');
-                        if (typeof showNotification === 'function') {
-                            showNotification('Permiso de micrófono denegado. Escucha continua desactivada. Otorga el permiso desde el candado en la barra de URL y vuelve a activarla.', 'warning');
-                        }
-                    } else if (ev.error === 'audio-capture') {
-                        triggerListeningEnabled = false;
-                        saveVoiceSettings();
-                        listeningBadge.classList.add('d-none');
-                        if (typeof showNotification === 'function') {
-                            showNotification('Sin micrófono detectado. Escucha continua desactivada.', 'warning');
-                        }
-                    }
-                    // 'no-speech', 'aborted', 'network' se reintentan via onend.
-                };
-                triggerRecognition.onend = function() {
-                    if (triggerListeningEnabled && !dictationActive) {
-                        // Auto-reinicio (el API se detiene periódicamente)
-                        setTimeout(function() {
-                            if (triggerListeningEnabled && !dictationActive) {
-                                try { triggerRecognition.start(); } catch (e) {}
-                            }
-                        }, 500);
-                    }
-                };
-                try {
-                    triggerRecognition.start();
-                    listeningBadge.classList.remove('d-none');
-                    listeningBadge.title = 'Escuchando: "' + triggerPhrase + '"';
-                } catch (e) {
-                    // ya estaba corriendo
-                }
-            }
-            function _LEGACY_stopTriggerListener() {
-                if (triggerRecognition) {
-                    try { triggerRecognition.stop(); } catch (e) {}
-                }
-                listeningBadge.classList.add('d-none');
-            }
             */
             // === Fin del bloque legacy ===
 
@@ -3551,17 +3492,11 @@
                 }
                 // Usar Gemini Live (WebSocket streaming) para latencia ~200ms
                 if (liveMode === 'dictating') {
-                    // Click durante dictado = pasar a listening (sigue WS abierta) o cerrar
-                    if (triggerListeningEnabled) {
-                        switchLiveToListening();
-                    } else {
-                        liveStop('manual');
-                    }
-                } else if (liveMode === 'listening') {
-                    // Click durante listening = dictado manual inmediato (sin esperar trigger)
-                    switchLiveToDictating();
-                } else {
-                    // No hay sesión activa → arrancar una
+                    // Click durante dictado = cerrar (la escucha de frase se reactiva en liveCleanup)
+                    liveStop('manual');
+                } else if (liveMode === 'off') {
+                    // No hay sesión activa → arrancar dictado, pausando la escucha de frase
+                    stopTriggerListener();
                     liveStart('dictating');
                 }
             });

@@ -91,6 +91,32 @@ def format_peru_datetime_short(dt):
     t = _to_peru(dt)
     return t.strftime('%d/%m/%Y %H:%M') if t else ""
 
+import math as _math
+
+# Configuración del cálculo automático de comisión
+# Regla: cada COMISION_RANGO_SOLES de monto → +COMISION_POR_RANGO de comisión.
+# Por defecto: cada 100 soles → 1 sol de comisión (configurable solo cambiando estas constantes).
+COMISION_RANGO_SOLES = 100
+COMISION_POR_RANGO = 1.0
+
+def calcular_comision_sugerida(monto):
+    """Devuelve la comisión sugerida por la fórmula ⌈monto/rango⌉ × comision_por_rango.
+
+    Ejemplos con rango=100, comision=1:
+        monto=50   → 1.0  (un rango completo, aunque parcial)
+        monto=100  → 1.0
+        monto=101  → 2.0  (rebasa al siguiente rango)
+        monto=2000 → 20.0
+    """
+    try:
+        m = float(monto or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if m <= 0:
+        return 0.0
+    rangos = _math.ceil(m / COMISION_RANGO_SOLES)
+    return round(rangos * COMISION_POR_RANGO, 2)
+
 print("[*] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO arrancando...")
 print("[!] OPTIMIZACIONES: Caché, Compresión, Consultas optimizadas, Paginación")
 print("[~] Actualización Railway - " + get_peru_time().strftime("%Y-%m-%d %H:%M:%S"))
@@ -260,6 +286,10 @@ class Operacion(db.Model):
     hora = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
+    # Nuevos campos para comisión automática + auditoría del override manual
+    comision_sugerida = db.Column(db.Numeric(10, 2), nullable=True)  # lo que sugirió la fórmula
+    comision_manual = db.Column(db.Boolean, default=False)            # TRUE si el operador la cambió
+    motivo_descuento = db.Column(db.String(200), nullable=True)       # texto libre opcional
 
 class MedioPago(db.Model):
     __tablename__ = 'medio_pago'
@@ -839,15 +869,34 @@ def eliminar_operacion(operacion_id):
 def registrar_operacion():
     if request.method == 'POST':
         monto = float(request.form['monto'])
-        comision = float(request.form['comision'])
         medio = request.form['medio']
-        
+
+        # Comisión: si comision_manual=true, usar el valor del form (override del operador).
+        # Si no, recalcular la sugerida server-side (ignorar lo que mande el cliente).
+        es_manual = (request.form.get('comision_manual') or '').lower() in ('true', '1', 'on', 'yes')
+        comision_sugerida = calcular_comision_sugerida(monto)
+        if es_manual:
+            try:
+                comision = float(request.form.get('comision') or comision_sugerida)
+            except (TypeError, ValueError):
+                comision = comision_sugerida
+            if comision < 0:
+                comision = 0.0
+            motivo = (request.form.get('motivo_descuento') or '').strip() or None
+            # Si terminó siendo igual a la sugerida, no la marcamos como manual
+            if abs(comision - comision_sugerida) < 0.001:
+                es_manual = False
+                motivo = None
+        else:
+            comision = comision_sugerida
+            motivo = None
+
         # Determinar sucursal
         if current_user.es_admin:
             sucursal_id = int(request.form.get('sucursal_id'))
         else:
             sucursal_id = current_user.sucursal_id
-        
+
         # Crear operación con hora Perú (wall-clock naive, sin tzinfo)
         hora_peru = get_peru_time().replace(tzinfo=None)
         operacion = Operacion(
@@ -856,9 +905,12 @@ def registrar_operacion():
             medio=medio,
             usuario_id=current_user.id,
             sucursal_id=sucursal_id,
-            hora=hora_peru  # Guardar como naive Perú para consistencia
+            hora=hora_peru,
+            comision_sugerida=comision_sugerida,
+            comision_manual=es_manual,
+            motivo_descuento=motivo,
         )
-        
+
         db.session.add(operacion)
         
         # Actualizar comisiones
@@ -912,8 +964,26 @@ def registrar_operacion():
     sucursales = []
     if current_user.es_admin:
         sucursales = get_sucursales_activas_cache()
-    
-    return render_template('registrar_operacion.html', sucursales=sucursales)
+
+    # Cargar medios habilitados para la sucursal del usuario (o todos si admin)
+    if current_user.es_admin:
+        medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    else:
+        medios_pago = MedioPago.query.join(
+            MedioSucursal,
+            (MedioSucursal.medio_pago_id == MedioPago.id) &
+            (MedioSucursal.sucursal_id == current_user.sucursal_id) &
+            (MedioSucursal.activo == True)
+        ).filter(MedioPago.activo == True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+        if not medios_pago:
+            medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+
+    # Constantes para que el JS conozca la fórmula sin duplicarla
+    return render_template('registrar_operacion.html',
+                           sucursales=sucursales,
+                           medios_pago=medios_pago,
+                           comision_rango=COMISION_RANGO_SOLES,
+                           comision_por_rango=COMISION_POR_RANGO)
 
 @app.route('/operaciones/<int:operacion_id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -928,20 +998,40 @@ def editar_operacion(operacion_id):
         monto_anterior = float(operacion.comision)
         sucursal_anterior = operacion.sucursal_id
         monto = float(request.form['monto'])
-        comision = float(request.form['comision'])
         medio = request.form['medio']
-        
+
+        # Misma lógica que registrar: comisión auto vs manual
+        es_manual = (request.form.get('comision_manual') or '').lower() in ('true', '1', 'on', 'yes')
+        comision_sugerida = calcular_comision_sugerida(monto)
+        if es_manual:
+            try:
+                comision = float(request.form.get('comision') or comision_sugerida)
+            except (TypeError, ValueError):
+                comision = comision_sugerida
+            if comision < 0:
+                comision = 0.0
+            motivo = (request.form.get('motivo_descuento') or '').strip() or None
+            if abs(comision - comision_sugerida) < 0.001:
+                es_manual = False
+                motivo = None
+        else:
+            comision = comision_sugerida
+            motivo = None
+
         if current_user.es_admin:
             nueva_sucursal_id = int(request.form.get('sucursal_id'))
         else:
             nueva_sucursal_id = operacion.sucursal_id
-        
+
         # Actualizar operación
         operacion.monto = monto
         operacion.comision = comision
         operacion.medio = medio
         operacion.sucursal_id = nueva_sucursal_id
-        
+        operacion.comision_sugerida = comision_sugerida
+        operacion.comision_manual = es_manual
+        operacion.motivo_descuento = motivo
+
         # Actualizar comisiones (lógica simplificada)
         db.session.commit()
         
@@ -950,8 +1040,23 @@ def editar_operacion(operacion_id):
         
         flash('Operación actualizada exitosamente', 'success')
         return redirect(url_for('operaciones'))
-    
-    # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
+
+    # GET: cargar medios habilitados para la sucursal de la operación
+    medios_pago = MedioPago.query.join(
+        MedioSucursal,
+        (MedioSucursal.medio_pago_id == MedioPago.id) &
+        (MedioSucursal.sucursal_id == operacion.sucursal_id) &
+        (MedioSucursal.activo == True)
+    ).filter(MedioPago.activo == True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    if not medios_pago:
+        # Si no hay restricciones por sucursal aún, traer todos los activos
+        medios_pago = MedioPago.query.filter_by(activo=True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
+    return render_template('editar_operacion.html',
+                           operacion=operacion,
+                           medios_pago=medios_pago,
+                           comision_rango=COMISION_RANGO_SOLES,
+                           comision_por_rango=COMISION_POR_RANGO)
+
 
 @app.route('/api/sucursal/<int:sucursal_id>/medios')
 @login_required
@@ -2462,6 +2567,7 @@ SYSTEM_PROMPT_CHATBOT = """Eres el asistente virtual de SISAGENT, un sistema de 
 
 Modelo de datos del sistema:
 - Operaciones bancarias: cada operación tiene `monto` (S/), `comision` (S/) y `medio` (uno de: EFECTIVO, TARJETA, TRANSFERENCIA, YAPE, PLIN, etc. — depende de qué medios estén habilitados en cada sucursal). NO existe un campo "tipo de operación"; las operaciones se categorizan únicamente por su medio de pago. La comisión se acumula en totales diarios y mensuales por sucursal.
+- Comisión AUTOMÁTICA: el sistema calcula la comisión sola (S/1 por cada S/100 de monto, redondeado hacia arriba). NUNCA pidas ni menciones la comisión al registrar una operación, salvo que el usuario explícitamente pida un descuento o un monto de comisión distinto al automático (p.ej. "es casero, cóbrale solo 1 sol", "hazle un descuento"). En ese caso SÍ pasa `comision` (el valor manual) y `motivo_descuento` a `proponer_operacion`.
 - Productos: cada producto tiene `nombre`, `descripcion`, `precio` (S/), `stock` (unidades), una `foto` opcional, y pertenece a una `sucursal`. Solo los administradores pueden crear/editar productos.
 - Ventas: cada venta es de un producto x cantidad al precio actual. Al registrarse, descuenta stock automáticamente y suma a la caja de ventas del día (separada de las comisiones bancarias).
 
@@ -2544,16 +2650,17 @@ _HERRAMIENTAS_DECLARACIONES = [
     },
     {
         "name": "proponer_operacion",
-        "description": "PROPONE registrar una operacion bancaria. Valida el medio de pago y devuelve una vista previa — el sistema mostrara una tarjeta de confirmacion al usuario. NO ejecuta la operacion directamente. Usala cuando el usuario pida registrar una operacion bancaria.",
+        "description": "PROPONE registrar una operacion bancaria. La comision se calcula automaticamente (S/1 por cada S/100 de monto, redondeado hacia arriba) — NO incluyas el parametro 'comision' a menos que el usuario pida explicitamente un descuento o un monto de comision distinto al automatico (p.ej. 'cobrale solo 1 sol de comision', 'es casero, hazle descuento'). Si el usuario pide una comision manual, incluye tambien 'motivo_descuento' explicando por que. Valida el medio de pago y devuelve una vista previa — el sistema mostrara una tarjeta de confirmacion al usuario. NO ejecuta la operacion directamente.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "monto": {"type": "number", "description": "Monto de la operacion en soles (S/)"},
-                "comision": {"type": "number", "description": "Comision cobrada en soles (S/)"},
+                "comision": {"type": "number", "description": "(Opcional) Comision MANUAL en soles, solo si el usuario pidio explicitamente una distinta a la automatica"},
+                "motivo_descuento": {"type": "string", "description": "(Opcional) Motivo de la comision manual, requerido si se incluye 'comision'"},
                 "medio": {"type": "string", "description": "Medio de pago (EFECTIVO, YAPE, PLIN, TARJETA, TRANSFERENCIA, etc.)"},
                 "sucursal_id": {"type": "integer", "description": "(Opcional, solo admin) ID de la sucursal"},
             },
-            "required": ["monto", "comision", "medio"],
+            "required": ["monto", "medio"],
         },
     },
     # ===== Read-only: búsquedas para localizar entidades a editar/eliminar =====
@@ -2895,17 +3002,35 @@ def _tool_proponer_venta(args, usuario):
 
 
 def _tool_proponer_operacion(args, usuario):
-    """Valida una operacion bancaria y devuelve preview. NO toca la BD."""
+    """Valida una operacion bancaria y devuelve preview. NO toca la BD.
+
+    La comisión es OPCIONAL: si no se pasa, se usa la auto-calculada.
+    Si se pasa, se usa como override manual (con motivo opcional).
+    """
     try:
         monto = float(args.get("monto"))
-        comision = float(args.get("comision"))
     except (TypeError, ValueError):
-        raise ValueError("Monto y comision deben ser numeros.")
-
+        raise ValueError("Monto debe ser un numero.")
     if monto <= 0:
         raise ValueError("El monto debe ser mayor a 0.")
-    if comision < 0:
-        raise ValueError("La comision no puede ser negativa.")
+
+    comision_sugerida = calcular_comision_sugerida(monto)
+    es_manual = False
+    motivo = None
+    if "comision" in args and args.get("comision") is not None:
+        try:
+            comision = float(args.get("comision"))
+        except (TypeError, ValueError):
+            raise ValueError("Comision debe ser un numero.")
+        if comision < 0:
+            raise ValueError("La comision no puede ser negativa.")
+        if abs(comision - comision_sugerida) > 0.001:
+            es_manual = True
+            motivo = (args.get("motivo_descuento") or "").strip() or None
+        else:
+            comision = comision_sugerida
+    else:
+        comision = comision_sugerida
 
     medio_arg = (args.get("medio") or "").strip().upper()
     if not medio_arg:
@@ -2920,7 +3045,10 @@ def _tool_proponer_operacion(args, usuario):
         (MedioSucursal.activo == True)
     ).filter(
         MedioPago.activo == True,
-        db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+        db.or_(
+            db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+            db.func.upper(MedioPago.nombre_completo) == medio_arg,
+        ),
     ).first()
 
     if not medio_valido:
@@ -2939,6 +3067,9 @@ def _tool_proponer_operacion(args, usuario):
     return {
         "monto": monto,
         "comision": comision,
+        "comision_sugerida": comision_sugerida,
+        "comision_manual": es_manual,
+        "motivo_descuento": motivo,
         "medio": medio_valido.nombre_abreviado,
         "sucursal_id": sucursal.id,
         "sucursal_nombre": sucursal.nombre,
@@ -3415,14 +3546,29 @@ def _ejecutar_operacion_validada(args, usuario):
     """Re-valida desde cero y registra la operacion bancaria. Espeja registrar_operacion."""
     try:
         monto = float(args.get("monto"))
-        comision = float(args.get("comision"))
     except (TypeError, ValueError):
-        raise ValueError("Monto y comision invalidos.")
-
+        raise ValueError("Monto invalido.")
     if monto <= 0:
         raise ValueError("El monto debe ser mayor a 0.")
-    if comision < 0:
-        raise ValueError("La comision no puede ser negativa.")
+
+    # Comisión: sugerida por defecto, override si se pasó manualmente
+    comision_sugerida = calcular_comision_sugerida(monto)
+    es_manual = bool(args.get("comision_manual"))
+    if "comision" in args and args.get("comision") is not None:
+        try:
+            comision = float(args.get("comision"))
+        except (TypeError, ValueError):
+            raise ValueError("Comision invalida.")
+        if comision < 0:
+            raise ValueError("La comision no puede ser negativa.")
+        if abs(comision - comision_sugerida) < 0.001:
+            es_manual = False
+        else:
+            es_manual = True
+    else:
+        comision = comision_sugerida
+        es_manual = False
+    motivo = (args.get("motivo_descuento") or "").strip() or None if es_manual else None
 
     medio_arg = (args.get("medio") or "").strip().upper()
     if not medio_arg:
@@ -3437,7 +3583,10 @@ def _ejecutar_operacion_validada(args, usuario):
         (MedioSucursal.activo == True)
     ).filter(
         MedioPago.activo == True,
-        db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+        db.or_(
+            db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+            db.func.upper(MedioPago.nombre_completo) == medio_arg,
+        ),
     ).first()
 
     if not medio_valido:
@@ -3451,6 +3600,9 @@ def _ejecutar_operacion_validada(args, usuario):
         usuario_id=usuario.id,
         sucursal_id=sucursal.id,
         hora=hora_peru,
+        comision_sugerida=comision_sugerida,
+        comision_manual=es_manual,
+        motivo_descuento=motivo,
     )
     db.session.add(operacion)
 
@@ -3478,13 +3630,17 @@ def _ejecutar_operacion_validada(args, usuario):
     db.session.commit()
     clear_cache()
 
+    sufijo = f' (manual{", motivo: " + motivo if motivo else ""})' if es_manual else ' (auto)'
     return {
         "mensaje": (
-            f'Operacion registrada: S/ {monto:.2f} con comision S/ {comision:.2f} '
+            f'Operacion registrada: S/ {monto:.2f} con comision S/ {comision:.2f}{sufijo} '
             f'via {medio_valido.nombre_abreviado} en {sucursal.nombre}.'
         ),
         "monto": monto,
         "comision": comision,
+        "comision_sugerida": comision_sugerida,
+        "comision_manual": es_manual,
+        "motivo_descuento": motivo,
         "medio": medio_valido.nombre_abreviado,
         "sucursal_nombre": sucursal.nombre,
     }
@@ -3700,6 +3856,21 @@ def _ejecutar_crear_sucursal_validada(args, usuario):
     return {"mensaje": f'Sucursal "{nombre}" creada exitosamente.', "sucursal_id": suc.id}
 
 
+# Dispatcher de ejecutores directos: nombre de proponer_* -> funcion validada que ejecuta de inmediato.
+# Usado tanto por el chat de texto como por voz para evitar el paso de confirmacion.
+EJECUTORES_DIRECTOS = {
+    'proponer_venta':              _ejecutar_venta_validada,
+    'proponer_operacion':          _ejecutar_operacion_validada,
+    'proponer_crear_producto':     _ejecutar_crear_producto_validado,
+    'proponer_editar_producto':    _ejecutar_editar_producto_validado,
+    'proponer_eliminar_producto':  _ejecutar_eliminar_producto_validado,
+    'proponer_eliminar_operacion': _ejecutar_eliminar_operacion_validada,
+    'proponer_eliminar_venta':     _ejecutar_eliminar_venta_validada,
+    'proponer_crear_usuario':      _ejecutar_crear_usuario_validado,
+    'proponer_crear_sucursal':     _ejecutar_crear_sucursal_validada,
+}
+
+
 # ---------- Cliente Anthropic (lazy) y loop de function-calling ----------
 
 _anthropic_client = None
@@ -3807,11 +3978,25 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                 "productos": productos_buscados,
             }
 
-        # Si alguna herramienta requiere confirmacion, detener y devolver propuesta
+        # Todas las acciones que mutan datos se ejecutan directo, sin pedir confirmacion.
         for tu in tool_uses:
             spec = CHATBOT_TOOLS.get(tu.name)
             if not spec:
                 continue
+            if tu.name in EJECUTORES_DIRECTOS:
+                try:
+                    resultado = EJECUTORES_DIRECTOS[tu.name](tu.input or {}, usuario)
+                except ValueError as e:
+                    return {
+                        "tipo": "texto",
+                        "texto": f"No se pudo completar la accion: {str(e)}",
+                        "productos": productos_buscados,
+                    }
+                return {
+                    "tipo": "texto",
+                    "texto": resultado.get("mensaje", "Listo, se completo correctamente."),
+                    "productos": productos_buscados,
+                }
             if spec["requires_confirmation"]:
                 try:
                     preview = spec["handler"](tu.input or {}, usuario)
@@ -3951,19 +4136,7 @@ def api_chat_confirmar_accion():
         if not CHATBOT_TOOLS[accion]['requires_confirmation']:
             return jsonify({'success': False, 'message': 'Esta accion no requiere confirmacion.'}), 400
 
-        # Dispatcher de acciones que requieren confirmación
-        dispatcher = {
-            'proponer_venta':             _ejecutar_venta_validada,
-            'proponer_operacion':         _ejecutar_operacion_validada,
-            'proponer_crear_producto':    _ejecutar_crear_producto_validado,
-            'proponer_editar_producto':   _ejecutar_editar_producto_validado,
-            'proponer_eliminar_producto': _ejecutar_eliminar_producto_validado,
-            'proponer_eliminar_operacion':_ejecutar_eliminar_operacion_validada,
-            'proponer_eliminar_venta':    _ejecutar_eliminar_venta_validada,
-            'proponer_crear_usuario':     _ejecutar_crear_usuario_validado,
-            'proponer_crear_sucursal':    _ejecutar_crear_sucursal_validada,
-        }
-        ejecutor = dispatcher.get(accion)
+        ejecutor = EJECUTORES_DIRECTOS.get(accion)
         if not ejecutor:
             return jsonify({'success': False, 'message': f'Accion {accion} no implementada.'}), 400
 
@@ -4191,6 +4364,7 @@ SYSTEM_PROMPT_GEMINI_LIVE = """Eres el asistente vocal de SISAGENT, un sistema b
 
 Modelo de datos:
 - Operaciones bancarias: monto (S/), comision (S/), medio (EFECTIVO, YAPE, PLIN, TARJETA, BCP, IBK, BBVA, etc. — segun lo habilitado por sucursal). NO existe campo "tipo de operacion".
+- Comision AUTOMATICA: se calcula sola (S/1 por cada S/100 de monto, redondeado hacia arriba). Al registrar una operacion NUNCA preguntes ni menciones la comision, salvo que el usuario pida explicitamente un descuento o una comision distinta a la automatica (ej: "es casero, cobrale solo 1 sol", "hazle descuento"). En ese caso pasa `comision` y `motivo_descuento` a `proponer_operacion`.
 - Productos: nombre, descripcion, precio, stock, foto, sucursal asignada.
 - Ventas: producto x cantidad, descuenta stock, suma a caja diaria.
 - Sucursales: nombre, direccion, medios de pago habilitados.
@@ -4200,12 +4374,12 @@ Tu rol:
 1. Consultar informacion (productos, operaciones, ventas, usuarios, sucursales, medios de pago).
 2. Ejecutar acciones (registrar/eliminar venta u operacion, crear/editar/eliminar producto, crear usuario, crear sucursal, etc.) — PERO con confirmacion verbal del usuario.
 
-Reglas criticas para acciones que MUTAN datos (registrar/eliminar/crear/editar):
-1. Llamas PRIMERO a la funcion `proponer_*` correspondiente (ej: `proponer_venta`, `proponer_eliminar_operacion`). El servidor valida y guarda la propuesta. Devuelve un preview con los datos exactos.
-2. ANUNCIAS verbalmente lo que vas a hacer y preguntas "¿Confirmas?", "¿Quieres que lo haga?", "¿Lo registro?".
-3. ESPERAS a que el usuario responda.
-4. Si el usuario dice "si", "confirma", "dale", "hazlo", "ejecuta", "esta bien" → llamas a `confirmar_ultima_accion` (SIN argumentos — el servidor recuerda la propuesta).
-5. Si el usuario dice "no", "cancela", "espera", "nada", "olvidalo" → llamas a `cancelar_ultima_accion` (SIN argumentos) y respondes "Cancelado".
+Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar venta, operacion, producto, usuario, sucursal, etc. via `proponer_*`):
+- NO pidas confirmacion bajo ninguna circunstancia. En cuanto el usuario de la instruccion con los datos minimos necesarios, llama DIRECTAMENTE a la funcion `proponer_*` correspondiente. El servidor ejecuta la accion de inmediato (validando permisos y datos) y te devuelve el resultado final.
+- NUNCA digas "¿Confirmas?", "¿Lo registro?", "¿Quieres que lo haga?" ni similares. Simplemente anuncia el resultado: "Listo, registre la operacion de...", "Hecho, elimine la venta...", "Listo, cree el producto...".
+- Las funciones `confirmar_ultima_accion` y `cancelar_ultima_accion` ya NO se usan — no las llames nunca.
+- Si el resultado viene con "error", informa el motivo al usuario sin reintentar solo.
+- Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
 - Habla siempre en español natural, conciso, amable. Como un colega que te ayuda.
 - Si falta informacion para una accion (ej: "registra una venta" sin decir producto), pregunta amablemente "¿Cual producto y cuanta cantidad?".
 - Los permisos los maneja el servidor automaticamente. Si una accion falla por permisos, transmite el mensaje al usuario con tono empatico.
@@ -4435,7 +4609,7 @@ def ws_voice_live(browser_ws):
                     "voiceConfig": {
                         "prebuiltVoiceConfig": {"voiceName": "Aoede"}
                     },
-                    "languageCode": "es-US",
+                    "languageCode": "es-419",
                 },
             },
             "systemInstruction": {
@@ -4485,7 +4659,7 @@ def ws_voice_live(browser_ws):
                 if data is None:
                     continue
                 if isinstance(data, (bytes, bytearray)):
-                    # Audio PCM crudo del navegador
+                    # Audio PCM crudo del navegador (formato legado, binario)
                     msg = {
                         "realtimeInput": {
                             "mediaChunks": [{
@@ -4499,19 +4673,34 @@ def ws_voice_live(browser_ws):
                     except Exception:
                         break
                 else:
-                    # Mensaje de control en texto
+                    # Mensaje de control/audio en texto (JSON)
                     try:
                         ctl = json.loads(data)
                     except Exception:
                         continue
                     if ctl.get('type') == 'close':
                         break
+                    elif ctl.get('type') == 'audio' and ctl.get('data'):
+                        msg = {
+                            "realtimeInput": {
+                                "mediaChunks": [{
+                                    "mimeType": "audio/pcm;rate=16000",
+                                    "data": ctl['data'],
+                                }]
+                            }
+                        }
+                        try:
+                            gemini_ws.send(json.dumps(msg))
+                        except Exception:
+                            break
                     elif ctl.get('type') == 'end_input':
                         try:
                             gemini_ws.send(json.dumps({"realtimeInput": {"audioStreamEnd": True}}))
                         except Exception:
                             break
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(f"[live] browser_to_gemini error: {type(e).__name__}: {e}")
         finally:
             stop_event.set()
@@ -4545,6 +4734,14 @@ def ws_voice_live(browser_ws):
                                 resultado = _confirmar_ultima_accion_voz(user_id)
                             elif fc_name == 'cancelar_ultima_accion':
                                 resultado = _cancelar_ultima_accion_voz(user_id)
+                            elif fc_name in EJECUTORES_DIRECTOS:
+                                # Ejecutar directo, sin pedir confirmacion (igual que en chat de texto)
+                                with app.app_context():
+                                    usuario_voz = Usuario.query.get(user_id)
+                                    try:
+                                        resultado = EJECUTORES_DIRECTOS[fc_name](fc_args, usuario_voz)
+                                    except ValueError as e:
+                                        resultado = {"error": str(e)}
                             else:
                                 resultado = _ejecutar_tool_voz(fc_name, fc_args, user_id)
                                 # Si fue un proponer_* exitoso, cachear para confirmar despues
@@ -4633,6 +4830,8 @@ def ws_voice_live(browser_ws):
                     except Exception:
                         break
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(f"[live] gemini_to_browser error: {type(e).__name__}: {e}")
         finally:
             stop_event.set()
@@ -4755,11 +4954,17 @@ def init_db():
                 if os.environ.get('DATABASE_URL'):
                     try:
                         with db.engine.begin() as _conn:
-                            # Usar CONCURRENTLY si es PostgreSQL 9.2+
                             _conn.execute(text(
                                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS session_token VARCHAR(36)"))
                             _conn.execute(text(
                                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS ultimo_acceso TIMESTAMP"))
+                            # Comisión automática + auditoría
+                            _conn.execute(text(
+                                "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS comision_sugerida NUMERIC(10,2)"))
+                            _conn.execute(text(
+                                "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS comision_manual BOOLEAN DEFAULT FALSE"))
+                            _conn.execute(text(
+                                "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS motivo_descuento VARCHAR(200)"))
                         print("[OK] Columnas verificadas (PostgreSQL)")
                     except Exception as e:
                         if "already exists" in str(e) or "duplicate" in str(e).lower():
@@ -4771,6 +4976,10 @@ def init_db():
                     for col_sql in [
                         "ALTER TABLE usuario ADD COLUMN session_token VARCHAR(36)",
                         "ALTER TABLE usuario ADD COLUMN ultimo_acceso TIMESTAMP",
+                        # Columnas nuevas para comisión automática + auditoría de override
+                        "ALTER TABLE operacion ADD COLUMN comision_sugerida NUMERIC(10,2)",
+                        "ALTER TABLE operacion ADD COLUMN comision_manual BOOLEAN DEFAULT 0",
+                        "ALTER TABLE operacion ADD COLUMN motivo_descuento VARCHAR(200)",
                     ]:
                         try:
                             with db.engine.connect() as _conn:
@@ -4857,4 +5066,5 @@ except Exception as e:
 # Para desarrollo local
 if __name__ == '__main__':
     print("[OK] SISAGENT Flask COMPATIBLE ULTRA OPTIMIZADO cargado completamente - Listo para produccion!")
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port, threaded=True)

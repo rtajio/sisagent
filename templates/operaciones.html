@@ -63,59 +63,90 @@
                     </h4>
                 </div>
                 <div class="card-body">
-                    <!-- Formulario de Nueva Operación -->
-                    <form method="POST" action="{{ url_for('registrar_operacion') }}" class="mb-4">
-                        <div class="row">
+                    <!-- Formulario de Nueva Operación con comisión automática -->
+                    <form method="POST" action="{{ url_for('registrar_operacion') }}" class="mb-4" id="formInlineOperacion">
+                        <div class="row g-2 align-items-end">
                             <div class="col-md-2">
                                 <label for="monto" class="form-label">Monto (S/)</label>
-                                <input type="number" 
-                                       class="form-control" 
-                                       id="monto" 
-                                       name="monto" 
-                                       step="0.01" 
-                                       min="0" 
-                                       required>
-                            </div>
-                            <div class="col-md-2">
-                                <label for="comision" class="form-label">Comisión (S/)</label>
-                                <input type="number" 
-                                       class="form-control" 
-                                       id="comision" 
-                                       name="comision" 
-                                       step="0.01" 
-                                       min="0" 
-                                       required>
+                                <input type="number"
+                                       class="form-control form-control-lg"
+                                       id="monto"
+                                       name="monto"
+                                       step="0.01"
+                                       min="0"
+                                       required
+                                       tabindex="1"
+                                       autofocus>
                             </div>
                             <div class="col-md-2">
                                 <label for="medio" class="form-label">Medio de Pago</label>
-                                <select class="form-select" id="medio" name="medio" required>
+                                <select class="form-select form-select-lg" id="medio" name="medio" required tabindex="2">
                                     <option value="">Seleccionar...</option>
                                     {% for medio in medios_pago %}
                                         <option value="{{ medio.nombre_abreviado }}">{{ medio.nombre_abreviado }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
+                            {% if current_user.es_admin %}
                             <div class="col-md-2">
-                                {% if current_user.es_admin %}
                                 <label for="sucursal_id" class="form-label">Sucursal</label>
-                                <select class="form-select" id="sucursal_id" name="sucursal_id" required>
+                                <select class="form-select form-select-lg" id="sucursal_id" name="sucursal_id" required tabindex="-1">
                                     <option value="">Seleccionar...</option>
                                     {% for sucursal in sucursales %}
                                         <option value="{{ sucursal.id }}">{{ sucursal.nombre }}</option>
                                     {% endfor %}
                                 </select>
-                                {% endif %}
                             </div>
-
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <button type="submit" class="btn btn-success" id="btnRegistrar">
-                                    <i class="fas fa-plus me-2"></i>
-                                    Registrar Operación
+                            {% endif %}
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-success btn-lg w-100" id="btnRegistrar" tabindex="3">
+                                    <i class="fas fa-plus me-1"></i>Registrar Operación
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Comisión sugerida (informativa, NO está en el flujo de TAB) -->
+                        <div id="comisionAutoRow" class="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 py-2 mt-3 rounded"
+                             style="background: rgba(160,132,90,0.10); border-left: 3px solid #A0845A;">
+                            <div class="d-flex align-items-baseline flex-wrap gap-2">
+                                <span style="font-size: 11px; font-weight: 600; color: #A0845A; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    <i class="fas fa-calculator me-1"></i> Comisión sugerida:
+                                </span>
+                                <span id="comisionAutoMonto" style="font-size: 1.4rem; font-weight: 500; color: #28a745; line-height: 1;">S/ 0.00</span>
+                            </div>
+                            <button type="button" id="btnModificarComision" class="btn btn-sm btn-link p-0" tabindex="-1"
+                                    style="text-decoration: underline; font-size: 12px;">
+                                <i class="fas fa-pen me-1"></i>modificar
+                            </button>
+                        </div>
+
+                        <!-- Modo manual (oculto, solo se abre con click) -->
+                        <div id="comisionManualSection" class="px-3 py-2 mt-2 rounded"
+                             style="display:none; background: rgba(255,193,7,0.10); border-left: 3px solid #ffc107;">
+                            <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                                <span style="font-size: 11px; font-weight: 600; color: #ffc107; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    <i class="fas fa-pen me-1"></i> Manual:
+                                </span>
+                                <input type="number" id="comisionManualInput" name="comision"
+                                       step="0.01" min="0" value="0"
+                                       style="width: 110px; background: rgba(0,0,0,0.25); border: 1px solid #504840; color: #ffc107; font-weight: 500; font-size: 1.2rem; padding: 4px 10px; border-radius: 4px;">
+                                <span style="font-size: 12px;">vs sugerida <strong id="comisionVsSugerida">S/ 0.00</strong></span>
+                                <span id="comisionDiffBadge" class="badge"
+                                      style="background: rgba(0,0,0,0.25); color: #ffc107; font-size: 11px; padding: 3px 8px; border-radius: 12px; border: 1px solid #504840; font-weight: 500;">−S/ 0.00</span>
+                                <button type="button" id="btnRevertirSugerida" class="btn btn-sm btn-link p-0 ms-auto" tabindex="-1"
+                                        style="color: #ffc107; text-decoration: underline; font-size: 11px;">
+                                    <i class="fas fa-rotate-left me-1"></i>usar sugerida
+                                </button>
+                            </div>
+                            <input type="text" name="motivo_descuento" id="motivoDescuento" maxlength="200"
+                                   class="form-control form-control-sm"
+                                   placeholder="Motivo (opcional): cliente recurrente, descuento promocional...">
+                            <p class="mt-2 mb-0" style="font-size: 11px; color: #ffc107; opacity: 0.85;">
+                                <i class="fas fa-circle-info me-1"></i>Esta operación quedará marcada para revisión del administrador
+                            </p>
+                        </div>
+
+                        <input type="hidden" name="comision_manual" id="comisionManualFlag" value="false">
                     </form>
 
                     <!-- Tabla de Operaciones -->
@@ -147,6 +178,13 @@
                                     </td>
                                     <td class="text-success font-weight-bold" id="comision-{{ operacion.id }}">
                                         S/ {{ "%.2f"|format(operacion.comision) }}
+                                        {% if operacion.comision_manual %}
+                                        <span class="badge ms-1"
+                                              style="background: #ffc107; color: #1A1714; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 8px; vertical-align: middle; cursor: help;"
+                                              title="Comisión modificada manualmente{% if operacion.comision_sugerida %} (sugerida era S/ {{ '%.2f'|format(operacion.comision_sugerida) }}){% endif %}{% if operacion.motivo_descuento %} — Motivo: {{ operacion.motivo_descuento }}{% endif %}">
+                                            <i class="fas fa-pen" style="font-size: 8px;"></i> MANUAL
+                                        </span>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         {% set medio_obj = medios_pago|selectattr('nombre_abreviado', 'equalto', operacion.medio)|first %}
@@ -250,6 +288,95 @@ const mediosPago = [
         { valor: '{{ medio.nombre_abreviado }}', nombre: '{{ medio.nombre_completo }}' },
     {% endfor %}
 ];
+
+// ============= Lógica de comisión automática del form inline =============
+(function() {
+    const RANGO = 100;
+    const POR_RANGO = 1.0;
+    const monto = document.getElementById('monto');
+    const medio = document.getElementById('medio');
+    const sucursal = document.getElementById('sucursal_id');
+    const autoMonto = document.getElementById('comisionAutoMonto');
+    const autoRow = document.getElementById('comisionAutoRow');
+    const manualSection = document.getElementById('comisionManualSection');
+    const btnModificar = document.getElementById('btnModificarComision');
+    const btnRevertir = document.getElementById('btnRevertirSugerida');
+    const manualInput = document.getElementById('comisionManualInput');
+    const vsSugerida = document.getElementById('comisionVsSugerida');
+    const diffBadge = document.getElementById('comisionDiffBadge');
+    const motivoInput = document.getElementById('motivoDescuento');
+    const flag = document.getElementById('comisionManualFlag');
+    const form = document.getElementById('formInlineOperacion');
+
+    if (!monto || !form) return; // página no tiene el form inline
+
+    function calcularSugerida(m) {
+        const n = parseFloat(m) || 0;
+        if (n <= 0) return 0;
+        return Math.ceil(n / RANGO) * POR_RANGO;
+    }
+    function fmt(n) { return 'S/ ' + Number(n).toFixed(2); }
+
+    function actualizar() {
+        const m = parseFloat(monto.value) || 0;
+        const sugerida = calcularSugerida(m);
+        autoMonto.textContent = fmt(sugerida);
+        vsSugerida.textContent = fmt(sugerida);
+
+        const esManual = manualSection.style.display !== 'none';
+        if (esManual) {
+            const c = parseFloat(manualInput.value) || 0;
+            const d = c - sugerida;
+            if (Math.abs(d) < 0.005) {
+                diffBadge.textContent = 'igual a sugerida';
+                diffBadge.style.color = '#A89A82';
+            } else if (d < 0) {
+                diffBadge.textContent = '−' + fmt(Math.abs(d));
+                diffBadge.style.color = '#7CC76F';
+            } else {
+                diffBadge.textContent = '+' + fmt(d);
+                diffBadge.style.color = '#C77163';
+            }
+        }
+    }
+
+    btnModificar.addEventListener('click', function() {
+        const sugerida = calcularSugerida(monto.value);
+        manualInput.value = sugerida.toFixed(2);
+        autoRow.style.display = 'none';
+        manualSection.style.display = '';
+        flag.value = 'true';
+        actualizar();
+        manualInput.focus();
+        manualInput.select();
+    });
+    btnRevertir.addEventListener('click', function() {
+        autoRow.style.display = '';
+        manualSection.style.display = 'none';
+        motivoInput.value = '';
+        flag.value = 'false';
+        actualizar();
+        monto.focus();
+    });
+
+    [monto, manualInput, motivoInput].forEach(function(el) {
+        if (el) el.addEventListener('input', actualizar);
+    });
+
+    form.addEventListener('submit', function(e) {
+        const m = parseFloat(monto.value);
+        if (!m || m <= 0) { e.preventDefault(); alert('Ingresa un monto válido mayor a 0'); monto.focus(); return; }
+        if (!medio.value) { e.preventDefault(); alert('Selecciona un medio de pago'); medio.focus(); return; }
+        if (sucursal && !sucursal.value) { e.preventDefault(); alert('Selecciona una sucursal'); sucursal.focus(); return; }
+        if (flag.value !== 'true') {
+            // Cuando NO está en modo manual, aseguramos que el input tenga name="comision" con valor sugerido
+            if (manualInput.name !== 'comision') manualInput.name = 'comision';
+            manualInput.value = calcularSugerida(m).toFixed(2);
+        }
+    });
+
+    actualizar();
+})();
 
 // OPTIMIZACIÓN ULTRA FLUIDA: Debounce para funciones frecuentes
 function debounce(func, wait) {
