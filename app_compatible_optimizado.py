@@ -173,6 +173,8 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # WebSocket (para Gemini Live API streaming)
+# ping/pong de keepalive para que el proxy de Railway no corte la conexion por inactividad
+app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 25}
 sock = Sock(app)
 
 # OPTIMIZACIÓN ULTRA: Inicializar caché y compresión
