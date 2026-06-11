@@ -4324,9 +4324,9 @@ def api_chat_transcribir():
         frase_hint = (request.form.get('frase_hint') or '').strip()[:80]
         if frase_hint:
             prompt_transcripcion += (
-                f' MUY IMPORTANTE: el audio puede contener la frase de activacion "{frase_hint}". '
-                f'Si lo que se oye se parece a esa frase aunque sea de forma aproximada, '
-                f'transcribela EXACTAMENTE como "{frase_hint}".'
+                f' Una frase frecuente del usuario es "{frase_hint}"; si REALMENTE la dice, transcribela bien. '
+                f'Pero NO la inventes: si no se dijo claramente, NO la escribas. '
+                f'Ante silencio, ruido, respiracion o audio dudoso, devuelve SIEMPRE cadena vacia — nunca adivines.'
             )
 
         # "Entrenamiento" del usuario: vocabulario propio (nombres, jerga) sesga la transcripcion;
