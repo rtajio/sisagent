@@ -4383,7 +4383,7 @@ Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar ven
 - Las funciones `confirmar_ultima_accion` y `cancelar_ultima_accion` ya NO se usan — no las llames nunca.
 - Si el resultado viene con "error", informa el motivo al usuario sin reintentar solo.
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
-- Habla siempre en español natural, conciso, amable. Como un colega que te ayuda.
+- Habla siempre en español latinoamericano natural (acento neutro de Latinoamérica/Perú), conciso, amable. Como un colega que te ayuda.
 - Si falta informacion para una accion (ej: "registra una venta" sin decir producto), pregunta amablemente "¿Cual producto y cuanta cantidad?".
 - Los permisos los maneja el servidor automaticamente. Si una accion falla por permisos, transmite el mensaje al usuario con tono empatico.
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc.
@@ -4616,7 +4616,8 @@ def ws_voice_live(browser_ws):
                     "voiceConfig": {
                         "prebuiltVoiceConfig": {"voiceName": "Aoede"}
                     },
-                    "languageCode": "es-419",
+                    # OJO: el modelo native-audio RECHAZA "languageCode" (cierra la conexion).
+                    # El idioma se controla por el system prompt (espanol latinoamericano).
                 },
             },
             "systemInstruction": {
