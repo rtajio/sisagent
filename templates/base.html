@@ -3197,7 +3197,7 @@
                 _trigLastLogTime = 0;
                 listeningBadge.classList.remove('d-none');
                 listeningBadge.title = 'Escuchando: "' + triggerPhrase + '"';
-                console.log('[chatbot] Trigger listener iniciado, frase="' + triggerPhrase + '", umbral=' + TRIGGER_VAD_DYNAMIC.threshold);
+                console.log('[chatbot] Trigger listener iniciado, frase="' + triggerPhrase + '", umbral=' + TRIGGER_VAD_DYNAMIC.threshold + ' | build=v3-fuzzy-hint');
 
                 function tick() {
                     if (!triggerActive || !triggerAnalyser) return;
@@ -3292,6 +3292,8 @@
                 console.log('[chatbot] Trigger: enviando ' + blob.size + ' bytes a Gemini');
                 const fd = new FormData();
                 fd.append('audio', blob, 'trigger.webm');
+                // Pista para el transcriptor: qué frase buscamos (vocabulary biasing)
+                fd.append('frase_hint', triggerPhrase || '');
                 try {
                     const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd });
                     const data = await resp.json();

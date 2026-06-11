@@ -4241,18 +4241,32 @@ def api_chat_transcribir():
         import httpx as _httpx_local
         url = f'{GEMINI_API_URL}/{GEMINI_TRANSCRIPTION_MODEL}:generateContent'
         gemini_headers = {"x-goog-api-key": app.config["GEMINI_API_KEY"]}
+
+        # "Entrenamiento" por prompt (vocabulary biasing): contexto del dominio bancario
+        # + la frase activadora del usuario como pista, para que el modelo transcriba
+        # bien palabras como "soles", "Yape", montos, y reconozca la frase aunque suene aproximada.
+        prompt_transcripcion = (
+            'Transcribe el siguiente audio en espanol (Peru). CONTEXTO: es un sistema bancario y de '
+            'ventas; vocabulario frecuente: soles, monto, comision, operacion, venta, producto, stock, '
+            'sucursal, registrar, eliminar, Yape, Plin, BCP, Interbank, BBVA, efectivo, tarjeta, '
+            'transferencia. Los montos se dicen como numero + "soles" (ej: "cien soles", "600 soles"). '
+            'Devuelve EXCLUSIVAMENTE el texto transcrito tal cual se dijo, sin comentarios, sin notas, '
+            'sin formato Markdown, sin marcas de tiempo, sin formato de subtitulos (nada de "00:00" ni '
+            '"-->"), sin prefijos como "Transcripcion:". Si no hay voz audible o solo hay ruido, '
+            'devuelve cadena vacia.'
+        )
+        frase_hint = (request.form.get('frase_hint') or '').strip()[:80]
+        if frase_hint:
+            prompt_transcripcion += (
+                f' MUY IMPORTANTE: el audio puede contener la frase de activacion "{frase_hint}". '
+                f'Si lo que se oye se parece a esa frase aunque sea de forma aproximada, '
+                f'transcribela EXACTAMENTE como "{frase_hint}".'
+            )
+
         payload = {
             'contents': [{
                 'parts': [
-                    {
-                        'text': (
-                            'Transcribe el siguiente audio en espanol (Peru). Devuelve EXCLUSIVAMENTE el texto '
-                            'transcrito tal cual se dijo, sin comentarios, sin notas, sin formato Markdown, '
-                            'sin marcas de tiempo, sin formato de subtitulos (nada de "00:00" ni "-->"), '
-                            'sin prefijos como "Transcripcion:". Si no hay voz audible o solo hay ruido, '
-                            'devuelve cadena vacia.'
-                        )
-                    },
+                    {'text': prompt_transcripcion},
                     {
                         'inline_data': {
                             'mime_type': 'audio/wav',
@@ -4387,6 +4401,12 @@ Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar ven
 - Los permisos los maneja el servidor automaticamente. Si una accion falla por permisos, transmite el mensaje al usuario con tono empatico.
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc.
 - NO inventes IDs ni datos. Si no sabes el ID, busca primero.
+
+Interpretacion del AUDIO (espanol peruano, dominio bancario — MUY IMPORTANTE):
+- Los montos se dicen como numero + "soles": "cien soles" = S/100, "seiscientos soles" = S/600, "mil quinientos soles" = S/1500. Si oyes un numero seguido de algo que suena a "soles", SIEMPRE es un monto en S/ — NUNCA lo interpretes como "si, en soles" ni otra frase.
+- Medios de pago frecuentes que vas a oir: Yape, Plin, BCP, Interbank (IBK), BBVA, Scotiabank, efectivo, tarjeta, transferencia. Acepta nombre completo o abreviatura.
+- Palabras frecuentes del dominio: operacion, venta, comision, producto, stock, sucursal, registrar, eliminar, editar, monto, descuento.
+- Si una palabra del audio suena ambigua, interpretala primero contra este vocabulario bancario antes que como frase suelta de conversacion.
 
 Cuando termines una accion exitosa, confirma brevemente: "Listo, registre la venta" o "Eliminada la operacion de cincuenta soles". Sin ser repetitivo."""
 
