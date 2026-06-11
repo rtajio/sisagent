@@ -2860,7 +2860,7 @@
                             liveStop('manual');
                             return;
                         }
-                        input.value = liveTranscript.trim();
+                        input.value = humanizeToNumeric(liveTranscript.trim());
                         // Si el modelo había comenzado a responder y el usuario habla → barge-in
                         if (liveCurrentBotMessageDiv) {
                             liveStopPlayback();
@@ -2887,14 +2887,14 @@
                     if (liveMode === 'dictating') {
                         // turn_complete = el MODELO terminó su respuesta. Commiteamos
                         // tanto el mensaje del usuario (si hubo) como el del bot al historial.
-                        const userText = liveTranscript.trim();
+                        const userText = humanizeToNumeric(liveTranscript.trim());
                         if (userText && !liveUserMessageCommitted) {
                             renderTextMessage(userText, 'user');
                             history.push({ role: 'user', content: userText });
                             liveUserMessageCommitted = true;
                         }
                         if (liveModelTranscript && liveCurrentBotMessageDiv) {
-                            history.push({ role: 'assistant', content: liveModelTranscript });
+                            history.push({ role: 'assistant', content: humanizeToNumeric(liveModelTranscript) });
                             saveHistory();
                         }
                         // Reset para el próximo turno (mantenemos modo dictating)
@@ -2932,7 +2932,7 @@
                         liveCurrentBotMessageDiv.className = 'chatbot-msg bot';
                         messagesEl.appendChild(liveCurrentBotMessageDiv);
                     }
-                    liveCurrentBotMessageDiv.textContent = liveModelTranscript;
+                    liveCurrentBotMessageDiv.textContent = humanizeToNumeric(liveModelTranscript);
                     scrollToBottom();
                     return;
                 }
@@ -2993,7 +2993,7 @@
                 // Si había una respuesta a medio camino, dejar lo dicho hasta ahora
                 if (liveCurrentBotMessageDiv) {
                     if (liveModelTranscript) {
-                        history.push({ role: 'assistant', content: liveModelTranscript });
+                        history.push({ role: 'assistant', content: humanizeToNumeric(liveModelTranscript) });
                         saveHistory();
                     }
                     liveCurrentBotMessageDiv = null;
@@ -3169,6 +3169,56 @@
             // Normaliza para comparar frases: minúsculas, sin tildes, sin puntuación, sin espacios.
             function normFrase(s) {
                 return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.,!?¿¡;:'"()-]/g, '').replace(/\s+/g, '').toLowerCase();
+            }
+
+            // ===== Display: convierte texto hablado a numérico SOLO para mostrar en el chat de voz =====
+            // ("doscientos soles" -> "S/ 200", "cuatro con veintinueve pe eme" -> "04:29pm").
+            // No afecta lo que se manda al modelo ni el audio; es puramente cosmético.
+            const _NUMW = {
+                cero:0,un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,
+                diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,dieciseis:16,diecisiete:17,dieciocho:18,diecinueve:19,
+                veinte:20,veintiuno:21,veintiun:21,veintidos:22,veintitres:23,veinticuatro:24,veinticinco:25,veintiseis:26,veintisiete:27,veintiocho:28,veintinueve:29,
+                treinta:30,cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90,
+                cien:100,ciento:100,doscientos:200,trescientos:300,cuatrocientos:400,quinientos:500,seiscientos:600,setecientos:700,ochocientos:800,novecientos:900,
+                doscientas:200,trescientas:300,cuatrocientas:400,quinientas:500,seiscientas:600,setecientas:700,ochocientas:800,novecientas:900,mil:1000
+            };
+            const _NWORD = "(?:mil|ciento|cien|doscient[oa]s|trescient[oa]s|cuatrocient[oa]s|quinient[oa]s|seiscient[oa]s|setecient[oa]s|ochocient[oa]s|novecient[oa]s|noventa|ochenta|setenta|sesenta|cincuenta|cuarenta|treinta|veintiuno|veintiún|veintiun|veintid[oó]s|veintitr[eé]s|veinticuatro|veinticinco|veintis[eé]is|veintisiete|veintiocho|veintinueve|veinte|diecinueve|dieciocho|diecisiete|diecis[eé]is|quince|catorce|trece|doce|once|diez|nueve|ocho|siete|seis|cinco|cuatro|tres|dos|una|uno|un|cero)";
+            const _NPHRASE = "(?:\\d+|" + _NWORD + "(?:\\s+(?:y\\s+)?" + _NWORD + ")*)";
+            const _MERID = "(pe\\s*eme|a\\s*eme|p\\.?\\s*m\\.?|a\\.?\\s*m\\.?|de\\s+la\\s+tarde|de\\s+la\\s+noche|de\\s+la\\s+ma[nñ]ana|de\\s+la\\s+madrugada|del?\\s+mediod[ií]a)";
+            function _parseNum(frag) {
+                frag = (frag || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+                if (/^\d+$/.test(frag)) return parseInt(frag, 10);
+                let total = 0, cur = 0, any = false;
+                for (const w of frag.split(/\s+/)) {
+                    if (w === 'y' || w === '') continue;
+                    if (w === 'mil') { cur = (cur === 0 ? 1 : cur); total += cur * 1000; cur = 0; any = true; }
+                    else if (_NUMW[w] != null) { cur += _NUMW[w]; any = true; }
+                    else return null;
+                }
+                return any ? total + cur : null;
+            }
+            function _pad2(n) { return (n < 10 ? '0' : '') + n; }
+            function humanizeToNumeric(text) {
+                if (!text || typeof text !== 'string') return text;
+                let out = text;
+                out = out.replace(new RegExp("(" + _NPHRASE + ")\\s+con\\s+(" + _NPHRASE + ")\\s+" + _MERID, "gi"),
+                    function (m, hStr, mStr, merid) {
+                        let h = _parseNum(hStr), mm = _parseNum(mStr);
+                        if (h == null || mm == null || h > 23 || mm > 59) return m;
+                        const md = merid.toLowerCase();
+                        let ampm = /pe\s*eme|p\.?\s*m|tarde|noche|mediod/.test(md) ? 'pm' : 'am';
+                        if (h === 0) h = 12;
+                        if (h > 12) { h -= 12; ampm = 'pm'; }
+                        return _pad2(h) + ":" + _pad2(mm) + ampm;
+                    });
+                out = out.replace(new RegExp("(" + _NPHRASE + ")\\s+(?:soles|sol)\\b(?:\\s+con\\s+(" + _NPHRASE + ")\\s+(?:centavos?|c[eé]ntimos?))?", "gi"),
+                    function (m, nStr, cStr) {
+                        const n = _parseNum(nStr);
+                        if (n == null) return m;
+                        if (cStr != null) { const c = _parseNum(cStr); if (c != null) return "S/ " + n + "." + _pad2(c); }
+                        return "S/ " + n;
+                    });
+                return out;
             }
 
             // Distancia de edición (Levenshtein) con tope: corta apenas supera `cap`.
