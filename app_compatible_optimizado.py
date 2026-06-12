@@ -4931,7 +4931,7 @@ Modelo de datos:
 - Comision AUTOMATICA: se calcula sola (S/1 por cada S/100 de monto, redondeado hacia arriba). Al registrar una operacion NUNCA preguntes ni menciones la comision, salvo que el usuario pida explicitamente un descuento o una comision distinta a la automatica (ej: "es casero, cobrale solo 1 sol", "hazle descuento"). En ese caso pasa `comision` y `motivo_descuento` a `proponer_operacion`.
 - Productos: nombre, descripcion, precio, stock, foto, sucursal asignada.
 - Ventas: producto x cantidad, descuenta stock, suma a caja diaria.
-- Sucursales: nombre, direccion, medios de pago habilitados.
+- Sucursales: nombre, direccion, medios de pago habilitados. IMPORTANTE: Si el usuario menciona una sucursal que no reconoces de la lista que te pasé, NO la rechaces. Asume que existe. El usuario sabe su propia sucursal mejor que tú — no discutas por el nombre.
 - Usuarios: rol (admin global, admin de sucursal, usuario regular).
 
 Tu rol:
