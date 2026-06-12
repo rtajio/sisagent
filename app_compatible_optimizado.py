@@ -2505,76 +2505,54 @@ def exportar_pdf():
             Paragraph(f'SISAGENT &nbsp;|&nbsp; Período: {fecha_ini} → {fecha_fin} &nbsp;|&nbsp; {len(filas)} registros', sub_style),
         ]
 
-        # Estilos para celdas con texto largo (permiten wrap automático)
-        cell_style = ParagraphStyle('Cell', parent=styles['Normal'],
-                                    fontSize=8, fontName='Helvetica',
-                                    textColor=C_DARK, leading=10, alignment=TA_LEFT)
-        cell_right = ParagraphStyle('CellR', parent=cell_style, alignment=TA_RIGHT)
-
-        def P(text, style=None):
-            """Convierte texto a Paragraph para que haga word-wrap en la celda."""
-            return Paragraph(str(text) if text else '', style or cell_style)
-
-        # Tabla de datos
-        # Landscape A4: 297mm - 24mm márgenes = 273mm útiles
-        # N°:8 | Fecha:22 | Hora:17 | Monto:24 | Comisión:24 | Medio:52 | Usuario:62 | Sucursal:62 = 271mm
+        # OPTIMIZACIÓN: no usar Paragraph para filas de datos (muy lento)
+        # Solo strings + estilos simples en TableStyle
         col_headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
         col_widths  = [8*mm, 22*mm, 17*mm, 24*mm, 24*mm, 52*mm, 62*mm, 62*mm]
 
         table_data = [col_headers]
         for i, f in enumerate(filas, 1):
+            # Usar strings directos - mucho más rápido que Paragraphs
             table_data.append([
                 str(i),
                 f['fecha'],
                 f['hora'],
-                P(f'S/ {f["monto"]:,.2f}', cell_right),
-                P(f'S/ {f["comision"]:,.2f}', cell_right),
-                P(f['medio']),
-                P(f['usuario']),
-                P(f['sucursal']),
+                f'S/ {f["monto"]:,.2f}',
+                f'S/ {f["comision"]:,.2f}',
+                str(f['medio'])[:15],
+                str(f['usuario'])[:15],
+                str(f['sucursal'])[:15],
             ])
 
         # Fila de totales
         total_m = sum(f['monto'] for f in filas)
         total_c = sum(f['comision'] for f in filas)
-        tot_style = ParagraphStyle('Tot', parent=cell_right,
-                                   fontName='Helvetica-Bold', textColor=C_LIGHT)
-        table_data.append(['', '', P('TOTAL', ParagraphStyle('TotC', parent=cell_style,
-                           fontName='Helvetica-Bold', textColor=C_LIGHT, alignment=TA_CENTER)),
-                           P(f'S/ {total_m:,.2f}', tot_style),
-                           P(f'S/ {total_c:,.2f}', tot_style),
+        table_data.append(['', '', 'TOTAL',
+                           f'S/ {total_m:,.2f}',
+                           f'S/ {total_c:,.2f}',
                            '', '', ''])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=1)
 
-        # Estilos de la tabla
+        # OPTIMIZACIÓN: estilos mínimos (sin filas alternadas que ralentizan)
         style_cmds = [
             ('BACKGROUND',  (0, 0), (-1, 0),  C_DARK),
             ('TEXTCOLOR',   (0, 0), (-1, 0),  C_LIGHT),
             ('FONTNAME',    (0, 0), (-1, 0),  'Helvetica-Bold'),
             ('FONTSIZE',    (0, 0), (-1, 0),  9),
             ('ALIGN',       (0, 0), (-1, 0),  'CENTER'),
-            ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONTSIZE',    (0, 1), (-1, -1), 8),
-            ('FONTNAME',    (0, 1), (-1, -1), 'Helvetica'),
-            ('ALIGN',       (3, 1), (4, -1),  'RIGHT'),
-            ('ALIGN',       (0, 1), (0, -1),  'CENTER'),
-            ('GRID',        (0, 0), (-1, -1), 0.4, C_MUTED),
-            ('TOPPADDING',  (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING',(0, 0), (-1, -1), 3),
-            ('LEFTPADDING', (0, 0), (-1, -1), 3),
-            ('RIGHTPADDING',(0, 0), (-1, -1), 3),
-            ('ROWHEIGHT',   (0, 0), (-1, 0),  16),
+            ('FONTSIZE',    (0, 1), (-1, -2), 8),
+            ('ALIGN',       (3, 1), (4, -2),  'RIGHT'),
+            ('GRID',        (0, 0), (-1, -1), 0.3, C_MUTED),
+            ('TOPPADDING',  (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING',(0, 0), (-1, -1), 2),
             # Fila de totales
             ('BACKGROUND',  (0, -1), (-1, -1), C_ACCENT),
             ('TEXTCOLOR',   (0, -1), (-1, -1), C_LIGHT),
             ('FONTNAME',    (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('ROWHEIGHT',   (0, -1), (-1, -1), 16),
         ]
-        # Filas alternadas
-        for row_i in range(1, len(table_data) - 1):
-            bg = C_ROW_ODD if row_i % 2 == 1 else C_ROW_EVEN
-            style_cmds.append(('BACKGROUND', (0, row_i), (-1, row_i), bg))
 
         t.setStyle(TableStyle(style_cmds))
         elements.append(t)
