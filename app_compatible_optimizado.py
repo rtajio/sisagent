@@ -2705,11 +2705,11 @@ Tu ÚNICO propósito es ejecutar funciones. NO TIENES OPCIÓN DE RESPONDER EN TE
 Cuando el usuario escribe algo, tu respuesta DEBE ser una llamada a función. PUNTO.
 
 Si el usuario dice: "registra una venta de 2 Coca-Colas"
-Tu respuesta: LLAMA proponer_venta({producto_id: <ID>, cantidad: 2})
+Tu respuesta: LLAMA registrar_venta({producto_id: <ID>, cantidad: 2})
 NO hagas esto: "Voy a registrar..." o "Perfecto, preparé..." — ESO ESTÁ PROHIBIDO.
 
 Si el usuario dice: "dame una operación de S/ 500 por Yape"
-Tu respuesta: LLAMA proponer_operacion({monto: 500, medio: "YAPE"})
+Tu respuesta: LLAMA registrar_operacion({monto: 500, medio: "YAPE"})
 NO hagas esto: "¿Confirmas?" o "Está bien?" — ESO ESTÁ PROHIBIDO.
 
 El servidor ejecuta TODO automáticamente. Tu trabajo es LLAMAR LA FUNCIÓN. No validar, no confirmar, solo llamar.
@@ -2720,7 +2720,7 @@ Eres el asistente virtual de SISAGENT, un sistema de gestión bancaria y de vent
 
 Modelo de datos del sistema:
 - Operaciones bancarias: cada operación tiene `monto` (S/), `comision` (S/) y `medio` (uno de: EFECTIVO, TARJETA, TRANSFERENCIA, YAPE, PLIN, etc. — depende de qué medios estén habilitados en cada sucursal). NO existe un campo "tipo de operación"; las operaciones se categorizan únicamente por su medio de pago. La comisión se acumula en totales diarios y mensuales por sucursal.
-- Comisión AUTOMÁTICA: el sistema calcula la comisión sola (S/1 por cada S/100 de monto, redondeado hacia arriba). NUNCA pidas ni menciones la comisión al registrar una operación, salvo que el usuario explícitamente pida un descuento o un monto de comisión distinto al automático (p.ej. "es casero, cóbrale solo 1 sol", "hazle un descuento"). En ese caso SÍ pasa `comision` (el valor manual) y `motivo_descuento` a `proponer_operacion`.
+- Comisión AUTOMÁTICA: el sistema calcula la comisión sola (S/1 por cada S/100 de monto, redondeado hacia arriba). NUNCA pidas ni menciones la comisión al registrar una operación, salvo que el usuario explícitamente pida un descuento o un monto de comisión distinto al automático (p.ej. "es casero, cóbrale solo 1 sol", "hazle un descuento"). En ese caso SÍ pasa `comision` (el valor manual) y `motivo_descuento` a `registrar_operacion`.
 - Productos: cada producto tiene `nombre`, `descripcion`, `precio` (S/), `stock` (unidades), una `foto` opcional, y pertenece a una `sucursal`. Solo los administradores pueden crear/editar productos.
 - Ventas: cada venta es de un producto x cantidad al precio actual. Al registrarse, descuenta stock automáticamente y suma a la caja de ventas del día (separada de las comisiones bancarias).
 
@@ -2731,8 +2731,8 @@ Tu rol — eres SOLO un ejecutor de funciones. Debes:
 
 ABSOLUTAMENTE PROHIBIDO:
 - NUNCA escribas "voy a registrar", "preparé", "perfecto", "confirmas", "está bien" o cualquier texto que describa una acción.
-- Si el usuario dice "registra una venta de 2 Coca-Colas", tu ÚNICA respuesta es llamar `proponer_venta({producto_id: ..., cantidad: 2})`. NO ESCRIBAS NADA MÁS.
-- Si el usuario dice "operación de S/ 500 por Yape", tu ÚNICA respuesta es llamar `proponer_operacion({monto: 500, medio: "YAPE"})`. NO HABLES SOBRE ELLO.
+- Si el usuario dice "registra una venta de 2 Coca-Colas", tu ÚNICA respuesta es llamar `registrar_venta({producto_id: ..., cantidad: 2})`. NO ESCRIBAS NADA MÁS.
+- Si el usuario dice "operación de S/ 500 por Yape", tu ÚNICA respuesta es llamar `registrar_operacion({monto: 500, medio: "YAPE"})`. NO HABLES SOBRE ELLO.
 - NUNCA pidas confirmación. NUNCA preguntes "¿confirmas?". El servidor ejecuta todo automáticamente.
 
 EL SERVIDOR EJECUTA INMEDIATAMENTE:
@@ -2750,7 +2750,7 @@ Reglas críticas:
 - Responde SIEMPRE en español, conciso, amable y orientado a la acción. En cuanto tengas los datos necesarios para una acción, invoca la herramienta `proponer_*` directamente en ese turno.
 - FORMATO en texto: los montos van con símbolo y número ("S/ 200", no "doscientos soles"). Las horas van en formato 12h compacto "HH:MMam/pm" (ej: "04:29pm", "09:05am") — NO las escribas con palabras ("las cuatro con veintinueve de la tarde").
 - ZONA HORARIA CRÍTICA: SIEMPRE usa la zona horaria de Perú (UTC-5) que viene en el contexto. NUNCA uses UTC ni conversiones de zona horaria. Si el usuario pregunta la hora, repite exactamente la hora del contexto injected (ej: si dice "09:05am Perú", responde "son las nueve con cinco a eme", no otra hora).
-- EDITAR vs REGISTRAR: Si el usuario dice "era de S/ X" o "cambiar a Y soles" DESPUÉS de registrar una operación, usa `proponer_editar_operacion` con el ID de la última operación (NO registres una nueva). Solo usa `proponer_operacion` para operaciones nuevas.
+- EDITAR vs REGISTRAR: Si el usuario dice "era de S/ X" o "cambiar a Y soles" DESPUÉS de registrar una operación, usa `editar_operacion` con el ID de la última operación (NO registres una nueva). Solo usa `registrar_operacion` para operaciones nuevas.
 """
 
 
@@ -2798,8 +2798,8 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_venta",
-        "description": "Registra una venta DIRECTAMENTE. Valida el producto, descuenta stock, suma a caja y confirma. NO preguntes '¿confirmas?' — el servidor ejecuta de inmediato. Usala cuando el usuario pida registrar una venta.",
+        "name": "registrar_venta",
+        "description": "Registra una venta DIRECTAMENTE. Valida el producto, descuenta stock, suma a caja y confirma. Usala cuando el usuario pida registrar una venta.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -2811,7 +2811,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_operacion",
+        "name": "registrar_operacion",
         "description": "Registra una operacion bancaria DIRECTAMENTE. La comision se calcula automaticamente (S/1 por cada S/100 de monto, redondeado hacia arriba) — NO incluyas el parametro 'comision' a menos que el usuario pida explicitamente un descuento o un monto de comision distinto al automatico (p.ej. 'cobrale solo 1 sol de comision', 'es casero, hazle descuento'). Si el usuario pide una comision manual, incluye tambien 'motivo_descuento' explicando por que. El servidor ejecuta de inmediato — NO preguntes '¿confirmas?'.",
         "input_schema": {
             "type": "object",
@@ -2867,7 +2867,7 @@ _HERRAMIENTAS_DECLARACIONES = [
     },
     # ===== Acciones que requieren confirmación =====
     {
-        "name": "proponer_crear_producto",
+        "name": "crear_producto",
         "description": "PROPONE crear un producto nuevo en el inventario. Solo admin o admin de sucursal pueden. NO ejecuta — muestra tarjeta de confirmación.",
         "input_schema": {
             "type": "object",
@@ -2882,7 +2882,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_editar_producto",
+        "name": "editar_producto",
         "description": "PROPONE editar campos de un producto. Solo admin o admin de sucursal en su sucursal. NO ejecuta — muestra tarjeta de confirmación.",
         "input_schema": {
             "type": "object",
@@ -2897,7 +2897,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_eliminar_producto",
+        "name": "eliminar_producto",
         "description": "PROPONE eliminar (desactivar) un producto del inventario. Solo admin o admin de sucursal en su sucursal. NO ejecuta.",
         "input_schema": {
             "type": "object",
@@ -2908,7 +2908,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_eliminar_operacion",
+        "name": "eliminar_operacion",
         "description": "PROPONE eliminar una operación bancaria. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las que él registró. NO ejecuta.",
         "input_schema": {
             "type": "object",
@@ -2919,7 +2919,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_editar_operacion",
+        "name": "editar_operacion",
         "description": "PROPONE editar una operación existente (cambiar monto y/o comisión). Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas. NO ejecuta.",
         "input_schema": {
             "type": "object",
@@ -2933,7 +2933,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_eliminar_venta",
+        "name": "eliminar_venta",
         "description": "PROPONE eliminar una venta (devuelve el stock al inventario). Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas. NO ejecuta.",
         "input_schema": {
             "type": "object",
@@ -2944,7 +2944,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_crear_usuario",
+        "name": "crear_usuario",
         "description": "PROPONE crear un usuario nuevo. Solo admin global puede elegir rol/sucursal; admin de sucursal solo crea usuarios regulares en su propia sucursal. NO ejecuta.",
         "input_schema": {
             "type": "object",
@@ -2959,7 +2959,7 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
-        "name": "proponer_crear_sucursal",
+        "name": "crear_sucursal",
         "description": "PROPONE crear una sucursal nueva. Solo admin global. NO ejecuta.",
         "input_schema": {
             "type": "object",
@@ -3132,7 +3132,7 @@ def _tool_medios_de_pago(args, usuario):
 
 # ---------- Handlers de herramientas de PROPUESTA (no ejecutan, solo validan) ----------
 
-def _tool_proponer_venta(args, usuario):
+def _tool_registrar_venta(args, usuario):
     """Valida una venta y devuelve preview. NO toca la BD."""
     producto_id = args.get("producto_id")
     cantidad = args.get("cantidad")
@@ -3177,7 +3177,7 @@ def _tool_proponer_venta(args, usuario):
     }
 
 
-def _tool_proponer_operacion(args, usuario):
+def _tool_registrar_operacion(args, usuario):
     """Valida una operacion bancaria y devuelve preview. NO toca la BD.
 
     La comisión es OPCIONAL: si no se pasa, se usa la auto-calculada.
@@ -3408,7 +3408,7 @@ def _tool_listar_sucursales(args, usuario):
 
 # ---------- Handlers de propuesta (validan, devuelven preview, NO tocan BD) ----------
 
-def _tool_proponer_crear_producto(args, usuario):
+def _tool_crear_producto(args, usuario):
     if not usuario.es_admin_o_admin_sucursal():
         raise ValueError("No tienes permisos para gestionar el inventario.")
     nombre = (args.get("nombre") or "").strip()
@@ -3441,7 +3441,7 @@ def _tool_proponer_crear_producto(args, usuario):
     }
 
 
-def _tool_proponer_editar_producto(args, usuario):
+def _tool_editar_producto(args, usuario):
     if not usuario.es_admin_o_admin_sucursal():
         raise ValueError("No tienes permisos para gestionar el inventario.")
     pid = args.get("producto_id")
@@ -3496,7 +3496,7 @@ def _tool_proponer_editar_producto(args, usuario):
     }
 
 
-def _tool_proponer_eliminar_producto(args, usuario):
+def _tool_eliminar_producto(args, usuario):
     if not usuario.es_admin_o_admin_sucursal():
         raise ValueError("No tienes permisos para gestionar el inventario.")
     pid = args.get("producto_id")
@@ -3520,7 +3520,7 @@ def _tool_proponer_eliminar_producto(args, usuario):
     }
 
 
-def _tool_proponer_eliminar_operacion(args, usuario):
+def _tool_eliminar_operacion(args, usuario):
     op_id = args.get("operacion_id")
     if not op_id:
         raise ValueError("Falta operacion_id.")
@@ -3548,7 +3548,7 @@ def _tool_proponer_eliminar_operacion(args, usuario):
     }
 
 
-def _tool_proponer_editar_operacion(args, usuario):
+def _tool_editar_operacion(args, usuario):
     """Valida cambios a una operación bancaria y devuelve preview. NO toca la BD."""
     op_id = args.get("operacion_id")
     if not op_id:
@@ -3612,7 +3612,7 @@ def _tool_proponer_editar_operacion(args, usuario):
     }
 
 
-def _tool_proponer_eliminar_venta(args, usuario):
+def _tool_eliminar_venta(args, usuario):
     v_id = args.get("venta_id")
     if not v_id:
         raise ValueError("Falta venta_id.")
@@ -3639,7 +3639,7 @@ def _tool_proponer_eliminar_venta(args, usuario):
     }
 
 
-def _tool_proponer_crear_usuario(args, usuario):
+def _tool_crear_usuario(args, usuario):
     if not usuario.es_admin_o_admin_sucursal():
         raise ValueError("Solo administradores pueden crear usuarios.")
     username = (args.get("username") or "").strip()
@@ -3689,7 +3689,7 @@ def _tool_proponer_crear_usuario(args, usuario):
     }
 
 
-def _tool_proponer_crear_sucursal(args, usuario):
+def _tool_crear_sucursal(args, usuario):
     if not usuario.es_admin:
         raise ValueError("Solo el admin global puede crear sucursales.")
     nombre = (args.get("nombre") or "").strip()
@@ -3718,16 +3718,16 @@ CHATBOT_TOOLS = {
     "buscar_ventas":          {"handler": _tool_buscar_ventas,          "requires_confirmation": False},
     "listar_usuarios":        {"handler": _tool_listar_usuarios,        "requires_confirmation": False},
     "listar_sucursales":      {"handler": _tool_listar_sucursales,      "requires_confirmation": False},
-    "proponer_venta":         {"handler": _tool_proponer_venta,             "requires_confirmation": True},
-    "proponer_operacion":     {"handler": _tool_proponer_operacion,         "requires_confirmation": True},
-    "proponer_crear_producto":   {"handler": _tool_proponer_crear_producto,   "requires_confirmation": True},
-    "proponer_editar_producto":  {"handler": _tool_proponer_editar_producto,  "requires_confirmation": True},
-    "proponer_eliminar_producto":{"handler": _tool_proponer_eliminar_producto,"requires_confirmation": True},
-    "proponer_eliminar_operacion":{"handler": _tool_proponer_eliminar_operacion,"requires_confirmation": True},
-    "proponer_editar_operacion":  {"handler": _tool_proponer_editar_operacion,  "requires_confirmation": True},
-    "proponer_eliminar_venta":   {"handler": _tool_proponer_eliminar_venta,   "requires_confirmation": True},
-    "proponer_crear_usuario":    {"handler": _tool_proponer_crear_usuario,    "requires_confirmation": True},
-    "proponer_crear_sucursal":   {"handler": _tool_proponer_crear_sucursal,   "requires_confirmation": True},
+    "registrar_venta":         {"handler": _tool_registrar_venta,             "requires_confirmation": True},
+    "registrar_operacion":     {"handler": _tool_registrar_operacion,         "requires_confirmation": True},
+    "crear_producto":   {"handler": _tool_crear_producto,   "requires_confirmation": True},
+    "editar_producto":  {"handler": _tool_editar_producto,  "requires_confirmation": True},
+    "eliminar_producto":{"handler": _tool_eliminar_producto,"requires_confirmation": True},
+    "eliminar_operacion":{"handler": _tool_eliminar_operacion,"requires_confirmation": True},
+    "editar_operacion":  {"handler": _tool_editar_operacion,  "requires_confirmation": True},
+    "eliminar_venta":   {"handler": _tool_eliminar_venta,   "requires_confirmation": True},
+    "crear_usuario":    {"handler": _tool_crear_usuario,    "requires_confirmation": True},
+    "crear_sucursal":   {"handler": _tool_crear_sucursal,   "requires_confirmation": True},
 }
 
 # Agregar declaraciones de herramientas (para Claude)
@@ -4250,16 +4250,16 @@ def _ejecutar_crear_sucursal_validada(args, usuario):
 # Dispatcher de ejecutores directos: nombre de proponer_* -> funcion validada que ejecuta de inmediato.
 # Usado tanto por el chat de texto como por voz para evitar el paso de confirmacion.
 EJECUTORES_DIRECTOS = {
-    'proponer_venta':              _ejecutar_venta_validada,
-    'proponer_operacion':          _ejecutar_operacion_validada,
-    'proponer_crear_producto':     _ejecutar_crear_producto_validado,
-    'proponer_editar_producto':    _ejecutar_editar_producto_validado,
-    'proponer_eliminar_producto':  _ejecutar_eliminar_producto_validado,
-    'proponer_eliminar_operacion': _ejecutar_eliminar_operacion_validada,
-    'proponer_editar_operacion':   _ejecutar_editar_operacion_validada,
-    'proponer_eliminar_venta':     _ejecutar_eliminar_venta_validada,
-    'proponer_crear_usuario':      _ejecutar_crear_usuario_validado,
-    'proponer_crear_sucursal':     _ejecutar_crear_sucursal_validada,
+    'registrar_venta':              _ejecutar_venta_validada,
+    'registrar_operacion':          _ejecutar_operacion_validada,
+    'crear_producto':     _ejecutar_crear_producto_validado,
+    'editar_producto':    _ejecutar_editar_producto_validado,
+    'eliminar_producto':  _ejecutar_eliminar_producto_validado,
+    'eliminar_operacion': _ejecutar_eliminar_operacion_validada,
+    'editar_operacion':   _ejecutar_editar_operacion_validada,
+    'eliminar_venta':     _ejecutar_eliminar_venta_validada,
+    'crear_usuario':      _ejecutar_crear_usuario_validado,
+    'crear_sucursal':     _ejecutar_crear_sucursal_validada,
 }
 
 
@@ -5009,7 +5009,7 @@ SYSTEM_PROMPT_GEMINI_LIVE = """Eres el asistente vocal de SISAGENT, un sistema b
 
 Modelo de datos:
 - Operaciones bancarias: monto (S/), comision (S/), medio (EFECTIVO, YAPE, PLIN, TARJETA, BCP, IBK, BBVA, etc. — segun lo habilitado por sucursal). NO existe campo "tipo de operacion".
-- Comision AUTOMATICA: se calcula sola (S/1 por cada S/100 de monto, redondeado hacia arriba). Al registrar una operacion NUNCA preguntes ni menciones la comision, salvo que el usuario pida explicitamente un descuento o una comision distinta a la automatica (ej: "es casero, cobrale solo 1 sol", "hazle descuento"). En ese caso pasa `comision` y `motivo_descuento` a `proponer_operacion`.
+- Comision AUTOMATICA: se calcula sola (S/1 por cada S/100 de monto, redondeado hacia arriba). Al registrar una operacion NUNCA preguntes ni menciones la comision, salvo que el usuario pida explicitamente un descuento o una comision distinta a la automatica (ej: "es casero, cobrale solo 1 sol", "hazle descuento"). En ese caso pasa `comision` y `motivo_descuento` a `registrar_operacion`.
 - Productos: nombre, descripcion, precio, stock, foto, sucursal asignada.
 - Ventas: producto x cantidad, descuenta stock, suma a caja diaria.
 - Sucursales: nombre, direccion, medios de pago habilitados. IMPORTANTE: Si el usuario menciona una sucursal que no reconoces de la lista que te pasé, NO la rechaces. Asume que existe. El usuario sabe su propia sucursal mejor que tú — no discutas por el nombre.
@@ -5022,15 +5022,15 @@ Tu rol:
 Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar venta, operacion, producto, usuario, sucursal, etc. via `proponer_*`):
 - FLUJO CRÍTICO: (1) PROPÓN (llamando proponer_*) (2) ESPERA confirmación del usuario (3) EJECUTA (el servidor hace el registro) (4) RECIÉN ENTONCES responde "Listo, registré..."
 - NUNCA digas "Listo, registré" ANTES de que el usuario confirme. NUNCA confundas "propuesta" con "ejecución".
-- Cuando usuario diga "S/ 100 en BCP": llama `proponer_operacion(...)` → muestra preview → aguarda "sí/confirma/dale" → servidor ejecuta → responde "Listo, registré"
+- Cuando usuario diga "S/ 100 en BCP": llama `registrar_operacion(...)` → muestra preview → aguarda "sí/confirma/dale" → servidor ejecuta → responde "Listo, registré"
 - NUNCA ejecutes directamente. SIEMPRE propón primero, espera confirmación, ejecuta después.
 - MAPEO AUTOMÁTICO DE SUCURSALES: Si oyes "Tecnovation", busca si existe "TECKNOVATION" o similar. Si el usuario lo repite 1+ veces, REGISTRA AUTOMATICAMENTE esa pronunciación en tu BANCO DE MEMORIA (servidor le notificará). NO vuelvas a preguntar por el mismo nombre en ESTE TURNO ni en TURNOS POSTERIORES si ya se mencionó.
 - GUARDÍA DE MEMORIA CRÍTICA: Tu banco de pronunciaciones APRENDIDAS es PERSISTENTE — se guarda en el servidor y se carga en cada nueva sesión de voz. "Tecnovation" = TECKNOVATION (aprendido). En futuras sesiones, cuando inicies una nueva conversación de voz, el sistema te dirá TODAS tus pronunciaciones aprendidas (verás "PRONUNCIACIONES APRENDIDAS" en tus instrucciones). SIEMPRE úsalas. NUNCA las olvides.
 - Las funciones `confirmar_ultima_accion` y `cancelar_ultima_accion` ya NO se usan — no las llames nunca.
 - Si el resultado viene con "error", informa el motivo al usuario BREVEMENTE (una línea). NO insistas, NO repreguntes. "Error: sucursal no existe. ¿Otra?" es demasiado. Mejor: "No encontré esa sucursal. ¿Cuál era?"
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
-- EDITAR vs ELIMINAR: Si el usuario dice "no era de S/ 500", "cambiar a 300 soles", "corregir el monto", "era más" — usa `proponer_editar_operacion` (mantiene el ID, solo cambia valores). Solo USA `proponer_eliminar_operacion` si dice explícitamente "borra", "elimina", "quita esa operacion".
-- EDITAR SIN REPREGUNTAR: Si el usuario acaba de registrar una operación y dice "era de S/ X" o "cambiar a Y soles", ASUME que habla de la ÚLTIMA operación registrada. NO preguntes cuál. Actúa directamente con `proponer_editar_operacion(operacion_id=<última>, monto=Y)`.
+- EDITAR vs ELIMINAR: Si el usuario dice "no era de S/ 500", "cambiar a 300 soles", "corregir el monto", "era más" — usa `editar_operacion` (mantiene el ID, solo cambia valores). Solo USA `eliminar_operacion` si dice explícitamente "borra", "elimina", "quita esa operacion".
+- EDITAR SIN REPREGUNTAR: Si el usuario acaba de registrar una operación y dice "era de S/ X" o "cambiar a Y soles", ASUME que habla de la ÚLTIMA operación registrada. NO preguntes cuál. Actúa directamente con `editar_operacion(operacion_id=<última>, monto=Y)`.
 - HORA: NUNCA uses la hora que el usuario menciona. El servidor registra SIEMPRE con la hora actual de Perú (get_peru_time()). Si el usuario dice "dado las 11:29", IGNORA esa hora — el sistema sabrá cuándo se registró.
 - Habla siempre en español latinoamericano natural (acento neutro de Latinoamérica/Perú), conciso, amable. Como un colega que te ayuda.
 - LECTURA DE MONTOS: el simbolo "S/" antes de un numero se pronuncia "soles" DESPUES del numero. "S/ 1" se dice "un sol"; "S/ 2" = "dos soles"; "S/ 100" = "cien soles"; "S/ 150.50" = "ciento cincuenta soles con cincuenta centimos". NUNCA digas "ese barra", "soles barra" ni leas el simbolo literal.
@@ -5170,16 +5170,16 @@ def _ejecutar_accion_confirmada_voz(accion, args, user_id):
         if not CHATBOT_TOOLS[accion].get("requires_confirmation"):
             return {"error": "Esta acción no requiere confirmación"}
         dispatcher = {
-            'proponer_venta':              _ejecutar_venta_validada,
-            'proponer_operacion':          _ejecutar_operacion_validada,
-            'proponer_crear_producto':     _ejecutar_crear_producto_validado,
-            'proponer_editar_producto':    _ejecutar_editar_producto_validado,
-            'proponer_eliminar_producto':  _ejecutar_eliminar_producto_validado,
-            'proponer_eliminar_operacion': _ejecutar_eliminar_operacion_validada,
-            'proponer_editar_operacion':   _ejecutar_editar_operacion_validada,
-            'proponer_eliminar_venta':     _ejecutar_eliminar_venta_validada,
-            'proponer_crear_usuario':      _ejecutar_crear_usuario_validado,
-            'proponer_crear_sucursal':     _ejecutar_crear_sucursal_validada,
+            'registrar_venta':              _ejecutar_venta_validada,
+            'registrar_operacion':          _ejecutar_operacion_validada,
+            'crear_producto':     _ejecutar_crear_producto_validado,
+            'editar_producto':    _ejecutar_editar_producto_validado,
+            'eliminar_producto':  _ejecutar_eliminar_producto_validado,
+            'eliminar_operacion': _ejecutar_eliminar_operacion_validada,
+            'editar_operacion':   _ejecutar_editar_operacion_validada,
+            'eliminar_venta':     _ejecutar_eliminar_venta_validada,
+            'crear_usuario':      _ejecutar_crear_usuario_validado,
+            'crear_sucursal':     _ejecutar_crear_sucursal_validada,
         }
         ejecutor = dispatcher.get(accion)
         if not ejecutor:
