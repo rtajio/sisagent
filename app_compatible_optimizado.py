@@ -2925,11 +2925,11 @@ _HERRAMIENTAS_DECLARACIONES = [
     },
     {
         "name": "editar_operacion",
-        "description": "PROPONE editar una operación existente (cambiar monto y/o comisión). Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas. NO ejecuta.",
+        "description": "Edita una operación existente (cambiar monto y/o comisión). EJECUTA DIRECTAMENTE sin pedir confirmación. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "operacion_id": {"type": "integer", "description": "ID de la operación a editar"},
+                "operacion_id": {"type": "integer", "description": "ID de la operación a editar (OBLIGATORIO)"},
                 "monto": {"type": "number", "description": "(Opcional) Nuevo monto en S/. Si no se pasa, se mantiene el actual."},
                 "comision": {"type": "number", "description": "(Opcional) Nueva comisión. Si no se pasa, se auto-calcula."},
                 "motivo_descuento": {"type": "string", "description": "(Opcional) Motivo si la comisión es manual diferente a lo sugerido."},
