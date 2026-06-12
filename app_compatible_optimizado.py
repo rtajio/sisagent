@@ -938,6 +938,35 @@ def eliminar_operacion(operacion_id):
 
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
 @login_required
+def _corregir_autoincrement_operacion():
+    """Asegura que el auto-increment esté correcto tras registrar una operación."""
+    try:
+        max_id = db.session.query(db.func.max(Operacion.id)).scalar() or 0
+        if max_id > 0:
+            next_id = max_id + 1
+            if os.environ.get('DATABASE_URL'):
+                # PostgreSQL
+                db.session.execute(
+                    db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_id}, true)")
+                )
+            else:
+                # SQLite
+                try:
+                    db.session.execute(db.text("DELETE FROM sqlite_sequence WHERE name='operacion'"))
+                except:
+                    pass
+                db.session.execute(
+                    db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {next_id})")
+                )
+            db.session.commit()
+    except Exception as e:
+        print(f"[WARN] No se pudo corregir auto-increment: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+
+
 def registrar_operacion():
     if request.method == 'POST':
         monto = float(request.form['monto'])
@@ -1025,10 +1054,13 @@ def registrar_operacion():
             db.session.add(comision_mensual)
         
         db.session.commit()
-        
+
+        # Corregir auto-increment si es necesario (evita IDs saltados)
+        _corregir_autoincrement_operacion()
+
         # Limpiar caché después de cambios
         clear_cache()
-        
+
         flash('Operación bancaria registrada exitosamente', 'success')
         return redirect(url_for('operaciones'))
     
@@ -3816,6 +3848,10 @@ def _ejecutar_operacion_validada(args, usuario):
         db.session.add(comision_mensual)
 
     db.session.commit()
+
+    # Corregir auto-increment si es necesario
+    _corregir_autoincrement_operacion()
+
     clear_cache()
 
     # La sucursal solo se nombra a admins (un usuario regular tiene una sola, sobra decirla).
