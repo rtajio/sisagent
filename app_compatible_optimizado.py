@@ -2712,10 +2712,10 @@ Si el usuario dice: "dame una operación de S/ 500 por Yape"
 Tu respuesta: LLAMA registrar_operacion({monto: 500, medio: "YAPE"})
 
 Si el usuario dice: "me equivoqué" O "eso era incorrecto" O "era de X soles"
-Tu respuesta:
-  PASO 1: LLAMA eliminar_operacion() para eliminar la última operación
+Tu respuesta EXACTA (en este orden):
+  PASO 1: LLAMA eliminar_operacion() SIN PARÁMETROS (elimina la última automáticamente)
   PASO 2: LLAMA registrar_operacion() con los datos correctos
-IMPORTANTE: NO EXISTE editar_operacion. SIEMPRE usa ELIMINAR + REGISTRAR para corregir.
+AMBOS PASOS SON OBLIGATORIOS. NO EXISTEN editar_operacion ni editar_venta. SIEMPRE ELIMINA + REGISTRA.
 
 NO hagas esto: "¿Confirmas?" o "Está bien?" — ESO ESTÁ PROHIBIDO.
 
@@ -3515,11 +3515,30 @@ def _tool_eliminar_producto(args, usuario):
 
 def _tool_eliminar_operacion(args, usuario):
     op_id = args.get("operacion_id")
+
+    # Si no se pasa operacion_id, buscar automáticamente la última del usuario
     if not op_id:
-        raise ValueError("Falta operacion_id.")
-    operacion = Operacion.query.filter_by(id=int(op_id)).first()
-    if not operacion:
-        raise ValueError(f"La operación {op_id} no existe.")
+        sucursales = sucursales_visibles_para(usuario)
+        if not sucursales:
+            raise ValueError("No tienes sucursales asignadas.")
+        sucursal_ids = [s.id for s in sucursales]
+        # Buscar la última operación de hoy
+        from datetime import datetime as _datetime
+        hoy = get_peru_time().date()
+        q = Operacion.query.filter(
+            Operacion.sucursal_id.in_(sucursal_ids),
+            db.func.date(Operacion.hora) == hoy,
+        )
+        if not usuario.es_admin:
+            q = q.filter_by(usuario_id=usuario.id)
+        operacion = q.order_by(Operacion.id.desc()).first()
+        if not operacion:
+            raise ValueError("No hay operaciones recientes para eliminar.")
+        op_id = operacion.id
+    else:
+        operacion = Operacion.query.filter_by(id=int(op_id)).first()
+        if not operacion:
+            raise ValueError(f"La operación {op_id} no existe.")
     # Reglas de permisos (mirror de eliminar_operacion):
     if not usuario.es_admin:
         if operacion.sucursal_id != usuario.sucursal_id:
