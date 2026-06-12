@@ -4388,32 +4388,38 @@ def api_chat_transcribir():
         # "Entrenamiento" por prompt (vocabulary biasing): contexto del dominio bancario
         # + la frase activadora del usuario como pista, para que el modelo transcriba
         # bien palabras como "soles", "Yape", montos, y reconozca la frase aunque suene aproximada.
-        prompt_transcripcion = (
-            'Transcribe el siguiente audio en espanol (Peru). CONTEXTO: es un sistema bancario y de '
-            'ventas; vocabulario frecuente: soles, monto, comision, operacion, venta, producto, stock, '
-            'sucursal, registrar, eliminar, Yape, Plin, BCP, Interbank, BBVA, efectivo, tarjeta, '
-            'transferencia. Los montos se dicen como numero + "soles" (ej: "cien soles", "600 soles"). '
-            'Devuelve EXCLUSIVAMENTE el texto transcrito tal cual se dijo, sin comentarios, sin notas, '
-            'sin formato Markdown, sin marcas de tiempo, sin formato de subtitulos (nada de "00:00" ni '
-            '"-->"), sin prefijos como "Transcripcion:". Si no hay voz audible o solo hay ruido, '
-            'devuelve cadena vacia.'
-        )
-        # NO se sesga hacia la frase activadora: mencionarla hacia que el modelo la "alucinara"
-        # ante ruido -> falsos positivos del wake-word. Confiamos en transcripcion fiel +
-        # match difuso en el cliente. Reforzamos solo el anti-alucinacion:
-        prompt_transcripcion += (
-            ' CRITICO: si el audio es silencio, ruido, respiracion o dudoso, devuelve SIEMPRE '
-            'cadena vacia. NUNCA adivines ni inventes palabras.'
-        )
+        es_wakeword = (request.form.get('modo') or '') == 'wakeword'
 
-        # Speech adaptation: vocabulario derivado AUTOMATICAMENTE de la BD (sucursales,
-        # productos, medios) — sesga al modelo hacia las entidades reales del sistema.
-        vocab_terminos = _vocabulario_dinamico(current_user)
-        if vocab_terminos:
-            prompt_transcripcion += (
-                ' NOMBRES REALES del sistema (sucursales, productos y medios de pago); si oyes algo '
-                'parecido a uno de estos, escribelo EXACTAMENTE asi: ' + ', '.join(vocab_terminos) + '.'
+        if es_wakeword:
+            # Wake-word: transcripcion LITERAL, SIN sesgo de dominio. El sesgo de vocabulario
+            # bancario hacia que el modelo alucinara frases ("el monto de la venta es de 200 soles")
+            # ante un audio corto. Aqui solo queremos lo que se dijo, tal cual, o vacio.
+            prompt_transcripcion = (
+                'Transcribe LITERALMENTE el audio en espanol, palabra por palabra, exactamente lo que '
+                'se oye. NO interpretes, NO completes frases, NO agregues contexto, NO inventes. '
+                'Devuelve solo el texto crudo, sin puntuacion extra ni formato. Si es silencio, ruido, '
+                'respiracion o no se entiende, devuelve CADENA VACIA. Nunca adivines.'
             )
+        else:
+            prompt_transcripcion = (
+                'Transcribe el siguiente audio en espanol (Peru). CONTEXTO: es un sistema bancario y de '
+                'ventas; vocabulario frecuente: soles, monto, comision, operacion, venta, producto, stock, '
+                'sucursal, registrar, eliminar, Yape, Plin, BCP, Interbank, BBVA, efectivo, tarjeta, '
+                'transferencia. Los montos se dicen como numero + "soles" (ej: "cien soles", "600 soles"). '
+                'Devuelve EXCLUSIVAMENTE el texto transcrito tal cual se dijo, sin comentarios, sin notas, '
+                'sin formato Markdown, sin marcas de tiempo, sin formato de subtitulos (nada de "00:00" ni '
+                '"-->"), sin prefijos como "Transcripcion:". Si no hay voz audible o solo hay ruido, '
+                'devuelve cadena vacia.'
+                ' CRITICO: si el audio es silencio, ruido, respiracion o dudoso, devuelve SIEMPRE '
+                'cadena vacia. NUNCA adivines ni inventes palabras.'
+            )
+            # Speech adaptation: vocabulario de la BD SOLO para comandos (no para el wake-word).
+            vocab_terminos = _vocabulario_dinamico(current_user)
+            if vocab_terminos:
+                prompt_transcripcion += (
+                    ' NOMBRES REALES del sistema (sucursales, productos y medios de pago); si oyes algo '
+                    'parecido a uno de estos, escribelo EXACTAMENTE asi: ' + ', '.join(vocab_terminos) + '.'
+                )
 
         payload = {
             'contents': [{

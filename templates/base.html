@@ -3320,7 +3320,7 @@
             function fuzzyContains(haystack, needle) {
                 if (!needle) return false;
                 if (haystack.indexOf(needle) !== -1) return true;
-                const maxDist = needle.length >= 8 ? 2 : (needle.length >= 5 ? 1 : 0);
+                const maxDist = needle.length >= 8 ? 2 : (needle.length >= 4 ? 1 : 0);
                 if (maxDist === 0) return false;
                 for (let len = needle.length - maxDist; len <= needle.length + maxDist; len++) {
                     if (len <= 0 || len > haystack.length) continue;
@@ -3465,8 +3465,9 @@
                 console.log('[chatbot] Trigger: enviando ' + blob.size + ' bytes a Gemini');
                 const fd = new FormData();
                 fd.append('audio', blob, 'trigger.webm');
-                // Pista para el transcriptor: qué frase buscamos (vocabulary biasing)
-                fd.append('frase_hint', triggerPhrase || '');
+                // Modo wake-word: transcripción LITERAL sin sesgo de dominio (el sesgo hacía
+                // que el modelo alucinara frases como "el monto de la venta es de 200 soles").
+                fd.append('modo', 'wakeword');
                 try {
                     const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd });
                     const data = await resp.json();
