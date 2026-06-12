@@ -936,8 +936,6 @@ def eliminar_operacion(operacion_id):
     return redirect(url_for('operaciones'))
 
 
-@app.route('/operaciones/registrar', methods=['GET', 'POST'])
-@login_required
 def _corregir_autoincrement_operacion():
     """Asegura que el auto-increment esté correcto tras registrar una operación."""
     try:
