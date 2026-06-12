@@ -4376,7 +4376,7 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
 
     for iteracion in range(max_iteraciones):
         response = client.messages.create(
-            model="claude-opus-4-1",
+            model="claude-sonnet-4-20250514",
             max_tokens=2048,
             system=system_prompt,
             tools=herramientas if herramientas else None,
