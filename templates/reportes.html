@@ -229,19 +229,24 @@ function actualizarLinks() {
 // -- Generar reporte ------------------------------------------------------
 function generarReporte() {
     const qs = getParams();
+    const url = `/api/reportes/operaciones?${qs}`;
+    console.log('[reportes] Iniciando fetch a:', url);
     document.getElementById('estado-carga').style.display = '';
     document.getElementById('btn-generar').disabled = true;
 
-    fetch(`/api/reportes/operaciones?${qs}`, { credentials: 'same-origin' })
+    fetch(url, { credentials: 'same-origin' })
         .then(async r => {
+            console.log('[reportes] Response status:', r.status);
             if (!r.ok) {
                 const d = await r.json().catch(() => ({}));
+                console.error('[reportes] Error response:', d);
                 alert(d.error || 'Error al generar el reporte');
                 return null;
             }
             return r.json();
         })
         .then(data => {
+            console.log('[reportes] Data received:', data);
             document.getElementById('estado-carga').style.display = 'none';
             document.getElementById('btn-generar').disabled = false;
             if (!data) return;
@@ -254,10 +259,11 @@ function generarReporte() {
             document.getElementById('grupo-descargas').style.display =
                 data.operaciones.length > 0 ? '' : 'none';
         })
-        .catch(() => {
+        .catch(err => {
+            console.error('[reportes] Catch error:', err);
             document.getElementById('estado-carga').style.display = 'none';
             document.getElementById('btn-generar').disabled = false;
-            alert('Error de red al generar el reporte');
+            alert('Error de red al generar el reporte: ' + err.message);
         });
 }
 
