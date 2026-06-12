@@ -534,11 +534,9 @@ function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
                 <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit(${id}, '${hora}', ${monto}, ${comision}, '${medio}', '${usuarioOriginal}')">
                     <i class="fas fa-edit"></i>
                 </button>
-                <form method="POST" action="/operaciones/${id}/eliminar" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que quieres eliminar esta operación?')">
-                    <button type="submit" class="btn btn-outline-danger" title="Eliminar">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </form>
+                <button type="button" class="btn btn-outline-danger" title="Eliminar" onclick="eliminarOperacion(${id})">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         </td>
     `;
@@ -683,5 +681,36 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateTableFromAPI, 3000);
     updateTableFromAPI(); // Primera actualización inmediata
 })();
+
+// Función para eliminar operación vía AJAX (no formulario que se reemplaza por polling)
+function eliminarOperacion(id) {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta operación?')) {
+        return;
+    }
+    fetch(`/operaciones/${id}/eliminar`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    }).then(resp => {
+        if (resp.ok) {
+            // Mostrar notificación de éxito
+            if (window.showNotification) {
+                window.showNotification('Operación eliminada', 'success');
+            }
+            // Actualizar tabla inmediatamente
+            if (window.refreshOperationsTable) {
+                window.refreshOperationsTable();
+            }
+        } else {
+            if (window.showNotification) {
+                window.showNotification('Error al eliminar la operación', 'error');
+            }
+        }
+    }).catch(err => {
+        if (window.showNotification) {
+            window.showNotification('Error de conexión: ' + err.message, 'error');
+        }
+    });
+}
 </script>
 {% endblock %} 
