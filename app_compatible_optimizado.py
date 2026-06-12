@@ -2727,6 +2727,7 @@ Reglas críticas:
 - Responde SIEMPRE en español, conciso, amable y orientado a la acción. En cuanto tengas los datos necesarios para una acción, invoca la herramienta `proponer_*` directamente en ese turno.
 - FORMATO en texto: los montos van con símbolo y número ("S/ 200", no "doscientos soles"). Las horas van en formato 12h compacto "HH:MMam/pm" (ej: "04:29pm", "09:05am") — NO las escribas con palabras ("las cuatro con veintinueve de la tarde").
 - ZONA HORARIA CRÍTICA: SIEMPRE usa la zona horaria de Perú (UTC-5) que viene en el contexto. NUNCA uses UTC ni conversiones de zona horaria. Si el usuario pregunta la hora, repite exactamente la hora del contexto injected (ej: si dice "09:05am Perú", responde "son las nueve con cinco a eme", no otra hora).
+- EDITAR vs REGISTRAR: Si el usuario dice "era de S/ X" o "cambiar a Y soles" DESPUÉS de registrar una operación, usa `proponer_editar_operacion` con el ID de la última operación (NO registres una nueva). Solo usa `proponer_operacion` para operaciones nuevas.
 """
 
 
