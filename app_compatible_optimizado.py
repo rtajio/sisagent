@@ -3524,11 +3524,12 @@ def _tool_proponer_editar_operacion(args, usuario):
         if not usuario.es_admin_de_sucursal() and operacion.usuario_id != usuario.id:
             raise ValueError("Solo puedes editar las operaciones que tú registraste.")
 
-    # Validar nuevos valores
+    # Validar nuevos valores (aceptar tanto "monto" como "monto_nuevo")
     monto_nuevo = operacion.monto
-    if "monto" in args and args.get("monto") is not None:
+    monto_arg = args.get("monto") or args.get("monto_nuevo")
+    if monto_arg is not None:
         try:
-            monto_nuevo = float(args.get("monto"))
+            monto_nuevo = float(monto_arg)
         except (TypeError, ValueError):
             raise ValueError("Monto debe ser un numero.")
         if monto_nuevo <= 0:
@@ -3537,9 +3538,10 @@ def _tool_proponer_editar_operacion(args, usuario):
     comision_nueva = operacion.comision
     es_manual = False
     motivo = None
-    if "comision" in args and args.get("comision") is not None:
+    comision_arg = args.get("comision") or args.get("comision_nueva")
+    if comision_arg is not None:
         try:
-            comision_nueva = float(args.get("comision"))
+            comision_nueva = float(comision_arg)
         except (TypeError, ValueError):
             raise ValueError("Comision debe ser un numero.")
         if comision_nueva < 0:
@@ -4942,6 +4944,8 @@ Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar ven
 - Si el resultado viene con "error", informa el motivo al usuario BREVEMENTE (una línea). NO insistas, NO repreguntes. "Error: sucursal no existe. ¿Otra?" es demasiado. Mejor: "No encontré esa sucursal. ¿Cuál era?"
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
 - EDITAR vs ELIMINAR: Si el usuario dice "no era de S/ 500", "cambiar a 300 soles", "corregir el monto", "era más" — usa `proponer_editar_operacion` (mantiene el ID, solo cambia valores). Solo USA `proponer_eliminar_operacion` si dice explícitamente "borra", "elimina", "quita esa operacion".
+- EDITAR SIN REPREGUNTAR: Si el usuario acaba de registrar una operación y dice "era de S/ X" o "cambiar a Y soles", ASUME que habla de la ÚLTIMA operación registrada. NO preguntes cuál. Actúa directamente con `proponer_editar_operacion(operacion_id=<última>, monto=Y)`.
+- HORA: NUNCA uses la hora que el usuario menciona. El servidor registra SIEMPRE con la hora actual de Perú (get_peru_time()). Si el usuario dice "dado las 11:29", IGNORA esa hora — el sistema sabrá cuándo se registró.
 - Habla siempre en español latinoamericano natural (acento neutro de Latinoamérica/Perú), conciso, amable. Como un colega que te ayuda.
 - LECTURA DE MONTOS: el simbolo "S/" antes de un numero se pronuncia "soles" DESPUES del numero. "S/ 1" se dice "un sol"; "S/ 2" = "dos soles"; "S/ 100" = "cien soles"; "S/ 150.50" = "ciento cincuenta soles con cincuenta centimos". NUNCA digas "ese barra", "soles barra" ni leas el simbolo literal.
 - LECTURA DE HORAS: di la hora concisa, formato 12h. "16:29" se dice "cuatro con veintinueve pe eme"; "09:05" = "nueve con cinco a eme". Di "pe eme" para PM y "a eme" para AM. ZONA HORARIA: SIEMPRE usa la hora de Perú (UTC-5) que viene en el contexto.
