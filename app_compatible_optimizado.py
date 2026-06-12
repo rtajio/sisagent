@@ -767,11 +767,10 @@ def operaciones():
     # Obtener fecha actual para comparación en hora de Perú
     ahora = get_peru_time()
     hoy = ahora.date()
-    
-    # Calcular rango de tiempo para hoy en hora de Perú (00:00:00 a 23:59:59)
-    inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
-    fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
-    fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    # Calcular rango de tiempo para hoy (sin tzinfo, la BD almacena hora sin timezone)
+    inicio_hoy = datetime.combine(hoy, datetime.min.time())
+    fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
     
     # Aplicar filtros
     if fecha:
@@ -781,10 +780,9 @@ def operaciones():
             fecha = None
         
         if fecha:
-            # Usar rango de tiempo para la fecha específica en hora de Perú
-            inicio_fecha = datetime.combine(fecha_objeto, datetime.min.time()).replace(tzinfo=peru_tz)
-            fin_fecha = datetime.combine(fecha_objeto, datetime.max.time()).replace(tzinfo=peru_tz)
-            fin_fecha = fin_fecha.replace(hour=23, minute=59, second=59, microsecond=999999)
+            # Usar rango de tiempo para la fecha específica (sin tzinfo, la BD almacena hora sin timezone)
+            inicio_fecha = datetime.combine(fecha_objeto, datetime.min.time())
+            fin_fecha = datetime.combine(fecha_objeto, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
             query = query.filter(
                 Operacion.hora >= inicio_fecha,
                 Operacion.hora <= fin_fecha
