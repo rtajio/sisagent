@@ -531,10 +531,10 @@ function actualizarFila(id, monto, comision, medio, usuarioOriginal) {
     filaHTML += `
         <td>
             <div class="btn-group btn-group-sm" role="group">
-                <button type="button" class="btn btn-outline-warning" title="Editar" onclick="toggleEdit(${id}, '${hora}', ${monto}, ${comision}, '${medio}', '${usuarioOriginal}')">
+                <button type="button" class="btn btn-outline-warning edit-btn" data-id="${id}" data-hora="${hora}" data-monto="${monto}" data-comision="${comision}" data-medio="${medio}" data-usuario="${usuarioOriginal}" title="Editar">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button type="button" class="btn btn-outline-danger" title="Eliminar" onclick="eliminarOperacion(${id})">
+                <button type="button" class="btn btn-outline-danger delete-btn" data-id="${id}" title="Eliminar">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -682,35 +682,42 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTableFromAPI(); // Primera actualización inmediata
 })();
 
-// Función para eliminar operación vía AJAX (no formulario que se reemplaza por polling)
-function eliminarOperacion(id) {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta operación?')) {
-        return;
+// Event delegation para botones de editar y eliminar (funciona incluso cuando tabla se reemplaza)
+document.addEventListener('click', function(e) {
+    // Botón de eliminar
+    if (e.target.closest('.delete-btn')) {
+        const btn = e.target.closest('.delete-btn');
+        const id = btn.dataset.id;
+        if (!confirm('¿Estás seguro de que quieres eliminar esta operación?')) {
+            return;
+        }
+        fetch(`/operaciones/${id}/eliminar`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        }).then(resp => {
+            if (resp.ok) {
+                if (window.showNotification) window.showNotification('Operación eliminada', 'success');
+                if (window.refreshOperationsTable) window.refreshOperationsTable();
+            } else {
+                if (window.showNotification) window.showNotification('Error al eliminar', 'error');
+            }
+        }).catch(err => {
+            if (window.showNotification) window.showNotification('Error: ' + err.message, 'error');
+        });
     }
-    fetch(`/operaciones/${id}/eliminar`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    }).then(resp => {
-        if (resp.ok) {
-            // Mostrar notificación de éxito
-            if (window.showNotification) {
-                window.showNotification('Operación eliminada', 'success');
-            }
-            // Actualizar tabla inmediatamente
-            if (window.refreshOperationsTable) {
-                window.refreshOperationsTable();
-            }
-        } else {
-            if (window.showNotification) {
-                window.showNotification('Error al eliminar la operación', 'error');
-            }
-        }
-    }).catch(err => {
-        if (window.showNotification) {
-            window.showNotification('Error de conexión: ' + err.message, 'error');
-        }
-    });
-}
+
+    // Botón de editar
+    if (e.target.closest('.edit-btn')) {
+        const btn = e.target.closest('.edit-btn');
+        const id = btn.dataset.id;
+        const hora = btn.dataset.hora;
+        const monto = parseFloat(btn.dataset.monto);
+        const comision = parseFloat(btn.dataset.comision);
+        const medio = btn.dataset.medio;
+        const usuario = btn.dataset.usuario;
+        toggleEdit(id, hora, monto, comision, medio, usuario);
+    }
+});
 </script>
 {% endblock %} 
