@@ -809,8 +809,8 @@ def operaciones():
         page=page, per_page=per_page, error_out=False
     )
 
-    # Forzar orden descendente por hora (en caso de que DB no respete ORDER BY)
-    operaciones_paginated.items = sorted(
+    # Forzar orden descendente por hora (crear lista nueva ordenada)
+    operaciones = sorted(
         operaciones_paginated.items,
         key=lambda op: op.hora if op.hora else datetime(1900, 1, 1),
         reverse=True
@@ -874,7 +874,7 @@ def operaciones():
             sucursal_nombre = None
     
     return render_template('operaciones.html',
-                         operaciones=operaciones_paginated.items,
+                         operaciones=operaciones,
                          pagination=operaciones_paginated,
                          fecha_actual=fecha or datetime.now(peru_tz).strftime('%Y-%m-%d'),
                          fecha_hoy=datetime.now(peru_tz).strftime('%Y-%m-%d'),
