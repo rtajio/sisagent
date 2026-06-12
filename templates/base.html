@@ -2327,7 +2327,22 @@
                 imgPreview.classList.add('d-none');
                 showTyping();
 
+                // Establecer timeout para evitar que pending quede true si la respuesta no llega
+                const timeoutId = setTimeout(function() {
+                    if (pending) {
+                        console.warn('[chat] Timeout: respuesta tardó mucho, limpiando estado');
+                        pending = false;
+                        sendBtn.disabled = false;
+                        attachBtn.disabled = false;
+                        input.disabled = false;
+                        hideTyping();
+                        renderErrorMessage('La IA tardó demasiado. Por favor intenta de nuevo.');
+                        input.focus();
+                    }
+                }, 30000);  // 30 segundos de timeout
+
                 sendMessage(text, fileForUpload).then(function(data) {
+                    clearTimeout(timeoutId);
                     hideTyping();
                     if (!data.success) {
                         renderErrorMessage(data.message || 'Error desconocido.');
@@ -2369,12 +2384,15 @@
                         renderErrorMessage('Tipo de respuesta inesperado: ' + data.tipo);
                     }
                 }).catch(function(err) {
+                    clearTimeout(timeoutId);
                     hideTyping();
                     renderErrorMessage(err.message || 'Error de red.');
-                }).then(function() {
+                }).finally(function() {
+                    // SIEMPRE limpiar el estado, incluso si hay error
                     pending = false;
                     sendBtn.disabled = false;
                     attachBtn.disabled = false;
+                    input.disabled = false;
                     input.focus();
                 });
             });
