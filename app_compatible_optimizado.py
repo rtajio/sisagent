@@ -3914,9 +3914,10 @@ def _ejecutar_editar_operacion_validada(args, usuario):
 
     # Nuevos valores (o mantener los actuales)
     monto_nuevo = operacion.monto
-    if "monto_nuevo" in args and args.get("monto_nuevo") is not None:
+    monto_arg = args.get("monto") or args.get("monto_nuevo")
+    if monto_arg is not None:
         try:
-            monto_nuevo = float(args.get("monto_nuevo"))
+            monto_nuevo = float(monto_arg)
         except (TypeError, ValueError):
             raise ValueError("Monto invalido.")
         if monto_nuevo <= 0:
@@ -3926,9 +3927,10 @@ def _ejecutar_editar_operacion_validada(args, usuario):
     es_manual = bool(args.get("comision_manual", False))
     motivo = args.get("motivo")
 
-    if "comision_nueva" in args and args.get("comision_nueva") is not None:
+    comision_arg = args.get("comision") or args.get("comision_nueva")
+    if comision_arg is not None:
         try:
-            comision_nueva = float(args.get("comision_nueva"))
+            comision_nueva = float(comision_arg)
         except (TypeError, ValueError):
             raise ValueError("Comision invalida.")
         if comision_nueva < 0:
