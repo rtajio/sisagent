@@ -308,20 +308,13 @@ function renderTabla(data) {
     document.getElementById('tabla-card').style.display = '';
 }
 
-// -- Gráficos ------------------------------------------------------------─
+// -- Gráficos (deshabilitados temporalmente) ----------
 function renderGraficos(data) {
-    if (data.operaciones.length === 0) {
-        document.getElementById('graficos-row').style.display = 'none';
-        return;
-    }
-
-    // 1) Por Medio (pie)
-    const mediosMap = {};
-    data.operaciones.forEach(op => {
-        mediosMap[op.medio] = (mediosMap[op.medio] || 0) + 1;
-    });
-    destroyChart('medios');
-    charts['medios'] = new Chart(document.getElementById('chart-medios'), {
+    // Gráficos deshabilitados por ahora — prioridad: que funcionen las exportaciones
+    const grafRow = document.getElementById('graficos-row');
+    if (grafRow) grafRow.style.display = 'none';
+    console.log('[reportes] Gráficos deshabilitados (renderGraficos)');
+    return;
         type: 'doughnut',
         data: {
             labels: Object.keys(mediosMap),
