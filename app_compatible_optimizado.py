@@ -939,7 +939,7 @@ def eliminar_operacion(operacion_id):
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
 @login_required
 def _corregir_autoincrement_operacion():
-    """Asegura que el auto-increment esté correcto tras registrar una operación. NO hace commit."""
+    """Asegura que el auto-increment esté correcto tras registrar una operación."""
     try:
         max_id = db.session.query(db.func.max(Operacion.id)).scalar() or 0
         if max_id > 0:
@@ -958,9 +958,13 @@ def _corregir_autoincrement_operacion():
                 db.session.execute(
                     db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {next_id})")
                 )
-            # NO hacer commit aqui - dejar que el caller haga commit
+            db.session.commit()
     except Exception as e:
         print(f"[WARN] No se pudo corregir auto-increment: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
 
 
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
@@ -1055,10 +1059,6 @@ def registrar_operacion():
 
         # Corregir auto-increment si es necesario (evita IDs saltados)
         _corregir_autoincrement_operacion()
-        try:
-            db.session.commit()  # Persistir cambios de auto-increment
-        except Exception as e:
-            print(f"[WARN] Error al commit de auto-increment: {e}")
 
         # Limpiar caché después de cambios
         clear_cache()
@@ -3855,10 +3855,6 @@ def _ejecutar_operacion_validada(args, usuario):
 
     # Corregir auto-increment si es necesario
     _corregir_autoincrement_operacion()
-    try:
-        db.session.commit()  # Persistir cambios de auto-increment
-    except Exception as e:
-        print(f"[WARN] Error al commit de auto-increment: {e}")
 
     clear_cache()
 
