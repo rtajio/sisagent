@@ -252,8 +252,9 @@ function generarReporte() {
             if (!data) return;
 
             renderResumen(data);
-            renderTabla(data);
-            renderGraficos(data);
+            // Tabla: solo en descargas (PDF, Excel, CSV) — no en navegador para velocidad
+            // renderTabla(data);
+            // renderGraficos(data);
             actualizarLinks();
 
             document.getElementById('grupo-descargas').style.display =
