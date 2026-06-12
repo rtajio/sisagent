@@ -164,7 +164,7 @@ GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 GEMINI_MAX_AUDIO_BYTES = 18 * 1024 * 1024  # 18 MB (Gemini admite hasta 20MB inline)
 
 # Modelo Live API (transcripción en streaming via WebSocket)
-GEMINI_LIVE_MODEL = os.getenv('GEMINI_LIVE_MODEL', 'models/gemini-3.1-flash-live-preview')  # acepta languageCode (transcribe español confiable); native-audio no
+GEMINI_LIVE_MODEL = os.getenv('GEMINI_LIVE_MODEL', 'models/gemini-3.1-flash-live-preview')  # acepta languageCode (transcribe español confiable)
 GEMINI_LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent'
 
 # OPTIMIZACIÓN ULTRA: Configuración de caché
@@ -4904,13 +4904,14 @@ def ws_voice_live(browser_ws):
                 if data is None:
                     continue
                 if isinstance(data, (bytes, bytearray)):
-                    # Audio PCM crudo del navegador (formato legado, binario)
+                    # Audio PCM crudo del navegador (binario). Formato NUEVO realtimeInput.audio
+                    # (el legacy mediaChunks lo rechazan los modelos Live nuevos -> cierran la conexion).
                     msg = {
                         "realtimeInput": {
-                            "mediaChunks": [{
+                            "audio": {
                                 "mimeType": "audio/pcm;rate=16000",
                                 "data": base64.b64encode(bytes(data)).decode('ascii'),
-                            }]
+                            }
                         }
                     }
                     try:
@@ -4928,10 +4929,10 @@ def ws_voice_live(browser_ws):
                     elif ctl.get('type') == 'audio' and ctl.get('data'):
                         msg = {
                             "realtimeInput": {
-                                "mediaChunks": [{
+                                "audio": {
                                     "mimeType": "audio/pcm;rate=16000",
                                     "data": ctl['data'],
-                                }]
+                                }
                             }
                         }
                         try:
