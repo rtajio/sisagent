@@ -812,7 +812,7 @@ def operaciones():
     # Forzar orden descendente por hora (en caso de que DB no respete ORDER BY)
     operaciones_paginated.items = sorted(
         operaciones_paginated.items,
-        key=lambda op: op.hora or datetime.min,
+        key=lambda op: op.hora if op.hora else datetime(1900, 1, 1),
         reverse=True
     )
 
