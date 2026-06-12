@@ -2332,13 +2332,23 @@
                     if (!data.success) {
                         renderErrorMessage(data.message || 'Error desconocido.');
                     } else if (data.tipo === 'texto') {
-                        if (data.texto) renderTextMessage(data.texto, 'bot');
+                        // Remover preguntas de confirmación que Gemini insiste en agregar
+                        let textoLimpio = (data.texto || '').trim();
+                        textoLimpio = textoLimpio
+                            .replace(/\s*¿confirmas\?.*$/i, '')
+                            .replace(/\s*¿está bien\?.*$/i, '')
+                            .replace(/\s*¿deseas\?.*$/i, '')
+                            .replace(/\s*¿es correcto\?.*$/i, '')
+                            .replace(/\s*¿quieres\?.*$/i, '')
+                            .trim();
+
+                        if (textoLimpio) renderTextMessage(textoLimpio, 'bot');
                         if (data.productos && data.productos.length) renderProducts(data.productos);
-                        if (data.texto) {
-                            history.push({ role: 'assistant', content: data.texto });
+                        if (textoLimpio) {
+                            history.push({ role: 'assistant', content: textoLimpio });
                             saveHistory();
                             // Si el chat registró algo, actualizar tabla de operaciones/ventas
-                            if (data.texto.toLowerCase().includes('registr')) {
+                            if (textoLimpio.toLowerCase().includes('registr')) {
                                 setTimeout(function() {
                                     if (window.refreshOperationsTable) window.refreshOperationsTable();
                                     if (window.refreshVentasTable) window.refreshVentasTable();
