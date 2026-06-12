@@ -4453,7 +4453,20 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
         # Si hay tool calls para procesar, agregar al historial y continuar
         if tool_calls_no_mutativos:
             # Agregar respuesta del asistente con los tool_use blocks
-            mensajes_claude.append({"role": "assistant", "content": response.content})
+            # Convertir response.content a un formato que Claude pueda procesar
+            assistant_content = []
+            for block in response.content:
+                if hasattr(block, "text") and block.text:
+                    assistant_content.append({"type": "text", "text": block.text})
+                elif hasattr(block, "type") and block.type == "tool_use":
+                    assistant_content.append({
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input
+                    })
+
+            mensajes_claude.append({"role": "assistant", "content": assistant_content})
 
             # Agregar resultados de las herramientas
             tool_results = []
