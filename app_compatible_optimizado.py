@@ -4142,11 +4142,28 @@ def _ejecutar_eliminar_producto_validado(args, usuario):
 
 def _ejecutar_eliminar_operacion_validada(args, usuario):
     op_id = args.get("operacion_id")
+
+    # Si no se pasa operacion_id, buscar automáticamente la última del usuario
     if not op_id:
-        raise ValueError("Falta operacion_id.")
-    operacion = Operacion.query.filter_by(id=int(op_id)).first()
-    if not operacion:
-        raise ValueError("La operación ya no existe.")
+        sucursales = sucursales_visibles_para(usuario)
+        if not sucursales:
+            raise ValueError("No tienes sucursales asignadas.")
+        sucursal_ids = [s.id for s in sucursales]
+        hoy = get_peru_time().date()
+        q = Operacion.query.filter(
+            Operacion.sucursal_id.in_(sucursal_ids),
+            db.func.date(Operacion.hora) == hoy,
+        )
+        if not usuario.es_admin:
+            q = q.filter_by(usuario_id=usuario.id)
+        operacion = q.order_by(Operacion.id.desc()).first()
+        if not operacion:
+            raise ValueError("No hay operaciones recientes para eliminar.")
+        op_id = operacion.id
+    else:
+        operacion = Operacion.query.filter_by(id=int(op_id)).first()
+        if not operacion:
+            raise ValueError("La operación ya no existe.")
     if not usuario.es_admin:
         if operacion.sucursal_id != usuario.sucursal_id:
             raise ValueError("Sin permisos para esta sucursal.")
