@@ -2334,13 +2334,21 @@
                     } else if (data.tipo === 'texto') {
                         // Remover preguntas de confirmación que Gemini insiste en agregar
                         let textoLimpio = (data.texto || '').trim();
-                        textoLimpio = textoLimpio
-                            .replace(/\s*¿confirmas\?.*$/i, '')
-                            .replace(/\s*¿está bien\?.*$/i, '')
-                            .replace(/\s*¿deseas\?.*$/i, '')
-                            .replace(/\s*¿es correcto\?.*$/i, '')
-                            .replace(/\s*¿quieres\?.*$/i, '')
-                            .trim();
+                        // Remover líneas completas que contengan palabras de confirmación
+                        const lineas = textoLimpio.split('\n');
+                        const liniasFiltradas = lineas.filter(line => {
+                            const linea = line.toLowerCase();
+                            // Remover líneas que pregunta por confirmación
+                            if (/confirma|desea|está bien|es correcto|quieres|via\s+\w+\s*\?|\?\s*$/.test(linea)) {
+                                return false;
+                            }
+                            return true;
+                        });
+                        textoLimpio = liniasFiltradas.join('\n').trim();
+                        // Fallback: si quedó vacío, al menos mostrar que se registró
+                        if (!textoLimpio && data.texto.toLowerCase().includes('registr')) {
+                            textoLimpio = 'Listo, operación registrada.';
+                        }
 
                         if (textoLimpio) renderTextMessage(textoLimpio, 'bot');
                         if (data.productos && data.productos.length) renderProducts(data.productos);
