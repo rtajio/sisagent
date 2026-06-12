@@ -177,11 +177,30 @@
             background: var(--bg-paper);
             min-height: 100vh;
             margin-left: 260px;
-            transition: margin 0.25s ease;
+            transition: margin 0.25s ease, margin-right 0.25s ease;
             padding: 2rem 2.5rem;
+            margin-right: 0;
         }
 
         .main-content.expanded { margin-left: 0; }
+
+        .main-content.chat-open {
+            margin-right: 380px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-content.chat-open {
+                margin-right: 0;
+                opacity: 0.6;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-content.chat-open {
+                margin-right: 0;
+                opacity: 0.5;
+            }
+        }
 
         /* ── Cabecera de página ──────────────────────────────────── */
         .page-header {
@@ -4033,6 +4052,220 @@
     })();
     </script>
     {% endif %}
+
+    <!-- ========== MÓDULO CHAT RESPONSIVO ========== -->
+    <script>
+    (function() {
+        'use strict';
+
+        const chatPanel = document.getElementById('chatbot-panel');
+        const chatToggle = document.getElementById('chatbot-toggle');
+        const chatClose = document.getElementById('chatbot-close');
+        const chatMessages = document.getElementById('chatbot-messages');
+        const chatForm = document.getElementById('chatbot-form');
+        const chatInput = document.getElementById('chatbot-input');
+        const mainContent = document.getElementById('mainContent');
+        const chatClear = document.getElementById('chatbot-clear');
+
+        if (!chatPanel || !chatToggle) return; // No chat widget en esta página
+
+        let chatHistory = [];
+        const STORAGE_KEY = 'sisagentChatHistory';
+        const HISTORY_LIMIT = 15;
+
+        // Abrir/cerrar chat
+        function openChat() {
+            chatPanel.classList.remove('d-none');
+            mainContent.classList.add('chat-open');
+            chatToggle.style.display = 'none';
+            chatInput.focus();
+            saveState();
+        }
+
+        function closeChat() {
+            chatPanel.classList.add('d-none');
+            mainContent.classList.remove('chat-open');
+            chatToggle.style.display = 'flex';
+        }
+
+        function toggleChat() {
+            if (chatPanel.classList.contains('d-none')) {
+                openChat();
+            } else {
+                closeChat();
+            }
+        }
+
+        // Listeners para abrir/cerrar
+        chatToggle?.addEventListener('click', toggleChat);
+        chatClose?.addEventListener('click', closeChat);
+
+        // Limpiar historial
+        chatClear?.addEventListener('click', function() {
+            if (confirm('¿Limpiar toda la conversación?')) {
+                chatHistory = [];
+                chatMessages.innerHTML = '';
+                localStorage.removeItem(STORAGE_KEY);
+            }
+        });
+
+        // Persistencia del historial
+        function saveHistory() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory.slice(-HISTORY_LIMIT)));
+        }
+
+        function loadHistory() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            return saved ? JSON.parse(saved) : [];
+        }
+
+        function saveState() {
+            localStorage.setItem('chatbotOpen', chatPanel.classList.contains('d-none') ? 'false' : 'true');
+        }
+
+        // Renderizar mensaje
+        function addMessage(text, role, meta = {}) {
+            const msg = document.createElement('div');
+            msg.className = `chatbot-msg ${role}`;
+
+            if (meta.isAction) {
+                // Tarjeta de acción (propuesta)
+                msg.innerHTML = `
+                    <div style="background:var(--bg-inset);border:1px solid var(--accent);border-radius:8px;padding:10px;font-size:0.85rem;">
+                        <strong style="color:var(--accent);">📋 ${meta.actionTitle || 'Propuesta'}</strong><br>
+                        <small style="color:var(--text-secondary);">${text}</small><br>
+                        <div style="display:flex;gap:6px;margin-top:8px;">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="window.confirmAction('${meta.actionId}', false)" style="font-size:0.75rem;">Cancelar</button>
+                            <button class="btn btn-sm" style="background:var(--accent);color:white;font-size:0.75rem;" onclick="window.confirmAction('${meta.actionId}', true)">Confirmar</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                msg.textContent = text;
+            }
+
+            chatMessages.appendChild(msg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            if (role === 'user') {
+                chatHistory.push({ role: 'user', content: text });
+            } else if (!meta.isAction) {
+                chatHistory.push({ role: 'bot', content: text });
+            }
+
+            saveHistory();
+        }
+
+        // Cargar historial al abrir
+        function repaintHistory() {
+            chatMessages.innerHTML = '';
+            chatHistory.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = `chatbot-msg ${msg.role}`;
+                div.textContent = msg.content;
+                chatMessages.appendChild(div);
+            });
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Enviar mensaje
+        function sendMessage(e) {
+            if (e) e.preventDefault();
+
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            chatInput.value = '';
+
+            // Llamar al backend
+            const formData = new FormData();
+            formData.append('mensaje', text);
+            formData.append('historial', JSON.stringify(chatHistory.slice(0, -1)));
+
+            fetch('/api/chat/mensaje', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.tipo === 'texto') {
+                        addMessage(data.texto || '(Sin respuesta)', 'bot');
+                    } else if (data.tipo === 'propuesta') {
+                        addMessage(data.preview, 'bot', {
+                            isAction: true,
+                            actionId: data.accion + '_' + Date.now(),
+                            actionTitle: data.accion.replace(/_/g, ' ').toUpperCase()
+                        });
+                        window.pendingAction = data;
+                    }
+                } else {
+                    addMessage(`Error: ${data.message || 'No se pudo procesar'}`, 'bot');
+                }
+            })
+            .catch(err => {
+                console.error('Chat error:', err);
+                addMessage('Error de conexión con el asistente', 'bot');
+            });
+        }
+
+        // Confirmar acción
+        window.confirmAction = function(actionId, confirmed) {
+            if (!confirmed || !window.pendingAction) {
+                addMessage('Acción cancelada', 'bot');
+                window.pendingAction = null;
+                return;
+            }
+
+            const action = window.pendingAction;
+            fetch('/api/chat/confirmar_accion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    accion: action.accion,
+                    args: action.args
+                }),
+                credentials: 'same-origin'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage(`✅ ${data.message || 'Acción completada'}`, 'bot');
+
+                    // Actualizar la tabla si existe
+                    if (window.recargarTabla && typeof window.recargarTabla === 'function') {
+                        window.recargarTabla();
+                    }
+                } else {
+                    addMessage(`❌ Error: ${data.message || 'No se completó'}`, 'bot');
+                }
+                window.pendingAction = null;
+            })
+            .catch(err => {
+                console.error('Action error:', err);
+                addMessage('Error al confirmar la acción', 'bot');
+            });
+        };
+
+        // Event listeners
+        chatForm?.addEventListener('submit', sendMessage);
+
+        // Cargar historial al inicializar
+        document.addEventListener('DOMContentLoaded', function() {
+            chatHistory = loadHistory();
+            repaintHistory();
+
+            // Restaurar estado anterior
+            const wasOpen = localStorage.getItem('chatbotOpen') === 'true';
+            if (wasOpen) {
+                openChat();
+            }
+        });
+    })();
+    </script>
+    <!-- ========== FIN MÓDULO CHAT ========== -->
 
     {% block scripts %}{% endblock %}
 {% if get_flashed_messages(with_categories=true) %}

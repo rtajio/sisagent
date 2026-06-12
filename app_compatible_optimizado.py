@@ -21,6 +21,7 @@ import base64
 import json
 import anthropic
 import threading
+import requests
 from sqlalchemy import or_
 from flask_sock import Sock
 
@@ -1088,6 +1089,37 @@ def api_medios_por_sucursal(sucursal_id):
     ).filter(MedioPago.activo == True).order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
     return {'medios': [{'value': m.nombre_abreviado, 'label': m.nombre_abreviado} for m in medios]}
 
+@app.route('/api/operaciones/lista', methods=['GET'])
+@login_required
+def api_lista_operaciones():
+    """Devuelve la lista de operaciones en JSON para actualizar tablas sin recargar."""
+    try:
+        # Query base según permisos del usuario
+        if current_user.es_admin:
+            query = Operacion.query
+        elif current_user.es_admin_de_sucursal():
+            query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
+        else:
+            query = Operacion.query.filter_by(usuario_id=current_user.id)
+
+        operaciones = query.order_by(Operacion.hora.desc()).limit(100).all()
+
+        return jsonify({
+            'success': True,
+            'operaciones': [{
+                'id': op.id,
+                'hora': op.hora.strftime('%d/%m/%Y %H:%M:%S') if op.hora else '',
+                'monto': float(op.monto),
+                'comision': float(op.comision),
+                'medio': op.medio,
+                'usuario': op.usuario.nombre_completo if op.usuario else '',
+                'sucursal': op.sucursal.nombre if op.sucursal else '',
+            } for op in operaciones]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @app.route('/api/operaciones/<int:operacion_id>', methods=['PUT'])
 @login_required
 def api_actualizar_operacion(operacion_id):
@@ -1614,6 +1646,38 @@ def editar_venta(venta_id):
             return redirect(url_for('editar_venta', venta_id=venta_id))
 
     return render_template('editar_venta.html', venta=venta, productos=productos)
+
+
+@app.route('/api/ventas/lista', methods=['GET'])
+@login_required
+def api_lista_ventas():
+    """Devuelve la lista de ventas en JSON para actualizar tablas sin recargar."""
+    try:
+        # Query base según permisos del usuario
+        if current_user.es_admin:
+            query = Venta.query
+        elif current_user.es_admin_de_sucursal():
+            query = Venta.query.filter_by(sucursal_id=current_user.sucursal_id)
+        else:
+            query = Venta.query.filter_by(usuario_id=current_user.id)
+
+        ventas = query.order_by(Venta.fecha.desc()).limit(100).all()
+
+        return jsonify({
+            'success': True,
+            'ventas': [{
+                'id': v.id,
+                'fecha': v.fecha.strftime('%d/%m/%Y %H:%M:%S') if v.fecha else '',
+                'producto': v.producto.nombre if v.producto else '',
+                'cantidad': v.cantidad,
+                'precio_unitario': float(v.precio_unitario),
+                'monto': float(v.monto),
+                'usuario': v.usuario.nombre_completo if v.usuario else '',
+                'sucursal': v.sucursal.nombre if v.sucursal else '',
+            } for v in ventas]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @app.route('/api/ventas/resumen')
@@ -3948,6 +4012,22 @@ def _construir_mensajes_chat(historial, mensaje_usuario, imagen_bytes=None, imag
     return contents
 
 
+def _construir_preview_propuesta(preview_dict):
+    """Convierte un diccionario de propuesta en un string legible."""
+    if "_titulo" in preview_dict:
+        lineas = [f"**{preview_dict['_titulo']}**"]
+        for campo in preview_dict.get("campos", []):
+            lineas.append(f"  • {campo['label']}: {campo['valor']}")
+        return "\n".join(lineas)
+
+    # Fallback para otros formatos
+    lineas = []
+    for key, val in preview_dict.items():
+        if not key.startswith("_") and key not in ["producto_id", "sucursal_id"]:
+            lineas.append(f"{key}: {val}")
+    return "\n".join(lineas)
+
+
 def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
     """Loop de tool-use. Devuelve dict con 'tipo': 'texto' o 'propuesta'.
 
@@ -4010,11 +4090,30 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                 "productos": productos_buscados,
             }
 
-        # Acciones que mutan datos (proponer_*) o confirmar/cancelar -> ejecutar directo y devolver.
+        # Acciones que mutan datos (proponer_*) -> devolver propuesta para confirmación del usuario.
         for fc in fcs:
             nombre = fc.get("name")
             fargs = fc.get("args") or {}
-            if nombre in EJECUTORES_DIRECTOS:
+            if nombre in CHATBOT_TOOLS and CHATBOT_TOOLS[nombre].get("requires_confirmation"):
+                # Llamar al handler de propuesta para obtener un preview
+                try:
+                    preview = CHATBOT_TOOLS[nombre]["handler"](fargs, usuario)
+                except ValueError as e:
+                    return {
+                        "tipo": "texto",
+                        "texto": f"No se pudo proponer la accion: {str(e)}",
+                        "productos": productos_buscados,
+                    }
+                # Devolver propuesta (el cliente mostrará botones de confirmar/cancelar)
+                return {
+                    "tipo": "propuesta",
+                    "accion": nombre,
+                    "args": fargs,
+                    "preview": _construir_preview_propuesta(preview),
+                    "productos": productos_buscados,
+                }
+            if nombre in EJECUTORES_DIRECTOS and nombre not in CHATBOT_TOOLS:
+                # Acciones especiales como confirmar_ultima_accion, cancelar_ultima_accion
                 try:
                     resultado = EJECUTORES_DIRECTOS[nombre](fargs, usuario)
                 except ValueError as e:

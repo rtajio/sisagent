@@ -614,5 +614,46 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Función para recargar la tabla de operaciones desde el chat
+window.recargarTabla = function() {
+    fetch('/api/operaciones/lista', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success || !data.operaciones) return;
+
+            const tbody = document.querySelector('table tbody');
+            if (!tbody) return;
+
+            const isAdmin = {{ 'true' if current_user.es_admin else 'false' }};
+            const operaciones = data.operaciones;
+
+            tbody.innerHTML = operaciones.map((op, idx) => `
+                <tr id="fila-${op.id}">
+                    <td>${op.id}</td>
+                    <td>${op.hora}</td>
+                    <td class="font-weight-bold" id="monto-${op.id}">S/ ${parseFloat(op.monto).toFixed(2)}</td>
+                    <td class="text-success font-weight-bold" id="comision-${op.id}">S/ ${parseFloat(op.comision).toFixed(2)}</td>
+                    <td><span class="badge bg-primary">${op.medio}</span></td>
+                    ${isAdmin ? `<td>${op.usuario}</td><td>${op.sucursal}</td>` : ''}
+                    <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-warning" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <form method="POST" action="/operaciones/${op.id}/eliminar" style="display:inline;">
+                                <button type="submit" class="btn btn-outline-danger" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+
+            showNotification('Tabla actualizada', 'success');
+        })
+        .catch(err => console.error('Error recargando tabla:', err));
+};
 </script>
 {% endblock %} 

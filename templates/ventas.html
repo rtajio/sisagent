@@ -138,3 +138,57 @@
 </div>
 
 {% endblock %}
+
+{% block scripts %}
+<script>
+// Función para recargar la tabla de ventas desde el chat
+window.recargarTabla = function() {
+    fetch('/api/ventas/lista', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success || !data.ventas) return;
+
+            const tbody = document.querySelector('table tbody');
+            if (!tbody) return;
+
+            const isAdmin = {{ 'true' if current_user.es_admin else 'false' }};
+            const ventas = data.ventas;
+
+            let totalMonto = 0;
+            tbody.innerHTML = ventas.map(venta => {
+                totalMonto += venta.monto;
+                return `
+                    <tr>
+                        <td>${venta.fecha}</td>
+                        <td>${venta.producto}</td>
+                        <td>${venta.cantidad}</td>
+                        <td>${parseFloat(venta.precio_unitario).toFixed(2)}</td>
+                        <td class="font-weight-bold text-success">S/ ${parseFloat(venta.monto).toFixed(2)}</td>
+                        <td>${venta.usuario}</td>
+                        ${isAdmin ? `<td>${venta.sucursal}</td>` : ''}
+                        <td>
+                            <a href="/ventas/${venta.id}/editar" class="btn btn-sm btn-outline-warning">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Actualizar total
+            const tfoot = document.querySelector('table tfoot tr');
+            if (tfoot) {
+                const cols = isAdmin ? 7 : 6;
+                tfoot.innerHTML = `
+                    <td colspan="4" class="text-right">TOTAL:</td>
+                    <td class="text-success">S/ ${totalMonto.toFixed(2)}</td>
+                    <td colspan="${cols - 5}"></td>
+                `;
+            }
+
+            showNotification('Tabla actualizada', 'success');
+        })
+        .catch(err => console.error('Error recargando tabla:', err));
+};
+</script>
+{% endblock %}
