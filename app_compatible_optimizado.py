@@ -3716,7 +3716,7 @@ CHATBOT_TOOLS = {
     "crear_producto":   {"handler": _tool_crear_producto,   "requires_confirmation": True},
     "editar_producto":  {"handler": _tool_editar_producto,  "requires_confirmation": True},
     "eliminar_producto":{"handler": _tool_eliminar_producto,"requires_confirmation": True},
-    "eliminar_operacion":{"handler": _tool_eliminar_operacion,"requires_confirmation": True},
+    "eliminar_operacion":{"handler": _tool_eliminar_operacion,"requires_confirmation": False},
     "eliminar_venta":   {"handler": _tool_eliminar_venta,   "requires_confirmation": True},
     "crear_usuario":    {"handler": _tool_crear_usuario,    "requires_confirmation": True},
     "crear_sucursal":   {"handler": _tool_crear_sucursal,   "requires_confirmation": True},
