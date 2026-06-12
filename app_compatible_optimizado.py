@@ -2915,26 +2915,23 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
+        "name": "editar_operacion",
+        "description": "Edita la ÚLTIMA operación registrada del usuario (cambiar monto). NO requiere ID - busca automáticamente la más reciente. EJECUTA DIRECTAMENTE sin confirmación.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "monto": {"type": "number", "description": "Nuevo monto en soles (ej: 130, sin símbolo)"},
+            },
+            "required": ["monto"],
+        },
+    },
+    {
         "name": "eliminar_operacion",
         "description": "PROPONE eliminar una operación bancaria. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las que él registró. NO ejecuta.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "operacion_id": {"type": "integer", "description": "ID de la operación a eliminar"},
-            },
-            "required": ["operacion_id"],
-        },
-    },
-    {
-        "name": "editar_operacion",
-        "description": "Edita una operación existente (cambiar monto y/o comisión). EJECUTA DIRECTAMENTE sin pedir confirmación. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "operacion_id": {"type": "integer", "description": "ID de la operación a editar (OBLIGATORIO)"},
-                "monto": {"type": "number", "description": "(Opcional) Nuevo monto en S/. Si no se pasa, se mantiene el actual."},
-                "comision": {"type": "number", "description": "(Opcional) Nueva comisión. Si no se pasa, se auto-calcula."},
-                "motivo_descuento": {"type": "string", "description": "(Opcional) Motivo si la comisión es manual diferente a lo sugerido."},
             },
             "required": ["operacion_id"],
         },
