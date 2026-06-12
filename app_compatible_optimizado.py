@@ -2711,11 +2711,11 @@ NO hagas esto: "Voy a registrar..." o "Perfecto, preparé..." — ESO ESTÁ PROH
 Si el usuario dice: "dame una operación de S/ 500 por Yape"
 Tu respuesta: LLAMA registrar_operacion({monto: 500, medio: "YAPE"})
 
-Si el usuario dice: "la operación era de S/ 300, no 500" O "me equivoqué, era de S/ 50"
+Si el usuario dice: "me equivoqué" O "eso era incorrecto" O "era de X soles"
 Tu respuesta:
-  PASO 1: LLAMA buscar_operaciones() PRIMERO para obtener el ID de la última operación
-  PASO 2: Luego LLAMA editar_operacion({operacion_id: <ID>, monto: 300})
-NUNCA intentes editar sin el operacion_id. SIEMPRE busca primero si no lo tienes.
+  PASO 1: LLAMA eliminar_operacion() para eliminar la última operación
+  PASO 2: LLAMA registrar_operacion() con los datos correctos
+IMPORTANTE: NO EXISTE editar_operacion. SIEMPRE usa ELIMINAR + REGISTRAR para corregir.
 
 NO hagas esto: "¿Confirmas?" o "Está bien?" — ESO ESTÁ PROHIBIDO.
 
@@ -2912,17 +2912,6 @@ _HERRAMIENTAS_DECLARACIONES = [
                 "producto_id": {"type": "integer", "description": "ID del producto"},
             },
             "required": ["producto_id"],
-        },
-    },
-    {
-        "name": "editar_operacion",
-        "description": "Edita la ÚLTIMA operación registrada del usuario (cambiar monto). NO requiere ID - busca automáticamente la más reciente. EJECUTA DIRECTAMENTE sin confirmación.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "monto": {"type": "number", "description": "Nuevo monto en soles (ej: 130, sin símbolo)"},
-            },
-            "required": ["monto"],
         },
     },
     {
@@ -3728,7 +3717,6 @@ CHATBOT_TOOLS = {
     "editar_producto":  {"handler": _tool_editar_producto,  "requires_confirmation": True},
     "eliminar_producto":{"handler": _tool_eliminar_producto,"requires_confirmation": True},
     "eliminar_operacion":{"handler": _tool_eliminar_operacion,"requires_confirmation": True},
-    "editar_operacion":  {"handler": _tool_editar_operacion,  "requires_confirmation": True},
     "eliminar_venta":   {"handler": _tool_eliminar_venta,   "requires_confirmation": True},
     "crear_usuario":    {"handler": _tool_crear_usuario,    "requires_confirmation": True},
     "crear_sucursal":   {"handler": _tool_crear_sucursal,   "requires_confirmation": True},
@@ -4271,7 +4259,6 @@ EJECUTORES_DIRECTOS = {
     'editar_producto':    _ejecutar_editar_producto_validado,
     'eliminar_producto':  _ejecutar_eliminar_producto_validado,
     'eliminar_operacion': _ejecutar_eliminar_operacion_validada,
-    'editar_operacion':   _ejecutar_editar_operacion_validada,
     'eliminar_venta':     _ejecutar_eliminar_venta_validada,
     'crear_usuario':      _ejecutar_crear_usuario_validado,
     'crear_sucursal':     _ejecutar_crear_sucursal_validada,
