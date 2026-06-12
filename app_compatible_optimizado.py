@@ -3965,7 +3965,9 @@ def _ejecutar_editar_operacion_validada(args, usuario):
     monto_arg = args.get("monto") or args.get("monto_nuevo")
     if monto_arg is not None:
         try:
-            monto_nuevo = float(monto_arg)
+            # Limpiar símbolo de moneda si viene así
+            monto_str = str(monto_arg).replace("S/", "").replace("$", "").strip()
+            monto_nuevo = float(monto_str)
         except (TypeError, ValueError):
             raise ValueError("Monto invalido.")
         if monto_nuevo <= 0:
