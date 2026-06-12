@@ -808,7 +808,14 @@ def operaciones():
     operaciones_paginated = query.order_by(Operacion.hora.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
-    
+
+    # Forzar orden descendente por hora (en caso de que DB no respete ORDER BY)
+    operaciones_paginated.items = sorted(
+        operaciones_paginated.items,
+        key=lambda op: op.hora or datetime.min,
+        reverse=True
+    )
+
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
     
