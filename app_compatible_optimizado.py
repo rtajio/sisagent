@@ -2140,6 +2140,42 @@ def eliminar_sucursal(sucursal_id):
     flash('Sucursal eliminada', 'success')
     return redirect(url_for('admin_sucursales'))
 
+@app.route('/admin/fix-operacion-sequence', methods=['POST'])
+@login_required
+def fix_operacion_sequence():
+    """Resetear auto-increment de operaciones (admin only, emergencia)."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        # Obtener el máximo ID actual
+        max_id = db.session.query(db.func.max(Operacion.id)).scalar() or 0
+        next_id = max_id + 1
+
+        # Resetear auto-increment según el tipo de BD
+        if os.environ.get('DATABASE_URL'):
+            # PostgreSQL
+            db.session.execute(
+                db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {next_id}, false)")
+            )
+        else:
+            # SQLite
+            db.session.execute(
+                db.text(f"DELETE FROM sqlite_sequence WHERE name='operacion'")
+            )
+            db.session.execute(
+                db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {max_id})")
+            )
+
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': f'Auto-increment reseteado. Próximo ID: {next_id}'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/reportes')
 @login_required
 def reportes():
