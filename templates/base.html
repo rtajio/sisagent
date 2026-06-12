@@ -2683,24 +2683,71 @@
                           : 'webm';
                 fd.append('audio', blob, 'dictado.' + ext);
 
-                const ctrl = new AbortController();
-                const timeout = setTimeout(function() { ctrl.abort(); }, 65000);
-
+                // PRIMERO: intentar Web Speech API nativa del navegador (sin servidor, instantáneo)
+                let texto = '';
                 try {
-                    const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd, signal: ctrl.signal });
-                    clearTimeout(timeout);
-                    const ct = resp.headers.get('content-type') || '';
-                    if (!ct.includes('application/json')) {
-                        throw new Error('Respuesta no JSON del servidor (HTTP ' + resp.status + ')');
-                    }
-                    const data = await resp.json();
-                    if (!data.success) {
+                    texto = await new Promise(function(resolve, reject) {
+                        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                        if (!SpeechRecognition) {
+                            reject(new Error('Web Speech API no disponible'));
+                        }
+                        const recognition = new SpeechRecognition();
+                        recognition.lang = 'es-ES';
+                        recognition.interimResults = false;
+                        recognition.maxAlternatives = 1;
+
+                        let timeout = setTimeout(() => {
+                            recognition.abort();
+                            reject(new Error('Timeout en Web Speech API'));
+                        }, 30000);
+
+                        recognition.onresult = (event) => {
+                            clearTimeout(timeout);
+                            const transcript = Array.from(event.results)
+                                .map(result => result[0].transcript)
+                                .join('');
+                            resolve(transcript.trim());
+                        };
+
+                        recognition.onerror = (event) => {
+                            clearTimeout(timeout);
+                            reject(new Error('Web Speech API error: ' + event.error));
+                        };
+
+                        recognition.start();
+                    });
+                } catch (webSpeechError) {
+                    console.warn('[chatbot] Web Speech API falló, fallback a Gemini:', webSpeechError);
+                    // FALLBACK: usar Gemini si Web Speech API falla
+                    const ctrl = new AbortController();
+                    const timeout = setTimeout(function() { ctrl.abort(); }, 65000);
+
+                    try {
+                        const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd, signal: ctrl.signal });
+                        clearTimeout(timeout);
+                        const ct = resp.headers.get('content-type') || '';
+                        if (!ct.includes('application/json')) {
+                            throw new Error('Respuesta no JSON del servidor (HTTP ' + resp.status + ')');
+                        }
+                        const data = await resp.json();
+                        if (!data.success) {
+                            if (typeof showNotification === 'function') {
+                                showNotification(data.message || 'Error al transcribir.', 'error');
+                            }
+                            return;
+                        }
+                        texto = (data.texto || '').trim();
+                    } catch (geminiError) {
+                        clearTimeout(timeout);
+                        console.error('[chatbot] Error en ambos métodos:', webSpeechError, geminiError);
                         if (typeof showNotification === 'function') {
-                            showNotification(data.message || 'Error al transcribir.', 'error');
+                            showNotification('Error en transcripción (Web Speech + Gemini fallaron).', 'error');
                         }
                         return;
                     }
-                    const texto = (data.texto || '').trim();
+                }
+
+                try {
                     if (!texto) {
                         if (typeof showNotification === 'function') {
                             showNotification('No se detectó voz en el audio.', 'warning');
