@@ -3929,32 +3929,23 @@ def _ejecutar_operacion_validada(args, usuario):
 
 
 def _ejecutar_editar_operacion_validada(args, usuario):
-    """Re-valida desde cero y edita la operacion bancaria.
-    Si no hay operacion_id, busca automáticamente la última operación del usuario."""
-    try:
-        op_id = args.get("operacion_id")
-        if not op_id:
-            # Buscar automáticamente la última operación del usuario
-            try:
-                sucursales = sucursales_visibles_para(usuario)
-                if not sucursales:
-                    raise ValueError("No tienes sucursales asignadas.")
-                sucursal_ids = [s.id for s in sucursales]
-                q = Operacion.query.filter(Operacion.sucursal_id.in_(sucursal_ids))
-                if not usuario.es_admin and not usuario.es_admin_de_sucursal():
-                    q = q.filter(Operacion.usuario_id == usuario.id)
-                ultima_op = q.order_by(Operacion.hora.desc()).first()
-                if not ultima_op:
-                    raise ValueError("No hay operaciones para editar.")
-                op_id = ultima_op.id
-            except Exception as e:
-                raise ValueError(f"Error buscando última operación: {str(e)}")
+    """Edita la última operación del usuario. Busca automáticamente por ID DESC."""
+    # Buscar la última operación del usuario (por ID, no hora - más confiable)
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        raise ValueError("No tienes sucursales asignadas.")
 
-        operacion = Operacion.query.filter_by(id=int(op_id)).first()
-        if not operacion:
-            raise ValueError(f"Operación {op_id} no existe.")
-    except Exception as e:
-        raise ValueError(f"Error en editar_operacion: {str(e)}")
+    sucursal_ids = [s.id for s in sucursales]
+    q = Operacion.query.filter(Operacion.sucursal_id.in_(sucursal_ids))
+
+    # Usuario regular solo ve sus propias operaciones
+    if not usuario.es_admin and not usuario.es_admin_de_sucursal():
+        q = q.filter(Operacion.usuario_id == usuario.id)
+
+    # Obtener la última operación por ID (más confiable que por hora)
+    operacion = q.order_by(Operacion.id.desc()).first()
+    if not operacion:
+        raise ValueError("No hay operaciones para editar.")
 
     # Reglas de permisos:
     if not usuario.es_admin:
