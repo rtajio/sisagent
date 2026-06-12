@@ -2847,6 +2847,20 @@ _HERRAMIENTAS_DECLARACIONES = [
         },
     },
     {
+        "name": "proponer_editar_operacion",
+        "description": "PROPONE editar una operación existente (cambiar monto y/o comisión). Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas. NO ejecuta.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "operacion_id": {"type": "integer", "description": "ID de la operación a editar"},
+                "monto": {"type": "number", "description": "(Opcional) Nuevo monto en S/. Si no se pasa, se mantiene el actual."},
+                "comision": {"type": "number", "description": "(Opcional) Nueva comisión. Si no se pasa, se auto-calcula."},
+                "motivo_descuento": {"type": "string", "description": "(Opcional) Motivo si la comisión es manual diferente a lo sugerido."},
+            },
+            "required": ["operacion_id"],
+        },
+    },
+    {
         "name": "proponer_eliminar_venta",
         "description": "PROPONE eliminar una venta (devuelve el stock al inventario). Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las suyas. NO ejecuta.",
         "input_schema": {
@@ -3447,6 +3461,68 @@ def _tool_proponer_eliminar_operacion(args, usuario):
     }
 
 
+def _tool_proponer_editar_operacion(args, usuario):
+    """Valida cambios a una operación bancaria y devuelve preview. NO toca la BD."""
+    op_id = args.get("operacion_id")
+    if not op_id:
+        raise ValueError("Falta operacion_id.")
+    operacion = Operacion.query.filter_by(id=int(op_id)).first()
+    if not operacion:
+        raise ValueError(f"La operación {op_id} no existe.")
+    # Reglas de permisos:
+    if not usuario.es_admin:
+        if operacion.sucursal_id != usuario.sucursal_id:
+            raise ValueError("No tienes permisos para editar operaciones de otra sucursal.")
+        if not usuario.es_admin_de_sucursal() and operacion.usuario_id != usuario.id:
+            raise ValueError("Solo puedes editar las operaciones que tú registraste.")
+
+    # Validar nuevos valores
+    monto_nuevo = operacion.monto
+    if "monto" in args and args.get("monto") is not None:
+        try:
+            monto_nuevo = float(args.get("monto"))
+        except (TypeError, ValueError):
+            raise ValueError("Monto debe ser un numero.")
+        if monto_nuevo <= 0:
+            raise ValueError("El monto debe ser mayor a 0.")
+
+    comision_nueva = operacion.comision
+    es_manual = False
+    motivo = None
+    if "comision" in args and args.get("comision") is not None:
+        try:
+            comision_nueva = float(args.get("comision"))
+        except (TypeError, ValueError):
+            raise ValueError("Comision debe ser un numero.")
+        if comision_nueva < 0:
+            raise ValueError("La comision no puede ser negativa.")
+        comision_sugerida = calcular_comision_sugerida(monto_nuevo)
+        if abs(comision_nueva - comision_sugerida) > 0.001:
+            es_manual = True
+            motivo = (args.get("motivo_descuento") or "").strip() or None
+    else:
+        # Si no pasan comisión pero cambiaron monto, recalcular
+        if monto_nuevo != operacion.monto:
+            comision_nueva = calcular_comision_sugerida(monto_nuevo)
+
+    return {
+        "_titulo": "Confirmar edición de operación",
+        "_mensaje": "Cambios a aplicar",
+        "campos": [
+            {"label": "ID", "valor": str(operacion.id)},
+            {"label": "Monto (actual → nuevo)", "valor": f"S/ {float(operacion.monto):.2f} → S/ {monto_nuevo:.2f}"},
+            {"label": "Comisión (actual → nueva)", "valor": f"S/ {float(operacion.comision):.2f} → S/ {comision_nueva:.2f}"},
+            {"label": "Medio", "valor": operacion.medio or ""},
+            {"label": "Sucursal", "valor": operacion.sucursal.nombre if operacion.sucursal else ""},
+        ],
+        "operacion_id": operacion.id,
+        "monto_nuevo": monto_nuevo,
+        "comision_nueva": comision_nueva,
+        "comision_manual": es_manual,
+        "motivo": motivo,
+    }
+
+
 def _tool_proponer_eliminar_venta(args, usuario):
     v_id = args.get("venta_id")
     if not v_id:
@@ -3559,6 +3635,7 @@ CHATBOT_TOOLS = {
     "proponer_editar_producto":  {"handler": _tool_proponer_editar_producto,  "requires_confirmation": True},
     "proponer_eliminar_producto":{"handler": _tool_proponer_eliminar_producto,"requires_confirmation": True},
     "proponer_eliminar_operacion":{"handler": _tool_proponer_eliminar_operacion,"requires_confirmation": True},
+    "proponer_editar_operacion":  {"handler": _tool_proponer_editar_operacion,  "requires_confirmation": True},
     "proponer_eliminar_venta":   {"handler": _tool_proponer_eliminar_venta,   "requires_confirmation": True},
     "proponer_crear_usuario":    {"handler": _tool_proponer_crear_usuario,    "requires_confirmation": True},
     "proponer_crear_sucursal":   {"handler": _tool_proponer_crear_sucursal,   "requires_confirmation": True},
@@ -3745,6 +3822,112 @@ def _ejecutar_operacion_validada(args, usuario):
         "motivo_descuento": motivo,
         "medio": medio_valido.nombre_abreviado,
         "sucursal_nombre": sucursal.nombre,
+    }
+
+
+def _ejecutar_editar_operacion_validada(args, usuario):
+    """Re-valida desde cero y edita la operacion bancaria."""
+    op_id = args.get("operacion_id")
+    if not op_id:
+        raise ValueError("Falta operacion_id.")
+
+    operacion = Operacion.query.filter_by(id=int(op_id)).first()
+    if not operacion:
+        raise ValueError(f"La operación {op_id} ya no existe.")
+
+    # Reglas de permisos:
+    if not usuario.es_admin:
+        if operacion.sucursal_id != usuario.sucursal_id:
+            raise ValueError("No tienes permisos para editar operaciones de otra sucursal.")
+        if not usuario.es_admin_de_sucursal() and operacion.usuario_id != usuario.id:
+            raise ValueError("Solo puedes editar las operaciones que tú registraste.")
+
+    # Nuevos valores (o mantener los actuales)
+    monto_nuevo = operacion.monto
+    if "monto_nuevo" in args and args.get("monto_nuevo") is not None:
+        try:
+            monto_nuevo = float(args.get("monto_nuevo"))
+        except (TypeError, ValueError):
+            raise ValueError("Monto invalido.")
+        if monto_nuevo <= 0:
+            raise ValueError("El monto debe ser mayor a 0.")
+
+    comision_nueva = operacion.comision
+    es_manual = bool(args.get("comision_manual", False))
+    motivo = args.get("motivo")
+
+    if "comision_nueva" in args and args.get("comision_nueva") is not None:
+        try:
+            comision_nueva = float(args.get("comision_nueva"))
+        except (TypeError, ValueError):
+            raise ValueError("Comision invalida.")
+        if comision_nueva < 0:
+            raise ValueError("La comision no puede ser negativa.")
+    else:
+        # Si no pasaron comisión pero cambiaron monto, recalcular
+        if monto_nuevo != operacion.monto:
+            comision_nueva = calcular_comision_sugerida(monto_nuevo)
+            es_manual = False
+            motivo = None
+
+    # Actualizar montos en la operación
+    monto_diferencia = monto_nuevo - operacion.monto
+    comision_diferencia = comision_nueva - operacion.comision
+
+    operacion.monto = monto_nuevo
+    operacion.comision = comision_nueva
+    operacion.comision_manual = es_manual
+    operacion.motivo_descuento = motivo if es_manual else None
+
+    # Ajustar comisiones diarias y mensuales
+    hoy = get_peru_time().date()
+    comision_diaria = ComisionDiaria.query.filter_by(fecha=hoy, sucursal_id=operacion.sucursal_id).first()
+    if comision_diaria:
+        comision_diaria.total_comision = float(comision_diaria.total_comision) + comision_diferencia
+    else:
+        # Crear registro si no existe (aunque es raro)
+        comision_diaria = ComisionDiaria(
+            fecha=hoy,
+            sucursal_id=operacion.sucursal_id,
+            total_comision=comision_diferencia
+        )
+        db.session.add(comision_diaria)
+
+    ahora = get_peru_time()
+    comision_mensual = ComisionMensual.query.filter_by(
+        año=ahora.year, mes=ahora.month, sucursal_id=operacion.sucursal_id
+    ).first()
+    if comision_mensual:
+        comision_mensual.total_comision = float(comision_mensual.total_comision) + comision_diferencia
+    else:
+        comision_mensual = ComisionMensual(
+            año=ahora.year,
+            mes=ahora.month,
+            sucursal_id=operacion.sucursal_id,
+            total_comision=comision_diferencia
+        )
+        db.session.add(comision_mensual)
+
+    db.session.commit()
+    clear_cache()
+
+    # Mensaje
+    _msg = f'Operación {operacion.id} editada: S/ {operacion.monto:.2f}'
+    if monto_diferencia != 0:
+        _msg = f'Monto: S/ {operacion.monto - monto_diferencia:.2f} → S/ {monto_nuevo:.2f}. '
+    if es_manual and comision_diferencia != 0:
+        _msg += f' Comisión manual: S/ {comision_nueva:.2f}'
+        if motivo:
+            _msg += f' (motivo: {motivo})'
+    _msg += '.'
+
+    return {
+        "mensaje": _msg,
+        "monto": monto_nuevo,
+        "monto_anterior": operacion.monto - monto_diferencia,
+        "comision": comision_nueva,
+        "comision_anterior": operacion.comision - comision_diferencia,
+        "operacion_id": operacion.id,
     }
 
 
@@ -3967,6 +4150,7 @@ EJECUTORES_DIRECTOS = {
     'proponer_editar_producto':    _ejecutar_editar_producto_validado,
     'proponer_eliminar_producto':  _ejecutar_eliminar_producto_validado,
     'proponer_eliminar_operacion': _ejecutar_eliminar_operacion_validada,
+    'proponer_editar_operacion':   _ejecutar_editar_operacion_validada,
     'proponer_eliminar_venta':     _ejecutar_eliminar_venta_validada,
     'proponer_crear_usuario':      _ejecutar_crear_usuario_validado,
     'proponer_crear_sucursal':     _ejecutar_crear_sucursal_validada,
@@ -4627,6 +4811,7 @@ Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar ven
 - Las funciones `confirmar_ultima_accion` y `cancelar_ultima_accion` ya NO se usan — no las llames nunca.
 - Si el resultado viene con "error", informa el motivo al usuario BREVEMENTE (una línea). NO insistas, NO repreguntes. "Error: sucursal no existe. ¿Otra?" es demasiado. Mejor: "No encontré esa sucursal. ¿Cuál era?"
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
+- EDITAR vs ELIMINAR: Si el usuario dice "no era de S/ 500", "cambiar a 300 soles", "corregir el monto", "era más" — usa `proponer_editar_operacion` (mantiene el ID, solo cambia valores). Solo USA `proponer_eliminar_operacion` si dice explícitamente "borra", "elimina", "quita esa operacion".
 - Habla siempre en español latinoamericano natural (acento neutro de Latinoamérica/Perú), conciso, amable. Como un colega que te ayuda.
 - LECTURA DE MONTOS: el simbolo "S/" antes de un numero se pronuncia "soles" DESPUES del numero. "S/ 1" se dice "un sol"; "S/ 2" = "dos soles"; "S/ 100" = "cien soles"; "S/ 150.50" = "ciento cincuenta soles con cincuenta centimos". NUNCA digas "ese barra", "soles barra" ni leas el simbolo literal.
 - LECTURA DE HORAS: di la hora concisa, formato 12h. "16:29" se dice "cuatro con veintinueve pe eme"; "09:05" = "nueve con cinco a eme". Di "pe eme" para PM y "a eme" para AM. ZONA HORARIA: SIEMPRE usa la hora de Perú (UTC-5) que viene en el contexto.
@@ -4771,6 +4956,7 @@ def _ejecutar_accion_confirmada_voz(accion, args, user_id):
             'proponer_editar_producto':    _ejecutar_editar_producto_validado,
             'proponer_eliminar_producto':  _ejecutar_eliminar_producto_validado,
             'proponer_eliminar_operacion': _ejecutar_eliminar_operacion_validada,
+            'proponer_editar_operacion':   _ejecutar_editar_operacion_validada,
             'proponer_eliminar_venta':     _ejecutar_eliminar_venta_validada,
             'proponer_crear_usuario':      _ejecutar_crear_usuario_validado,
             'proponer_crear_sucursal':     _ejecutar_crear_sucursal_validada,
