@@ -886,9 +886,9 @@ def api_operaciones_lista():
     try:
         ahora = get_peru_time()
         hoy = ahora.date()
-        inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
-        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
-        fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+        # Crear rango sin tzinfo (la BD almacena hora sin timezone)
+        inicio_hoy = datetime.combine(hoy, datetime.min.time())
+        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
 
         if current_user.es_admin:
             query = Operacion.query
