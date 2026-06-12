@@ -809,15 +809,8 @@ def operaciones():
         page=page, per_page=per_page, error_out=False
     )
 
-    # Forzar orden descendente por hora - sort en Python es confiable
-    items_list = list(operaciones_paginated.items)
-    operaciones = sorted(
-        items_list,
-        key=lambda op: op.hora or datetime(1900, 1, 1),
-        reverse=True  # DESCENDENTE: más recientes primero
-    )
-    if operaciones:
-        print(f"[DEBUG] Page {page}: {len(operaciones)} ops, primeras 3: {[(op.id, op.hora.strftime('%H:%M:%S') if op.hora else 'None') for op in operaciones[:3]]}")
+    # Invertir para mostrar del más reciente al más antiguo
+    operaciones = list(reversed(list(operaciones_paginated.items)))
 
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
