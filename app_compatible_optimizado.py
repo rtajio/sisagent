@@ -815,6 +815,7 @@ def operaciones():
         key=lambda op: op.hora if op.hora else datetime(1900, 1, 1),
         reverse=True
     )
+    print(f"[DEBUG] Operaciones ordenadas: {[f'{op.id}:{op.hora.strftime(\"%H:%M:%S\") if op.hora else \"None\"}' for op in operaciones[:3]]}")
 
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
