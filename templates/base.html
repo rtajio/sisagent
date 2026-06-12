@@ -177,11 +177,22 @@
             background: var(--bg-paper);
             min-height: 100vh;
             margin-left: 260px;
-            transition: margin 0.25s ease;
+            transition: margin-right 0.25s ease;
             padding: 2rem 2.5rem;
         }
 
         .main-content.expanded { margin-left: 0; }
+
+        /* Chat responsivo: desplazar contenido cuando el chat está abierto */
+        .main-content.chat-open {
+            margin-right: 420px;
+        }
+        @media (max-width: 768px) {
+            .main-content.chat-open {
+                margin-right: 0;
+                opacity: 0.5;
+            }
+        }
 
         /* ── Cabecera de página ──────────────────────────────────── */
         .page-header {
@@ -2249,9 +2260,19 @@
 
             toggleBtn.addEventListener('click', function() {
                 panel.classList.toggle('d-none');
-                if (!panel.classList.contains('d-none')) input.focus();
+                const mainContent = document.getElementById('mainContent');
+                if (!panel.classList.contains('d-none')) {
+                    if (mainContent) mainContent.classList.add('chat-open');
+                    input.focus();
+                } else {
+                    if (mainContent) mainContent.classList.remove('chat-open');
+                }
             });
-            closeBtn.addEventListener('click', function() { panel.classList.add('d-none'); });
+            closeBtn.addEventListener('click', function() {
+                panel.classList.add('d-none');
+                const mainContent = document.getElementById('mainContent');
+                if (mainContent) mainContent.classList.remove('chat-open');
+            });
             clearBtn.addEventListener('click', function() {
                 if (confirm('¿Borrar la conversación?')) clearHistory();
             });
