@@ -2718,13 +2718,13 @@ Tu rol — eres un asistente operativo COMPLETO. Puedes:
    - Crear sucursales nuevas
 
 Reglas críticas:
-- Para CUALQUIER mutación, llama DIRECTAMENTE a la herramienta `proponer_*` correspondiente con los datos (en el MISMO turno, no solo la anuncies). El servidor la ejecuta de inmediato, sin pedir confirmación, y te devuelve el resultado. NUNCA preguntes "¿confirmas?".
+- Para CUALQUIER mutación (registrar operacion/venta, crear producto, etc.): llama a `proponer_*` con los datos DIRECTAMENTE. El servidor la ejecuta de inmediato, sin pedir confirmación, y te devuelve el resultado. NUNCA JAMAS preguntes "¿confirmas?" o "¿está bien?" — eso es responsabilidad del servidor, no tuya. Solo confirma lo que se registró ("Listo, registré...").
 - Si necesitas el ID de una operación/venta para eliminarla, primero usa `buscar_operaciones` o `buscar_ventas` para que el usuario te confirme cuál.
 - Si te muestran una imagen, descríbela brevemente y usa `buscar_productos` con palabras clave.
 - No inventes valores: si falta información, pregunta en lenguaje natural ("¿en qué sucursal?", "¿qué precio?", "¿con qué stock inicial?").
 - Los permisos se respetan en el servidor automáticamente. Si el usuario no tiene acceso, la herramienta devolverá un error claro que debes transmitir.
 - Roles: admin global (puede TODO), admin de sucursal (gestiona su sucursal — productos, usuarios, operaciones de su sucursal), usuario regular (solo sus propias ventas/operaciones).
-- Responde SIEMPRE en español, conciso, amable y orientado a la acción. En cuanto tengas los datos necesarios para una acción, invoca la herramienta `proponer_*` directamente en ese turno (el servidor anuncia el resultado).
+- Responde SIEMPRE en español, conciso, amable y orientado a la acción. En cuanto tengas los datos necesarios para una acción, invoca la herramienta `proponer_*` directamente en ese turno.
 - FORMATO en texto: los montos van con símbolo y número ("S/ 200", no "doscientos soles"). Las horas van en formato 12h compacto "HH:MMam/pm" (ej: "04:29pm", "09:05am") — NO las escribas con palabras ("las cuatro con veintinueve de la tarde").
 - ZONA HORARIA CRÍTICA: SIEMPRE usa la zona horaria de Perú (UTC-5) que viene en el contexto. NUNCA uses UTC ni conversiones de zona horaria. Si el usuario pregunta la hora, repite exactamente la hora del contexto injected (ej: si dice "09:05am Perú", responde "son las nueve con cinco a eme", no otra hora).
 """
@@ -2775,7 +2775,7 @@ _HERRAMIENTAS_DECLARACIONES = [
     },
     {
         "name": "proponer_venta",
-        "description": "PROPONE registrar una venta. Valida el producto, calcula el total y devuelve una vista previa — el sistema mostrara una tarjeta de confirmacion al usuario. NO ejecuta la venta directamente. Usala cuando el usuario pida registrar una venta.",
+        "description": "Registra una venta DIRECTAMENTE. Valida el producto, descuenta stock, suma a caja y confirma. NO preguntes '¿confirmas?' — el servidor ejecuta de inmediato. Usala cuando el usuario pida registrar una venta.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -2788,7 +2788,7 @@ _HERRAMIENTAS_DECLARACIONES = [
     },
     {
         "name": "proponer_operacion",
-        "description": "PROPONE registrar una operacion bancaria. La comision se calcula automaticamente (S/1 por cada S/100 de monto, redondeado hacia arriba) — NO incluyas el parametro 'comision' a menos que el usuario pida explicitamente un descuento o un monto de comision distinto al automatico (p.ej. 'cobrale solo 1 sol de comision', 'es casero, hazle descuento'). Si el usuario pide una comision manual, incluye tambien 'motivo_descuento' explicando por que. Valida el medio de pago y devuelve una vista previa — el sistema mostrara una tarjeta de confirmacion al usuario. NO ejecuta la operacion directamente.",
+        "description": "Registra una operacion bancaria DIRECTAMENTE. La comision se calcula automaticamente (S/1 por cada S/100 de monto, redondeado hacia arriba) — NO incluyas el parametro 'comision' a menos que el usuario pida explicitamente un descuento o un monto de comision distinto al automatico (p.ej. 'cobrale solo 1 sol de comision', 'es casero, hazle descuento'). Si el usuario pide una comision manual, incluye tambien 'motivo_descuento' explicando por que. El servidor ejecuta de inmediato — NO preguntes '¿confirmas?'.",
         "input_schema": {
             "type": "object",
             "properties": {
