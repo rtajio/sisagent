@@ -3707,6 +3707,12 @@ CHATBOT_TOOLS = {
     "proponer_crear_sucursal":   {"handler": _tool_proponer_crear_sucursal,   "requires_confirmation": True},
 }
 
+# Agregar declaraciones de herramientas (para Claude)
+for decl in _HERRAMIENTAS_DECLARACIONES:
+    nombre = decl.get("name")
+    if nombre in CHATBOT_TOOLS:
+        CHATBOT_TOOLS[nombre]["_tool_declaration"] = decl
+
 
 # ---------- Ejecutores validados (tras confirmacion del usuario) ----------
 
@@ -4284,14 +4290,15 @@ def _construir_mensajes_chat(historial, mensaje_usuario, imagen_bytes=None, imag
 
 
 def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
-    """Loop de tool-use. Devuelve dict con 'tipo': 'texto' o 'propuesta'.
+    """Loop de tool-use con Claude API. Devuelve dict con 'tipo': 'texto'.
 
-    Acumula los productos vistos por la IA durante el turno (via `buscar_productos`)
-    para que el frontend pueda renderizar tarjetas con fotos junto a la respuesta.
+    Usa Anthropic Claude en lugar de Gemini para mejor obediencia de instrucciones.
+    Los mensajes llegan en formato Gemini (role: user/model, parts: [...]) y se convierten a Claude.
     """
-    if not app.config.get("GEMINI_API_KEY"):
-        raise RuntimeError("El asistente IA no esta disponible: falta configurar GEMINI_API_KEY en el servidor.")
-    import httpx as _httpx
+    if not app.config.get("ANTHROPIC_API_KEY"):
+        raise RuntimeError("El asistente IA no esta disponible: falta configurar ANTHROPIC_API_KEY en el servidor.")
+
+    client = _get_anthropic_client()
 
     productos_buscados = []
     productos_ids_vistos = set()
@@ -4304,52 +4311,87 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
             productos_ids_vistos.add(pid)
             productos_buscados.append(prod)
 
-    url = f"{GEMINI_API_URL}/{GEMINI_CHAT_MODEL}:generateContent"
-    headers = {"Content-Type": "application/json", "x-goog-api-key": app.config["GEMINI_API_KEY"]}
-    tools = [{"functionDeclarations": _build_gemini_function_declarations()}]
-    system_instruction = {"parts": [{"text": SYSTEM_PROMPT_CHATBOT + _contexto_fecha_hora()}]}
+    # Convertir mensajes de formato Gemini a Claude
+    # Gemini: {"role": "user"/"model", "parts": [{"text": "..."}, ...]}
+    # Claude: {"role": "user"/"assistant", "content": "text"} o con tool_use blocks
+    mensajes_claude = []
+    for msg in mensajes:
+        rol = msg.get("role", "").lower()
+        parts = msg.get("parts") or []
+        if not parts:
+            continue
 
-    for _ in range(max_iteraciones):
-        payload = {
-            "contents": mensajes,
-            "tools": tools,
-            "systemInstruction": system_instruction,
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
-        }
-        # Reintentos para 503 (alta demanda) transitorios de Gemini.
-        data = None
-        for intento in range(3):
-            resp = _httpx.post(url, json=payload, headers=headers, timeout=60.0)
-            if resp.status_code == 503 and intento < 2:
-                time.sleep(0.8 + intento)
-                continue
-            try:
-                data = resp.json()
-            except Exception:
-                data = {}
-            break
-        if not data or data.get("error"):
-            msg = (data or {}).get("error", {}).get("message", "alta demanda, reintenta en un momento")
-            raise RuntimeError(f"Error de la IA: {msg}")
+        # Extraer texto de los parts
+        textos = []
+        for part in parts:
+            if isinstance(part, dict):
+                if "text" in part:
+                    textos.append(part["text"])
+                # Ignorar inlineData por ahora (fotos) — Claude lo maneja diferente
 
-        candidate = (data.get("candidates") or [{}])[0]
-        parts = (candidate.get("content") or {}).get("parts") or []
-        texto = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p).strip()
-        fcs = [p["functionCall"] for p in parts if isinstance(p, dict) and "functionCall" in p]
+        contenido = " ".join(textos).strip()
+        if not contenido:
+            continue
 
-        # Sin llamadas a herramienta -> respuesta final de texto.
-        if not fcs:
+        if rol == "user":
+            mensajes_claude.append({"role": "user", "content": contenido})
+        elif rol == "model":
+            mensajes_claude.append({"role": "assistant", "content": contenido})
+
+    # Construir herramientas para Claude
+    herramientas = []
+    for nombre, spec in CHATBOT_TOOLS.items():
+        decl = spec.get("_tool_declaration", {})
+        if decl:
+            herramientas.append({
+                "name": nombre,
+                "description": decl.get("description", ""),
+                "input_schema": decl.get("input_schema", {})
+            })
+
+    system_prompt = SYSTEM_PROMPT_CHATBOT + _contexto_fecha_hora()
+
+    for iteracion in range(max_iteraciones):
+        response = client.messages.create(
+            model="claude-opus-4-1",
+            max_tokens=2048,
+            system=system_prompt,
+            tools=herramientas if herramientas else None,
+            messages=mensajes_claude
+        )
+
+        # Procesar respuesta de Claude
+        texto = ""
+        tool_calls = []
+
+        for block in response.content:
+            if hasattr(block, "text"):
+                texto = (block.text or "").strip()
+            elif hasattr(block, "type") and block.type == "tool_use":
+                tool_calls.append({
+                    "name": block.name,
+                    "id": block.id,
+                    "input": block.input or {}
+                })
+
+        # Sin llamadas a herramienta -> respuesta final
+        if not tool_calls:
             return {
                 "tipo": "texto",
                 "texto": texto or "(Sin respuesta)",
                 "productos": productos_buscados,
             }
 
-        # Acciones que mutan datos: ejecutar directamente (no pedir confirmación).
-        for fc in fcs:
-            nombre = fc.get("name")
-            fargs = fc.get("args") or {}
-            if nombre in EJECUTORES_DIRECTOS:
+        # Procesar tool calls
+        herramientas_ejecucion_directa = list(EJECUTORES_DIRECTOS.keys())
+        tool_calls_no_mutativos = []
+
+        for tool_call in tool_calls:
+            nombre = tool_call.get("name")
+            fargs = tool_call.get("input") or {}
+
+            # Herramientas que ejecutan directamente (sin confirmacion)
+            if nombre in herramientas_ejecucion_directa:
                 try:
                     resultado = EJECUTORES_DIRECTOS[nombre](fargs, usuario)
                 except ValueError as e:
@@ -4360,53 +4402,53 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                     }
                 return {
                     "tipo": "texto",
-                    "texto": resultado.get("mensaje", "Listo, se completo correctamente."),
-                    "productos": productos_buscados,
-                }
-            if nombre == "confirmar_ultima_accion":
-                resultado = _confirmar_ultima_accion_voz(usuario.id)
-                return {
-                    "tipo": "texto",
-                    "texto": resultado.get("mensaje") or resultado.get("error") or "Listo.",
-                    "productos": productos_buscados,
-                }
-            if nombre == "cancelar_ultima_accion":
-                resultado = _cancelar_ultima_accion_voz(usuario.id)
-                return {
-                    "tipo": "texto",
-                    "texto": resultado.get("mensaje", "Cancelado."),
+                    "texto": resultado.get("mensaje", "Listo."),
                     "productos": productos_buscados,
                 }
 
-        # Todas son de solo lectura — ejecutar, anexar functionResponses y continuar el loop.
-        mensajes.append({"role": "model", "parts": parts})
-        respuestas = []
-        for fc in fcs:
-            nombre = fc.get("name")
-            fargs = fc.get("args") or {}
+            # Herramientas de solo lectura - ejecutar y continuar loop
             spec = CHATBOT_TOOLS.get(nombre)
-            try:
-                if not spec:
-                    raise ValueError(f"Herramienta desconocida: {nombre}")
-                resultado = spec["handler"](fargs, usuario)
-                if not isinstance(resultado, dict):
-                    resultado = {"resultado": resultado}
-                if nombre == "buscar_productos":
-                    _registrar_productos(resultado.get("productos"))
-                elif nombre == "consultar_precio_stock":
-                    prod = resultado.get("producto")
-                    if prod:
-                        _registrar_productos([prod])
-            except ValueError as e:
-                resultado = {"error": str(e)}
-            except Exception as e:
-                resultado = {"error": f"Error interno: {str(e)}"}
-            respuestas.append({"functionResponse": {"name": nombre, "response": resultado}})
-        mensajes.append({"role": "user", "parts": respuestas})
+            if spec:
+                try:
+                    resultado = spec["handler"](fargs, usuario)
+                    if not isinstance(resultado, dict):
+                        resultado = {"resultado": resultado}
+                    if nombre == "buscar_productos":
+                        _registrar_productos(resultado.get("productos"))
+                    elif nombre == "consultar_precio_stock":
+                        prod = resultado.get("producto")
+                        if prod:
+                            _registrar_productos([prod])
+                except (ValueError, Exception) as e:
+                    resultado = {"error": str(e)}
+
+                tool_calls_no_mutativos.append({
+                    "tool_use_id": tool_call.get("id"),
+                    "content": resultado
+                })
+
+        # Si hay tool calls para procesar, agregar al historial y continuar
+        if tool_calls_no_mutativos:
+            # Agregar respuesta del asistente con los tool_use blocks
+            mensajes_claude.append({"role": "assistant", "content": response.content})
+
+            # Agregar resultados de las herramientas
+            tool_results = []
+            for tr in tool_calls_no_mutativos:
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tr["tool_use_id"],
+                    "content": json.dumps(tr["content"])
+                })
+
+            mensajes_claude.append({
+                "role": "user",
+                "content": tool_results
+            })
 
     return {
         "tipo": "texto",
-        "texto": "(He alcanzado el limite de iteraciones internas. Por favor reformula tu pregunta.)",
+        "texto": "He alcanzado el límite de iteraciones.",
         "productos": productos_buscados,
     }
 
