@@ -972,6 +972,18 @@
                 <small style="display:block;color:var(--text-muted);font-size:0.75rem;margin-bottom:10px;">
                     Durante la conversación de voz, al decir esta frase se cierra el chat (y la escucha de la frase activadora se reanuda). Déjala vacía para desactivarla.
                 </small>
+                <label style="display:block;font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px;">
+                    <i class="fas fa-keyboard me-1"></i>Tecla para activar/desactivar el chat de voz:
+                </label>
+                <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+                    <input type="text" id="chatbot-hotkey-input" readonly placeholder="Sin asignar — clic y presiona una tecla"
+                           style="flex:1;background:var(--bg-inset);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text-primary);font-size:0.88rem;outline:none;cursor:pointer;caret-color:transparent;">
+                    <button type="button" id="chatbot-hotkey-clear" title="Quitar tecla"
+                           style="padding:8px 10px;background:var(--bg-inset);color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.82rem;">Quitar</button>
+                </div>
+                <small style="display:block;color:var(--text-muted);font-size:0.75rem;margin-bottom:10px;">
+                    Respaldo manual por si fallara el reconocimiento por voz. Haz clic en el campo y presiona la tecla (o combinación, ej. Ctrl + Espacio). Funciona desde cualquier parte del sistema.
+                </small>
                 <div style="background:var(--bg-inset);border-left:3px solid var(--accent);border-radius:4px;padding:8px 10px;margin-bottom:12px;font-size:0.78rem;color:var(--text-secondary);">
                     <i class="fas fa-graduation-cap me-1" style="color:var(--accent);"></i><strong style="color:var(--text-primary);">Reconocimiento adaptativo</strong><br>
                     El asistente reconoce automáticamente los nombres de tus sucursales, productos y medios de pago — los aprende de la base de datos del sistema. No hay que configurar nada.
@@ -1851,6 +1863,7 @@
         const TRIGGER_STORAGE_KEY = 'sisagentChatTriggerPhrase_u' + SISAGENT_USER_ID;
         const CONTINUOUS_STORAGE_KEY = 'sisagentChatContinuousListening_u' + SISAGENT_USER_ID;
         const ENDPHRASE_STORAGE_KEY = 'sisagentChatEndPhrase_u' + SISAGENT_USER_ID;
+        const HOTKEY_STORAGE_KEY = 'sisagentChatVoiceHotkey_u' + SISAGENT_USER_ID;
         const LEGACY_KEYS = ['sisagentChatHistory', 'sisagentChatTriggerPhrase', 'sisagentChatContinuousListening'];
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -1876,6 +1889,8 @@
             const settingsCancelBtn = document.getElementById('chatbot-settings-cancel');
             const triggerInput = document.getElementById('chatbot-trigger-input');
             const endPhraseInput = document.getElementById('chatbot-endphrase-input');
+            const hotkeyInput = document.getElementById('chatbot-hotkey-input');
+            const hotkeyClearBtn = document.getElementById('chatbot-hotkey-clear');
             const continuousToggle = document.getElementById('chatbot-continuous-toggle');
             const listeningBadge = document.getElementById('chatbot-listening-badge');
             const voiceUnsupportedNotice = document.getElementById('chatbot-voice-unsupported');
@@ -1891,6 +1906,8 @@
             let pending = false;
             let triggerPhrase = 'REGISTRAR';
             let endPhrase = 'cierra el chat';   // frase para TERMINAR el chat de voz (vacía = desactivada)
+            let voiceHotkey = null;             // {ctrl,alt,shift,code,label} tecla manual para activar/desactivar voz
+            let pendingHotkey = undefined;      // capturada en settings, se aplica al guardar (undefined = sin cambios)
             let triggerListeningEnabled = false;
             let triggerRecognition = null;
             let dictation = null;
@@ -2268,6 +2285,8 @@
                     if (phrase && phrase.trim()) triggerPhrase = phrase.trim();
                     const endP = localStorage.getItem(ENDPHRASE_STORAGE_KEY);
                     if (endP !== null) endPhrase = endP.trim();  // '' guardado = desactivada a propósito
+                    const hk = localStorage.getItem(HOTKEY_STORAGE_KEY);
+                    if (hk) { try { voiceHotkey = JSON.parse(hk); } catch (e) { voiceHotkey = null; } }
                     triggerListeningEnabled = localStorage.getItem(CONTINUOUS_STORAGE_KEY) === '1';
                 } catch (e) {}
             }
@@ -2275,12 +2294,16 @@
                 try {
                     localStorage.setItem(TRIGGER_STORAGE_KEY, triggerPhrase);
                     localStorage.setItem(ENDPHRASE_STORAGE_KEY, endPhrase);
+                    if (voiceHotkey) localStorage.setItem(HOTKEY_STORAGE_KEY, JSON.stringify(voiceHotkey));
+                    else localStorage.removeItem(HOTKEY_STORAGE_KEY);
                     localStorage.setItem(CONTINUOUS_STORAGE_KEY, triggerListeningEnabled ? '1' : '0');
                 } catch (e) {}
             }
             function openSettings() {
                 triggerInput.value = triggerPhrase;
                 if (endPhraseInput) endPhraseInput.value = endPhrase;
+                pendingHotkey = undefined;
+                if (hotkeyInput) hotkeyInput.value = voiceHotkey ? voiceHotkey.label : '';
                 continuousToggle.checked = triggerListeningEnabled;
                 settingsPanel.classList.remove('d-none');
                 panel.classList.add('settings-open');
@@ -3650,6 +3673,72 @@
                     liveStart('dictating');
                 }
             });
+
+            // ===== Tecla manual para activar/desactivar el chat de voz (respaldo del wake-word) =====
+            function toggleVoiceChat() {
+                if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices) return;
+                if (window.location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    if (typeof showNotification === 'function') showNotification('La voz requiere HTTPS.', 'error');
+                    return;
+                }
+                if (liveMode === 'dictating') {
+                    liveStop('manual');
+                } else if (liveMode === 'off') {
+                    if (panel.classList.contains('d-none')) panel.classList.remove('d-none');
+                    if (panel.classList.contains('settings-open')) closeSettings();
+                    stopTriggerListener();
+                    liveStart('dictating');
+                }
+            }
+            function formatKeyCode(code, key) {
+                if (!code) return key || '?';
+                if (code.indexOf('Key') === 0) return code.slice(3);
+                if (code.indexOf('Digit') === 0) return code.slice(5);
+                if (code === 'Space') return 'Espacio';
+                if (code.indexOf('Arrow') === 0) return code.slice(5);
+                if (code === 'Escape') return 'Esc';
+                return code;
+            }
+            function hotkeyLabel(hk) {
+                if (!hk) return '';
+                const parts = [];
+                if (hk.ctrl) parts.push('Ctrl');
+                if (hk.alt) parts.push('Alt');
+                if (hk.shift) parts.push('Shift');
+                parts.push(formatKeyCode(hk.code, hk.key));
+                return parts.join(' + ');
+            }
+            if (hotkeyInput) {
+                hotkeyInput.addEventListener('keydown', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.key === 'Escape') { pendingHotkey = undefined; hotkeyInput.value = voiceHotkey ? voiceHotkey.label : ''; hotkeyInput.blur(); return; }
+                    if (['Control', 'Alt', 'Shift', 'Meta'].indexOf(e.key) !== -1) return; // esperar tecla no-modificadora
+                    const hk = { ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, code: e.code, key: e.key };
+                    hk.label = hotkeyLabel(hk);
+                    pendingHotkey = hk;
+                    hotkeyInput.value = hk.label;
+                });
+            }
+            if (hotkeyClearBtn) {
+                hotkeyClearBtn.addEventListener('click', function() {
+                    pendingHotkey = null;
+                    if (hotkeyInput) hotkeyInput.value = '';
+                });
+            }
+            // Listener global: dispara la tecla configurada desde cualquier parte del sistema
+            document.addEventListener('keydown', function(e) {
+                if (!voiceHotkey || document.activeElement === hotkeyInput) return;
+                if (e.code !== voiceHotkey.code) return;
+                if (!!e.ctrlKey !== !!voiceHotkey.ctrl || !!e.altKey !== !!voiceHotkey.alt || !!e.shiftKey !== !!voiceHotkey.shift) return;
+                // No secuestrar la escritura si la tecla no tiene modificador y el foco está en un campo de texto
+                const ae = document.activeElement;
+                const enCampo = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && !ae.readOnly;
+                if (enCampo && !voiceHotkey.ctrl && !voiceHotkey.alt) return;
+                e.preventDefault();
+                toggleVoiceChat();
+            });
+
             settingsBtn.addEventListener('click', function() {
                 if (panel.classList.contains('settings-open')) closeSettings();
                 else openSettings();
@@ -3666,6 +3755,7 @@
                 const wasListening = triggerListeningEnabled;
                 triggerPhrase = newPhrase;
                 endPhrase = endPhraseInput ? (endPhraseInput.value || '').trim() : endPhrase;
+                if (pendingHotkey !== undefined) voiceHotkey = pendingHotkey;  // null = quitada
                 triggerListeningEnabled = continuousToggle.checked;
                 saveVoiceSettings();
                 closeSettings();
