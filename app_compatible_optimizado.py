@@ -1015,65 +1015,73 @@ def registrar_operacion():
                     flash('No tienes una sucursal asignada', 'error')
                     return redirect(url_for('registrar_operacion'))
 
-            # Crear operación con hora Perú (wall-clock naive, sin tzinfo)
-            hora_peru = get_peru_time().replace(tzinfo=None)
-            operacion = Operacion(
-                monto=monto,
-                comision=comision,
-                medio=medio,
-                usuario_id=current_user.id,
-                sucursal_id=sucursal_id,
-                hora=hora_peru,
-                comision_sugerida=comision_sugerida,
-                comision_manual=es_manual,
-                motivo_descuento=motivo,
-            )
+        # Crear operación con hora Perú (wall-clock naive, sin tzinfo)
+        hora_peru = get_peru_time().replace(tzinfo=None)
+        operacion = Operacion(
+            monto=monto,
+            comision=comision,
+            medio=medio,
+            usuario_id=current_user.id,
+            sucursal_id=sucursal_id,
+            hora=hora_peru,
+            comision_sugerida=comision_sugerida,
+            comision_manual=es_manual,
+            motivo_descuento=motivo,
+        )
 
-            db.session.add(operacion)
-
-            # Actualizar comisiones
-            hoy = get_peru_time().date()
-            comision_diaria = ComisionDiaria.query.filter_by(
+        db.session.add(operacion)
+        
+        # Actualizar comisiones
+        hoy = get_peru_time().date()
+        comision_diaria = ComisionDiaria.query.filter_by(
+            fecha=hoy,
+            sucursal_id=sucursal_id
+        ).first()
+        
+        if comision_diaria:
+            comision_diaria.total_comision = float(comision_diaria.total_comision) + comision
+        else:
+            comision_diaria = ComisionDiaria(
                 fecha=hoy,
-                sucursal_id=sucursal_id
-            ).first()
-
-            if comision_diaria:
-                comision_diaria.total_comision = float(comision_diaria.total_comision) + comision
-            else:
-                comision_diaria = ComisionDiaria(
-                    fecha=hoy,
-                    sucursal_id=sucursal_id,
-                    total_comision=comision
-                )
-                db.session.add(comision_diaria)
-
-            # Actualizar comisión mensual
-            ahora = get_peru_time()
-            año_actual = ahora.year
-            mes_actual = ahora.month
-
-            comision_mensual = ComisionMensual.query.filter_by(
+                sucursal_id=sucursal_id,
+                total_comision=comision
+            )
+            db.session.add(comision_diaria)
+        
+        # Actualizar comisión mensual
+        ahora = get_peru_time()
+        año_actual = ahora.year
+        mes_actual = ahora.month
+        
+        comision_mensual = ComisionMensual.query.filter_by(
+            año=año_actual,
+            mes=mes_actual,
+            sucursal_id=sucursal_id
+        ).first()
+        
+        if comision_mensual:
+            comision_mensual.total_comision = float(comision_mensual.total_comision) + comision
+        else:
+            comision_mensual = ComisionMensual(
                 año=año_actual,
                 mes=mes_actual,
-                sucursal_id=sucursal_id
-            ).first()
+                sucursal_id=sucursal_id,
+                total_comision=comision
+            )
+            db.session.add(comision_mensual)
+        
+        db.session.commit()
 
-            if comision_mensual:
-                comision_mensual.total_comision = float(comision_mensual.total_comision) + comision
-            else:
-                comision_mensual = ComisionMensual(
-                    año=año_actual,
-                    mes=mes_actual,
-                    sucursal_id=sucursal_id,
-                    total_comision=comision
-                )
-                db.session.add(comision_mensual)
+        # Corregir auto-increment si es necesario (evita IDs saltados)
+        # DESACTIVADO TEMPORALMENTE para debuggear error 500
+        # _corregir_autoincrement_operacion()
+        # try:
+        #     db.session.commit()  # Persistir cambios de auto-increment
+        # except Exception as e:
+        #     print(f"[WARN] Error al commit de auto-increment: {e}")
 
-            db.session.commit()
-
-            # Limpiar caché después de cambios
-            clear_cache()
+        # Limpiar caché después de cambios
+        clear_cache()
 
             flash('Operación bancaria registrada exitosamente', 'success')
             return redirect(url_for('operaciones'))
