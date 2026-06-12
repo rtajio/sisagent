@@ -1973,6 +1973,61 @@
                 messagesEl.appendChild(div);
                 scrollToBottom();
             }
+
+            // ===== Transcripción del usuario en español (REST) para el chat de voz =====
+            // El modelo Live no permite forzar el idioma de la transcripción de entrada
+            // (sale en idiomas random). Por eso el audio del turno del usuario se re-transcribe
+            // por /api/chat/transcribir (que fuerza español) y se muestra ESO en la burbuja.
+            function pcmToWavBlob(chunks, sampleRate) {
+                let total = 0; for (const c of chunks) total += c.length;
+                const buffer = new ArrayBuffer(44 + total * 2);
+                const view = new DataView(buffer);
+                function wstr(off, s) { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); }
+                wstr(0, 'RIFF'); view.setUint32(4, 36 + total * 2, true); wstr(8, 'WAVE');
+                wstr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+                view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+                wstr(36, 'data'); view.setUint32(40, total * 2, true);
+                let off = 44;
+                for (const c of chunks) { for (let i = 0; i < c.length; i++) { view.setInt16(off, c[i], true); off += 2; } }
+                return new Blob([view], { type: 'audio/wav' });
+            }
+            async function transcribeUserTurnToBubble(chunks, span, entry) {
+                try {
+                    const blob = pcmToWavBlob(chunks, 16000);
+                    const fd = new FormData();
+                    fd.append('audio', blob, 'voz.wav');
+                    const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd, credentials: 'same-origin' });
+                    const data = await resp.json();
+                    if (data && data.success && (data.texto || '').trim()) {
+                        const txt = humanizeToNumeric(data.texto.trim());
+                        span.textContent = txt;
+                        entry.content = txt;
+                        saveHistory();
+                    } else if (!entry.content) {
+                        span.textContent = '🎤 (no se entendió)';
+                    }
+                } catch (e) {
+                    console.warn('[live] transcripción REST del usuario falló:', e);
+                }
+            }
+            function commitUserVoiceMessage() {
+                if (liveUserMessageCommitted) return;
+                liveUserMessageCommitted = true;
+                const chunks = liveUserAudioChunks;
+                liveUserAudioChunks = [];
+                const fallback = humanizeToNumeric((liveTranscript || '').trim());
+                const wrap = document.createElement('div');
+                wrap.className = 'chatbot-msg user';
+                const span = document.createElement('div');
+                span.textContent = fallback || '🎤 …';
+                wrap.appendChild(span);
+                messagesEl.appendChild(wrap);
+                scrollToBottom();
+                const entry = { role: 'user', content: fallback || '' };
+                history.push(entry);
+                let total = 0; for (const c of chunks) total += c.length;
+                if (total > 16000 * 0.4) { transcribeUserTurnToBubble(chunks, span, entry); }
+            }
             function renderProducts(productos) {
                 if (!productos || !productos.length) return;
                 productos.forEach(function(p) {
@@ -2361,6 +2416,8 @@
             let liveModelTranscript = '';       // texto que el modelo está diciendo
             let liveCurrentBotMessageDiv = null;
             let liveUserMessageCommitted = false; // bandera para commit del mensaje del usuario una sola vez por turno
+            let liveUserAudioChunks = [];         // PCM int16 del turno del usuario (para re-transcribir en español)
+            const LIVE_AUDIO_MAX_SAMPLES = 16000 * 25; // cap ~25s de audio acumulado
 
             function pickRecordingMimeType() {
                 const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
@@ -2669,6 +2726,7 @@
                 }
                 liveMode = 'starting';
                 liveTranscript = '';
+                liveUserAudioChunks = [];
                 liveReady = false;
                 stopTriggerListener();
 
@@ -2844,6 +2902,12 @@
                     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
                     liveWs.send(JSON.stringify({ type: 'audio', data: btoa(binary) }));
                     liveLastSendTime = Date.now();
+                    // Acumular el audio del usuario para re-transcribirlo en español (modo dictado)
+                    if (liveMode === 'dictating') {
+                        liveUserAudioChunks.push(int16);
+                        let total = 0; for (const c of liveUserAudioChunks) total += c.length;
+                        while (total > LIVE_AUDIO_MAX_SAMPLES && liveUserAudioChunks.length > 1) total -= liveUserAudioChunks.shift().length;
+                    }
                 } catch (e) {
                     console.warn('[live] send falló:', e);
                 }
@@ -2910,11 +2974,8 @@
                     if (liveMode === 'dictating') {
                         // turn_complete = el MODELO terminó su respuesta. Commiteamos
                         // tanto el mensaje del usuario (si hubo) como el del bot al historial.
-                        const userText = humanizeToNumeric(liveTranscript.trim());
-                        if (userText && !liveUserMessageCommitted) {
-                            renderTextMessage(userText, 'user');
-                            history.push({ role: 'user', content: userText });
-                            liveUserMessageCommitted = true;
+                        if (!liveUserMessageCommitted) {
+                            commitUserVoiceMessage();
                         }
                         if (liveModelTranscript && liveCurrentBotMessageDiv) {
                             history.push({ role: 'assistant', content: humanizeToNumeric(liveModelTranscript) });
@@ -2926,6 +2987,7 @@
                         liveModelTranscript = '';
                         liveCurrentBotMessageDiv = null;
                         liveUserMessageCommitted = false;
+                        liveUserAudioChunks = [];  // limpiar audio para el próximo turno
                     } else if (liveMode === 'listening') {
                         liveTranscript = '';
                     }
@@ -2941,11 +3003,10 @@
                     return;
                 }
                 if (msg.type === 'output_transcription' && msg.text) {
-                    // El modelo está respondiendo → commitear primero el mensaje del usuario al chat
-                    if (!liveUserMessageCommitted && liveTranscript.trim()) {
-                        renderTextMessage(liveTranscript.trim(), 'user');
-                        history.push({ role: 'user', content: liveTranscript.trim() });
-                        liveUserMessageCommitted = true;
+                    // El modelo está respondiendo → commitear primero el mensaje del usuario
+                    // (su audio se re-transcribe en español por REST dentro de commitUserVoiceMessage)
+                    if (!liveUserMessageCommitted) {
+                        commitUserVoiceMessage();
                         input.value = '';  // limpiar el "live preview" del input
                     }
                     // Acumular respuesta del modelo
