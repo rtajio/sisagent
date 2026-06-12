@@ -91,6 +91,18 @@ def format_peru_datetime_short(dt):
     t = _to_peru(dt)
     return t.strftime('%d/%m/%Y %H:%M') if t else ""
 
+
+def _contexto_fecha_hora():
+    """Linea de contexto para inyectar en los prompts del chatbot: fecha y hora
+    REAL de Peru (UTC-5). Sin esto el modelo asume UTC al preguntarle la hora."""
+    ahora = get_peru_time()
+    hora12 = ahora.strftime('%I:%M%p').lstrip('0').replace('AM', 'am').replace('PM', 'pm')
+    return (
+        f"\n\nFECHA Y HORA ACTUAL en Peru (UTC-5): {ahora.strftime('%d/%m/%Y')}, {hora12}. "
+        "Usa SIEMPRE esta hora/fecha de Peru para responder 'que hora es', 'que dia es' o "
+        "para interpretar 'hoy'. NUNCA uses UTC ni otra zona horaria."
+    )
+
 import math as _math
 
 # Configuración del cálculo automático de comisión
@@ -3962,7 +3974,7 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
     url = f"{GEMINI_API_URL}/{GEMINI_CHAT_MODEL}:generateContent"
     headers = {"Content-Type": "application/json", "x-goog-api-key": app.config["GEMINI_API_KEY"]}
     tools = [{"functionDeclarations": _build_gemini_function_declarations()}]
-    system_instruction = {"parts": [{"text": SYSTEM_PROMPT_CHATBOT}]}
+    system_instruction = {"parts": [{"text": SYSTEM_PROMPT_CHATBOT + _contexto_fecha_hora()}]}
 
     for _ in range(max_iteraciones):
         payload = {
@@ -4801,7 +4813,7 @@ def ws_voice_live(browser_ws):
 
     # Speech adaptation: vocabulario derivado AUTOMATICAMENTE de la BD del sistema
     # (sucursales, productos, medios) para sesgar la comprension del modelo.
-    _system_prompt_voz = SYSTEM_PROMPT_GEMINI_LIVE
+    _system_prompt_voz = SYSTEM_PROMPT_GEMINI_LIVE + _contexto_fecha_hora()
     try:
         _usuario_voz = Usuario.query.get(user_id)
         _vterm = _vocabulario_dinamico(_usuario_voz) if _usuario_voz else []
