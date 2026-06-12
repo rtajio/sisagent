@@ -232,7 +232,7 @@ function generarReporte() {
     document.getElementById('estado-carga').style.display = '';
     document.getElementById('btn-generar').disabled = true;
 
-    fetch(`/api/reportes/operaciones?${qs}`)
+    fetch(`/api/reportes/operaciones?${qs}`, { credentials: 'same-origin' })
         .then(async r => {
             if (!r.ok) {
                 const d = await r.json().catch(() => ({}));
