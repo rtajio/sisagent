@@ -967,6 +967,8 @@ def _corregir_autoincrement_operacion():
             pass
 
 
+@app.route('/operaciones/registrar', methods=['GET', 'POST'])
+@login_required
 def registrar_operacion():
     if request.method == 'POST':
         monto = float(request.form['monto'])
