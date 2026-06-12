@@ -384,6 +384,22 @@ class CajaVentas(db.Model):
     saldo = db.Column(db.Numeric(10, 2), default=0.0)
     sucursal = db.relationship('Sucursal', backref='caja_ventas')
 
+class PronunciacionAprendida(db.Model):
+    """Banco de memoria de pronunciaciones aprendidas por el modelo de voz"""
+    __tablename__ = 'pronunciacion_aprendida'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    termino_original = db.Column(db.String(200), nullable=False)  # "Tecnovation" (cómo lo dijo el usuario)
+    termino_correcto = db.Column(db.String(200), nullable=False)  # "TECKNOVATION" (cómo debe ser)
+    tipo = db.Column(db.String(50), default='sucursal')  # 'sucursal', 'producto', 'medio', etc.
+    frecuencia = db.Column(db.Integer, default=1)  # cuántas veces se mencionó
+    fecha_aprendida = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
+    usuario = db.relationship('Usuario', backref='pronunciaciones_aprendidas')
+
+    __table_args__ = (
+        db.UniqueConstraint('usuario_id', 'termino_original', 'termino_correcto', name='uq_pronunciacion'),
+    )
+
 # OPTIMIZACIÓN ULTRA: Cache de medios de pago
 @cache.memoize(timeout=300)
 def get_medios_pago_cache():
@@ -4581,6 +4597,54 @@ def _vocabulario_dinamico(usuario):
         return []
 
 
+def registrar_pronunciacion_aprendida(usuario_id, termino_original, termino_correcto, tipo='sucursal'):
+    """Registra una pronunciación aprendida en el banco de memoria del usuario."""
+    try:
+        # Buscar si ya existe esta pronunciación
+        pron = PronunciacionAprendida.query.filter_by(
+            usuario_id=usuario_id,
+            termino_original=termino_original,
+            termino_correcto=termino_correcto
+        ).first()
+
+        if pron:
+            # Incrementar frecuencia
+            pron.frecuencia = (pron.frecuencia or 0) + 1
+        else:
+            # Crear nueva
+            pron = PronunciacionAprendida(
+                usuario_id=usuario_id,
+                termino_original=termino_original,
+                termino_correcto=termino_correcto,
+                tipo=tipo,
+                frecuencia=1
+            )
+            db.session.add(pron)
+
+        db.session.commit()
+        return True
+    except Exception as e:
+        print(f"[WARN] Error registrando pronunciación: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return False
+
+
+def obtener_pronunciaciones_aprendidas(usuario_id):
+    """Obtiene el banco de pronunciaciones aprendidas del usuario (para pasar al system prompt)."""
+    try:
+        prons = PronunciacionAprendida.query.filter_by(usuario_id=usuario_id).all()
+        if not prons:
+            return []
+        # Formato: "Tecnovation → TECKNOVATION", ordenadas por frecuencia (más aprendidas primero)
+        prons.sort(key=lambda p: p.frecuencia, reverse=True)
+        return [f'{p.termino_original} → {p.termino_correcto}' for p in prons[:50]]  # máx 50
+    except Exception:
+        return []
+
+
 @app.route('/api/chat/vocabulario', methods=['GET', 'POST'])
 @login_required
 def api_chat_vocabulario():
@@ -4599,6 +4663,31 @@ def api_chat_vocabulario():
         except Exception:
             pass
         return jsonify({'success': False, 'message': f'No se pudo guardar el vocabulario: {str(e)}'}), 500
+
+
+@app.route('/api/chat/aprender_pronunciacion', methods=['POST'])
+@login_required
+def api_chat_aprender_pronunciacion():
+    """Registra una pronunciación aprendida (cómo el usuario dice algo vs. cómo está en el sistema)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        termino_original = (data.get('termino_original') or '').strip()
+        termino_correcto = (data.get('termino_correcto') or '').strip()
+        tipo = (data.get('tipo') or 'sucursal').strip()
+
+        if not termino_original or not termino_correcto:
+            return jsonify({'success': False, 'message': 'Faltan términos'}), 400
+
+        if registrar_pronunciacion_aprendida(current_user.id, termino_original, termino_correcto, tipo):
+            return jsonify({'success': True, 'message': f'Aprendido: {termino_original} → {termino_correcto}'})
+        else:
+            return jsonify({'success': False, 'message': 'Error al registrar pronunciación'}), 500
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
 
 
 @app.route('/api/chat/transcribir', methods=['POST'])
@@ -4811,8 +4900,8 @@ Tu rol:
 
 Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar venta, operacion, producto, usuario, sucursal, etc. via `proponer_*`):
 - NUNCA pidas confirmacion ni hagas preguntas. EN CUANTO EL USUARIO MENCIONE ALGO, ACTUA SIN ESPERAR VALIDACION. Si mencionó sucursal, usa esa. Si cambio de idea DENTRO del mismo turno, REEMPLAZA sin preguntar. NUNCA digas "¿Confirmas?" ni "¿Lo registro?" — simplemente actúa.
-- MAPEO AUTOMÁTICO DE SUCURSALES: Si oyes "Tecnovation", busca si existe "TECKNOVATION" o similar. Si el usuario lo repite 2+ veces, REGISTRA AUTOMATICAMENTE la pronunciación aprendida. NO vuelvas a preguntar por el mismo nombre en ESTE TURNO ni en TURNOS POSTERIORES si ya se mencionó.
-- GUARDÍA DE MEMORIA: Cada sucursal que el usuario mencione, aprende esa pronunciación. "Tecnovation" = TECKNOVATION (aprendido). Si lo repites, úsalo directo.
+- MAPEO AUTOMÁTICO DE SUCURSALES: Si oyes "Tecnovation", busca si existe "TECKNOVATION" o similar. Si el usuario lo repite 1+ veces, REGISTRA AUTOMATICAMENTE esa pronunciación en tu BANCO DE MEMORIA (servidor le notificará). NO vuelvas a preguntar por el mismo nombre en ESTE TURNO ni en TURNOS POSTERIORES si ya se mencionó.
+- GUARDÍA DE MEMORIA CRÍTICA: Tu banco de pronunciaciones APRENDIDAS es PERSISTENTE — se guarda en el servidor y se carga en cada nueva sesión de voz. "Tecnovation" = TECKNOVATION (aprendido). En futuras sesiones, cuando inicies una nueva conversación de voz, el sistema te dirá TODAS tus pronunciaciones aprendidas (verás "PRONUNCIACIONES APRENDIDAS" en tus instrucciones). SIEMPRE úsalas. NUNCA las olvides.
 - Las funciones `confirmar_ultima_accion` y `cancelar_ultima_accion` ya NO se usan — no las llames nunca.
 - Si el resultado viene con "error", informa el motivo al usuario BREVEMENTE (una línea). NO insistas, NO repreguntes. "Error: sucursal no existe. ¿Otra?" es demasiado. Mejor: "No encontré esa sucursal. ¿Cuál era?"
 - Para identificar entidades a eliminar/editar, primero llama a `buscar_operaciones`, `buscar_ventas`, `listar_usuarios`, etc. para obtener el ID correcto antes de llamar al `proponer_*` correspondiente.
@@ -5090,6 +5179,17 @@ def ws_voice_live(browser_ws):
             _system_prompt_voz += (
                 '\n\nNOMBRES REALES del sistema (sucursales, productos y medios de pago). Cuando el '
                 'usuario los mencione, reconocelos y escribelos EXACTAMENTE asi: ' + ', '.join(_vterm) + '.'
+            )
+
+        # Pronunciaciones APRENDIDAS por el usuario (banco de memoria persistente)
+        _prons = obtener_pronunciaciones_aprendidas(user_id) if _usuario_voz else []
+        if _prons:
+            _system_prompt_voz += (
+                '\n\nPRONUNCIACIONES APRENDIDAS (palabras que el usuario menciona diferente). '
+                'Cuando oigas estas pronunciaciones, traducelás AUTOMATICAMENTE a la forma correcta:\n'
+                + '\n'.join(['- ' + p for p in _prons]) +
+                '\n\nESTAS PRONUNCIACIONES APRENDIDAS SON CRITICAS: NUNCA ignores estas mappings. '
+                'Si el usuario dice "Tecnovation" y aprendiste que significa "TECKNOVATION", usa TECKNOVATION siempre.'
             )
     except Exception:
         pass
