@@ -804,35 +804,18 @@ def operaciones():
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
     
-    # OPTIMIZACIÓN ULTRA: Obtener TODOS, ordenar, LUEGO paginar
-    todas_operaciones = query.order_by(Operacion.hora.desc()).all()
+    # OPTIMIZACIÓN ULTRA: Paginación
+    operaciones_paginated = query.order_by(Operacion.hora.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
 
     # Forzar orden descendente por hora (crear lista nueva ordenada)
-    todas_operaciones = sorted(
-        todas_operaciones,
+    operaciones = sorted(
+        operaciones_paginated.items,
         key=lambda op: op.hora if op.hora else datetime(1900, 1, 1),
         reverse=True
     )
-
-    # Paginar manualmente
-    inicio = (page - 1) * per_page
-    fin = inicio + per_page
-    operaciones = todas_operaciones[inicio:fin]
-
-    # Crear objeto pagination fake para compatibilidad con template
-    class FakePagination:
-        def __init__(self, items, page, per_page, total):
-            self.items = items
-            self.page = page
-            self.per_page = per_page
-            self.total = total
-            self.pages = (total + per_page - 1) // per_page
-
-    operaciones_paginated = FakePagination(
-        operaciones, page, per_page, len(todas_operaciones)
-    )
-
-    print(f"[DEBUG] Total operaciones: {len(todas_operaciones)}, Página {page}, Primeras 3: {[f'{op.id}:{op.hora.strftime(\"%H:%M:%S\") if op.hora else \"None\"}' for op in operaciones[:3]]}")
+    print(f"[DEBUG] Operaciones ordenadas: {[f'{op.id}:{op.hora.strftime(\"%H:%M:%S\") if op.hora else \"None\"}' for op in operaciones[:3]]}")
 
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
