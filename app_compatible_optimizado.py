@@ -1054,11 +1054,12 @@ def registrar_operacion():
         db.session.commit()
 
         # Corregir auto-increment si es necesario (evita IDs saltados)
-        _corregir_autoincrement_operacion()
-        try:
-            db.session.commit()  # Persistir cambios de auto-increment
-        except Exception as e:
-            print(f"[WARN] Error al commit de auto-increment: {e}")
+        # DESACTIVADO TEMPORALMENTE para debuggear error 500
+        # _corregir_autoincrement_operacion()
+        # try:
+        #     db.session.commit()  # Persistir cambios de auto-increment
+        # except Exception as e:
+        #     print(f"[WARN] Error al commit de auto-increment: {e}")
 
         # Limpiar caché después de cambios
         clear_cache()
@@ -3854,11 +3855,12 @@ def _ejecutar_operacion_validada(args, usuario):
     db.session.commit()
 
     # Corregir auto-increment si es necesario
-    _corregir_autoincrement_operacion()
-    try:
-        db.session.commit()  # Persistir cambios de auto-increment
-    except Exception as e:
-        print(f"[WARN] Error al commit de auto-increment: {e}")
+    # DESACTIVADO TEMPORALMENTE para debuggear error 500
+    # _corregir_autoincrement_operacion()
+    # try:
+    #     db.session.commit()  # Persistir cambios de auto-increment
+    # except Exception as e:
+    #     print(f"[WARN] Error al commit de auto-increment: {e}")
 
     clear_cache()
 
