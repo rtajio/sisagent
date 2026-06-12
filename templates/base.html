@@ -3434,9 +3434,13 @@
                     // Buffer rodante: une el chunk anterior con el actual por si la frase quedó partida
                     const combinado = (_trigPrevTranscript + ' ' + transcript).trim();
                     _trigPrevTranscript = transcript;
+                    // Guardia anti-falsos-positivos: el wake-word se dice SOLO. Si la transcripción
+                    // es mucho más larga que la frase, es habla normal, no el comando → ignorar.
+                    const _nTrig = normFrase(trigger);
+                    if (normFrase(combinado).length > _nTrig.length + 6) { return; }
                     // Match tolerante: sin tildes/puntuación/espacios + distancia de edición
                     // ("hey sisi" matchea "ey sisi", "jey sisi", "hey, sí sí", etc.)
-                    if (!fuzzyContains(normFrase(combinado), normFrase(trigger))) {
+                    if (!fuzzyContains(normFrase(combinado), _nTrig)) {
                         return;  // no contenía la frase
                     }
                     _trigPrevTranscript = '';

@@ -164,7 +164,7 @@ GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 GEMINI_MAX_AUDIO_BYTES = 18 * 1024 * 1024  # 18 MB (Gemini admite hasta 20MB inline)
 
 # Modelo Live API (transcripción en streaming via WebSocket)
-GEMINI_LIVE_MODEL = os.getenv('GEMINI_LIVE_MODEL', 'models/gemini-2.5-flash-native-audio-latest')
+GEMINI_LIVE_MODEL = os.getenv('GEMINI_LIVE_MODEL', 'models/gemini-3.1-flash-live-preview')  # acepta languageCode (transcribe español confiable); native-audio no
 GEMINI_LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent'
 
 # OPTIMIZACIÓN ULTRA: Configuración de caché
@@ -4398,13 +4398,13 @@ def api_chat_transcribir():
             '"-->"), sin prefijos como "Transcripcion:". Si no hay voz audible o solo hay ruido, '
             'devuelve cadena vacia.'
         )
-        frase_hint = (request.form.get('frase_hint') or '').strip()[:80]
-        if frase_hint:
-            prompt_transcripcion += (
-                f' Una frase frecuente del usuario es "{frase_hint}"; si REALMENTE la dice, transcribela bien. '
-                f'Pero NO la inventes: si no se dijo claramente, NO la escribas. '
-                f'Ante silencio, ruido, respiracion o audio dudoso, devuelve SIEMPRE cadena vacia — nunca adivines.'
-            )
+        # NO se sesga hacia la frase activadora: mencionarla hacia que el modelo la "alucinara"
+        # ante ruido -> falsos positivos del wake-word. Confiamos en transcripcion fiel +
+        # match difuso en el cliente. Reforzamos solo el anti-alucinacion:
+        prompt_transcripcion += (
+            ' CRITICO: si el audio es silencio, ruido, respiracion o dudoso, devuelve SIEMPRE '
+            'cadena vacia. NUNCA adivines ni inventes palabras.'
+        )
 
         # Speech adaptation: vocabulario derivado AUTOMATICAMENTE de la BD (sucursales,
         # productos, medios) — sesga al modelo hacia las entidades reales del sistema.
@@ -4840,8 +4840,9 @@ def ws_voice_live(browser_ws):
                     "voiceConfig": {
                         "prebuiltVoiceConfig": {"voiceName": "Aoede"}
                     },
-                    # OJO: el modelo native-audio RECHAZA "languageCode" (cierra la conexion).
-                    # El idioma se controla por el system prompt (espanol latinoamericano).
+                    # languageCode se agrega abajo SOLO si el modelo no es native-audio
+                    # (los native-audio rechazan ese campo; los Live half-cascade lo aceptan
+                    #  y asi la transcripcion de entrada sale en español, no en chino/polaco).
                 },
             },
             # VAD de Gemini: ~1.2s de silencio antes de considerar que el usuario
@@ -4862,6 +4863,10 @@ def ws_voice_live(browser_ws):
             "outputAudioTranscription": {},
         }
     }
+    # Forzar idioma de la transcripción a español SOLO en modelos que lo aceptan
+    # (native-audio lo rechaza y cierra la conexión).
+    if 'native-audio' not in GEMINI_LIVE_MODEL:
+        setup_msg['setup']['generationConfig']['speechConfig']['languageCode'] = 'es-US'
     try:
         gemini_ws.send(json.dumps(setup_msg))
     except Exception as e:
