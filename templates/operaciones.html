@@ -676,6 +676,9 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(err => console.warn('[live] Error actualizando tabla:', err));
     }
 
+    // Hacer accesible globalmente para que el chat pueda actualizar
+    window.refreshOperationsTable = updateTableFromAPI;
+
     // Actualizar tabla cada 3 segundos
     setInterval(updateTableFromAPI, 3000);
     updateTableFromAPI(); // Primera actualización inmediata

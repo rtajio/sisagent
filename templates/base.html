@@ -2337,6 +2337,13 @@
                         if (data.texto) {
                             history.push({ role: 'assistant', content: data.texto });
                             saveHistory();
+                            // Si el chat registró algo, actualizar tabla de operaciones/ventas
+                            if (data.texto.toLowerCase().includes('registr')) {
+                                setTimeout(function() {
+                                    if (window.refreshOperationsTable) window.refreshOperationsTable();
+                                    if (window.refreshVentasTable) window.refreshVentasTable();
+                                }, 300);
+                            }
                         }
                     } else if (data.tipo === 'propuesta') {
                         renderProposal(data);
