@@ -2288,290 +2288,308 @@ def _get_operaciones_filtradas():
 @app.route('/api/reportes/exportar/csv')
 @login_required
 def exportar_csv():
-    filas, status = _get_operaciones_filtradas()
-    if status != 200:
-        return jsonify({'error': 'Acceso denegado'}), status
+    try:
+        filas, status = _get_operaciones_filtradas()
+        if status != 200:
+            return jsonify({'error': 'Acceso denegado'}), status
+        if not filas:
+            return jsonify({'error': 'No hay operaciones para exportar'}), 400
 
-    import csv, io
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal'])
-    for i, f in enumerate(filas, 1):
-        writer.writerow([i, f['fecha'], f['hora'],
-                         f'{f["monto"]:.2f}', f'{f["comision"]:.2f}',
-                         f['medio'], f['usuario'], f['sucursal']])
-    # Totales
-    writer.writerow([])
-    writer.writerow(['', '', 'TOTAL',
-                     f'{sum(f["monto"] for f in filas):.2f}',
-                     f'{sum(f["comision"] for f in filas):.2f}', '', '', ''])
+        import csv, io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal'])
+        for i, f in enumerate(filas, 1):
+            writer.writerow([i, f['fecha'], f['hora'],
+                             f'{f["monto"]:.2f}', f'{f["comision"]:.2f}',
+                             f['medio'], f['usuario'], f['sucursal']])
+        # Totales
+        writer.writerow([])
+        writer.writerow(['', '', 'TOTAL',
+                         f'{sum(f["monto"] for f in filas):.2f}',
+                         f'{sum(f["comision"] for f in filas):.2f}', '', '', ''])
 
-    from flask import Response
-    return Response(
-        '﻿' + output.getvalue(),      # BOM para Excel
-        mimetype='text/csv; charset=utf-8-sig',
-        headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.csv'}
-    )
+        from flask import Response
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv; charset=utf-8',
+            headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.csv'}
+        )
+    except Exception as e:
+        print(f'[ERROR] CSV export: {e}'); traceback.print_exc()
+        return jsonify({'error': 'Fallo al exportar CSV'}), 500
 
 
 # ── Exportar XLSX ─────────────────────────────────────────────────────────────
 @app.route('/api/reportes/exportar/xlsx')
 @login_required
 def exportar_xlsx():
-    filas, status = _get_operaciones_filtradas()
-    if status != 200:
-        return jsonify({'error': 'Acceso denegado'}), status
+    try:
+        filas, status = _get_operaciones_filtradas()
+        if status != 200:
+            return jsonify({'error': 'Acceso denegado'}), status
+        if not filas:
+            return jsonify({'error': 'No hay operaciones para exportar'}), 400
 
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-    import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        import io
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = 'Operaciones'
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Operaciones'
 
-    # Paleta clara y profesional para Excel (legible en impresión y pantalla)
-    COLOR_HEADER = '1F4E79'   # azul oscuro profesional
-    COLOR_TITLE  = '2E75B6'   # azul medio para título
-    COLOR_TOTAL  = 'D6E4F0'   # azul muy claro para totales
-    COLOR_ODD    = 'FFFFFF'   # blanco
-    COLOR_EVEN   = 'EBF3FA'   # azul muy claro alternado
+        # Paleta clara y profesional para Excel (legible en impresión y pantalla)
+        COLOR_HEADER = '1F4E79'   # azul oscuro profesional
+        COLOR_TITLE  = '2E75B6'   # azul medio para título
+        COLOR_TOTAL  = 'D6E4F0'   # azul muy claro para totales
+        COLOR_ODD    = 'FFFFFF'   # blanco
+        COLOR_EVEN   = 'EBF3FA'   # azul muy claro alternado
 
-    header_font  = Font(bold=True, color='FFFFFF', size=10)
-    total_font   = Font(bold=True, color='1F4E79', size=10)
-    data_font    = Font(color='1A1A1A', size=10)
-    header_fill  = PatternFill('solid', fgColor=COLOR_HEADER)
-    total_fill   = PatternFill('solid', fgColor=COLOR_TOTAL)
-    odd_fill     = PatternFill('solid', fgColor=COLOR_ODD)
-    even_fill    = PatternFill('solid', fgColor=COLOR_EVEN)
-    center       = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    left_wrap    = Alignment(horizontal='left',   vertical='center', wrap_text=True)
-    right_al     = Alignment(horizontal='right',  vertical='center')
-    thin         = Side(style='thin', color='BDD7EE')
-    border       = Border(left=thin, right=thin, top=thin, bottom=thin)
+        header_font  = Font(bold=True, color='FFFFFF', size=10)
+        total_font   = Font(bold=True, color='1F4E79', size=10)
+        data_font    = Font(color='1A1A1A', size=10)
+        header_fill  = PatternFill('solid', fgColor=COLOR_HEADER)
+        total_fill   = PatternFill('solid', fgColor=COLOR_TOTAL)
+        odd_fill     = PatternFill('solid', fgColor=COLOR_ODD)
+        even_fill    = PatternFill('solid', fgColor=COLOR_EVEN)
+        center       = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        left_wrap    = Alignment(horizontal='left',   vertical='center', wrap_text=True)
+        right_al     = Alignment(horizontal='right',  vertical='center')
+        thin         = Side(style='thin', color='BDD7EE')
+        border       = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    # Título
-    ws.merge_cells('A1:H1')
-    title_cell = ws['A1']
-    title_cell.value = 'REPORTE DE OPERACIONES — SISAGENT'
-    title_cell.font  = Font(bold=True, size=14, color='FFFFFF')
-    title_cell.fill  = PatternFill('solid', fgColor=COLOR_TITLE)
-    title_cell.alignment = center
-    ws.row_dimensions[1].height = 30
+        # Título
+        ws.merge_cells('A1:H1')
+        title_cell = ws['A1']
+        title_cell.value = 'REPORTE DE OPERACIONES — SISAGENT'
+        title_cell.font  = Font(bold=True, size=14, color='FFFFFF')
+        title_cell.fill  = PatternFill('solid', fgColor=COLOR_TITLE)
+        title_cell.alignment = center
+        ws.row_dimensions[1].height = 30
 
-    # Parámetros del reporte en fila 2
-    fecha_ini = request.args.get('fecha_inicio', '')
-    fecha_fin = request.args.get('fecha_fin', '')
-    ws.merge_cells('A2:H2')
-    ws['A2'].value = f'Período: {fecha_ini or "—"}  →  {fecha_fin or "—"}    Total registros: {len(filas)}'
-    ws['A2'].font  = Font(italic=True, color='2E75B6', size=9)
-    ws['A2'].fill  = PatternFill('solid', fgColor='DEEAF1')
-    ws['A2'].alignment = center
-    ws.row_dimensions[2].height = 16
+        # Parámetros del reporte en fila 2
+        fecha_ini = request.args.get('fecha_inicio', '')
+        fecha_fin = request.args.get('fecha_fin', '')
+        ws.merge_cells('A2:H2')
+        ws['A2'].value = f'Período: {fecha_ini or "—"}  →  {fecha_fin or "—"}    Total registros: {len(filas)}'
+        ws['A2'].font  = Font(italic=True, color='2E75B6', size=9)
+        ws['A2'].fill  = PatternFill('solid', fgColor='DEEAF1')
+        ws['A2'].alignment = center
+        ws.row_dimensions[2].height = 16
 
-    # Cabecera columnas (fila 4)
-    headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
-    widths  = [5,     12,      10,     14,            14,              22,      22,         22]
-    for col, (h, w) in enumerate(zip(headers, widths), 1):
-        cell = ws.cell(row=4, column=col, value=h)
-        cell.font      = header_font
-        cell.fill      = header_fill
-        cell.alignment = center
-        cell.border    = border
-        ws.column_dimensions[get_column_letter(col)].width = w
-    ws.row_dimensions[4].height = 20
+        # Cabecera columnas (fila 4)
+        headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
+        widths  = [5,     12,      10,     14,            14,              22,      22,         22]
+        for col, (h, w) in enumerate(zip(headers, widths), 1):
+            cell = ws.cell(row=4, column=col, value=h)
+            cell.font      = header_font
+            cell.fill      = header_fill
+            cell.alignment = center
+            cell.border    = border
+            ws.column_dimensions[get_column_letter(col)].width = w
+        ws.row_dimensions[4].height = 20
 
-    # Datos
-    money_fmt = '#,##0.00'
-    for i, f in enumerate(filas, 1):
-        row = i + 4
-        values = [i, f['fecha'], f['hora'], f['monto'], f['comision'],
-                  f['medio'], f['usuario'], f['sucursal']]
-        fill_bg = odd_fill if i % 2 == 1 else even_fill
-        for col, val in enumerate(values, 1):
-            cell = ws.cell(row=row, column=col, value=val)
-            cell.fill   = fill_bg
+        # Datos
+        money_fmt = '#,##0.00'
+        for i, f in enumerate(filas, 1):
+            row = i + 4
+            values = [i, f['fecha'], f['hora'], f['monto'], f['comision'],
+                      f['medio'], f['usuario'], f['sucursal']]
+            fill_bg = odd_fill if i % 2 == 1 else even_fill
+            for col, val in enumerate(values, 1):
+                cell = ws.cell(row=row, column=col, value=val)
+                cell.fill   = fill_bg
+                cell.border = border
+                cell.font   = data_font
+                if col in (4, 5):
+                    cell.number_format = money_fmt
+                    cell.alignment = right_al
+                elif col == 1:
+                    cell.alignment = center
+                else:
+                    cell.alignment = left_wrap
+            ws.row_dimensions[row].height = 15
+
+        # Totales
+        total_row = len(filas) + 5
+        ws.merge_cells(f'A{total_row}:C{total_row}')
+        ws[f'A{total_row}'].value     = 'TOTALES'
+        ws[f'A{total_row}'].font      = total_font
+        ws[f'A{total_row}'].fill      = total_fill
+        ws[f'A{total_row}'].alignment = center
+        ws[f'A{total_row}'].border    = border
+
+        for col, val in [(4, sum(f['monto'] for f in filas)),
+                         (5, sum(f['comision'] for f in filas))]:
+            cell = ws.cell(row=total_row, column=col, value=val)
+            cell.font          = total_font
+            cell.fill          = total_fill
+            cell.number_format = money_fmt
+            cell.alignment     = Alignment(horizontal='right')
+            cell.border        = border
+
+        for col in range(6, 9):
+            cell = ws.cell(row=total_row, column=col, value='')
+            cell.fill   = total_fill
             cell.border = border
-            cell.font   = data_font
-            if col in (4, 5):
-                cell.number_format = money_fmt
-                cell.alignment = right_al
-            elif col == 1:
-                cell.alignment = center
-            else:
-                cell.alignment = left_wrap
-        ws.row_dimensions[row].height = 15
 
-    # Totales
-    total_row = len(filas) + 5
-    ws.merge_cells(f'A{total_row}:C{total_row}')
-    ws[f'A{total_row}'].value     = 'TOTALES'
-    ws[f'A{total_row}'].font      = total_font
-    ws[f'A{total_row}'].fill      = total_fill
-    ws[f'A{total_row}'].alignment = center
-    ws[f'A{total_row}'].border    = border
+        ws.freeze_panes = 'A5'
 
-    for col, val in [(4, sum(f['monto'] for f in filas)),
-                     (5, sum(f['comision'] for f in filas))]:
-        cell = ws.cell(row=total_row, column=col, value=val)
-        cell.font          = total_font
-        cell.fill          = total_fill
-        cell.number_format = money_fmt
-        cell.alignment     = Alignment(horizontal='right')
-        cell.border        = border
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
 
-    for col in range(6, 9):
-        cell = ws.cell(row=total_row, column=col, value='')
-        cell.fill   = total_fill
-        cell.border = border
-
-    ws.freeze_panes = 'A5'
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
-    from flask import Response
-    return Response(
-        buf.read(),
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.xlsx'}
-    )
+        from flask import Response
+        return Response(
+            buf.read(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.xlsx'}
+        )
+    except Exception as e:
+        print(f'[ERROR] XLSX export: {e}'); traceback.print_exc()
+        return jsonify({'error': 'Fallo al exportar XLSX'}), 500
 
 
 # ── Exportar PDF ─────────────────────────────────────────────────────────────
 @app.route('/api/reportes/exportar/pdf')
 @login_required
 def exportar_pdf():
-    filas, status = _get_operaciones_filtradas()
-    if status != 200:
-        return jsonify({'error': 'Acceso denegado'}), status
+    try:
+        filas, status = _get_operaciones_filtradas()
+        if status != 200:
+            return jsonify({'error': 'Acceso denegado'}), status
+        if not filas:
+            return jsonify({'error': 'No hay operaciones para exportar'}), 400
 
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib import colors
-    from reportlab.lib.units import mm
-    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
-                                    Paragraph, Spacer)
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
-    import io
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                        Paragraph, Spacer)
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+        import io
 
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                            leftMargin=12*mm, rightMargin=12*mm,
-                            topMargin=14*mm, bottomMargin=14*mm)
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                leftMargin=12*mm, rightMargin=12*mm,
+                                topMargin=14*mm, bottomMargin=14*mm)
 
-    # Paleta oscura cálida → para PDF usamos versión legible (fondo blanco papel)
-    C_DARK    = colors.HexColor('#2A2420')
-    C_ACCENT  = colors.HexColor('#A0845A')
-    C_MID     = colors.HexColor('#332E28')
-    C_LIGHT   = colors.HexColor('#F2EDE4')
-    C_MUTED   = colors.HexColor('#8A7E70')
-    C_ROW_ODD = colors.HexColor('#F7F3EE')
-    C_ROW_EVEN= colors.HexColor('#EDE6DC')
-    C_SUCCESS = colors.HexColor('#3A6A3A')
-    C_WHITE   = colors.white
+        # Paleta oscura cálida → para PDF usamos versión legible (fondo blanco papel)
+        C_DARK    = colors.HexColor('#2A2420')
+        C_ACCENT  = colors.HexColor('#A0845A')
+        C_MID     = colors.HexColor('#332E28')
+        C_LIGHT   = colors.HexColor('#F2EDE4')
+        C_MUTED   = colors.HexColor('#8A7E70')
+        C_ROW_ODD = colors.HexColor('#F7F3EE')
+        C_ROW_EVEN= colors.HexColor('#EDE6DC')
+        C_SUCCESS = colors.HexColor('#3A6A3A')
+        C_WHITE   = colors.white
 
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Normal'],
-                                 fontSize=16, fontName='Helvetica-Bold',
-                                 textColor=C_DARK, alignment=TA_CENTER, spaceAfter=2*mm)
-    sub_style   = ParagraphStyle('Sub', parent=styles['Normal'],
-                                 fontSize=9, fontName='Helvetica',
-                                 textColor=C_MUTED, alignment=TA_CENTER, spaceAfter=4*mm)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('Title', parent=styles['Normal'],
+                                     fontSize=16, fontName='Helvetica-Bold',
+                                     textColor=C_DARK, alignment=TA_CENTER, spaceAfter=2*mm)
+        sub_style   = ParagraphStyle('Sub', parent=styles['Normal'],
+                                     fontSize=9, fontName='Helvetica',
+                                     textColor=C_MUTED, alignment=TA_CENTER, spaceAfter=4*mm)
 
-    fecha_ini = request.args.get('fecha_inicio', '—')
-    fecha_fin = request.args.get('fecha_fin', '—')
+        fecha_ini = request.args.get('fecha_inicio', '—')
+        fecha_fin = request.args.get('fecha_fin', '—')
 
-    elements = [
-        Paragraph('REPORTE DE OPERACIONES', title_style),
-        Paragraph(f'SISAGENT &nbsp;|&nbsp; Período: {fecha_ini} → {fecha_fin} &nbsp;|&nbsp; {len(filas)} registros', sub_style),
-    ]
+        elements = [
+            Paragraph('REPORTE DE OPERACIONES', title_style),
+            Paragraph(f'SISAGENT &nbsp;|&nbsp; Período: {fecha_ini} → {fecha_fin} &nbsp;|&nbsp; {len(filas)} registros', sub_style),
+        ]
 
-    # Estilos para celdas con texto largo (permiten wrap automático)
-    cell_style = ParagraphStyle('Cell', parent=styles['Normal'],
-                                fontSize=8, fontName='Helvetica',
-                                textColor=C_DARK, leading=10, alignment=TA_LEFT)
-    cell_right = ParagraphStyle('CellR', parent=cell_style, alignment=TA_RIGHT)
+        # Estilos para celdas con texto largo (permiten wrap automático)
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'],
+                                    fontSize=8, fontName='Helvetica',
+                                    textColor=C_DARK, leading=10, alignment=TA_LEFT)
+        cell_right = ParagraphStyle('CellR', parent=cell_style, alignment=TA_RIGHT)
 
-    def P(text, style=None):
-        """Convierte texto a Paragraph para que haga word-wrap en la celda."""
-        return Paragraph(str(text) if text else '', style or cell_style)
+        def P(text, style=None):
+            """Convierte texto a Paragraph para que haga word-wrap en la celda."""
+            return Paragraph(str(text) if text else '', style or cell_style)
 
-    # Tabla de datos
-    # Landscape A4: 297mm - 24mm márgenes = 273mm útiles
-    # N°:8 | Fecha:22 | Hora:17 | Monto:24 | Comisión:24 | Medio:52 | Usuario:62 | Sucursal:62 = 271mm
-    col_headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
-    col_widths  = [8*mm, 22*mm, 17*mm, 24*mm, 24*mm, 52*mm, 62*mm, 62*mm]
+        # Tabla de datos
+        # Landscape A4: 297mm - 24mm márgenes = 273mm útiles
+        # N°:8 | Fecha:22 | Hora:17 | Monto:24 | Comisión:24 | Medio:52 | Usuario:62 | Sucursal:62 = 271mm
+        col_headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
+        col_widths  = [8*mm, 22*mm, 17*mm, 24*mm, 24*mm, 52*mm, 62*mm, 62*mm]
 
-    table_data = [col_headers]
-    for i, f in enumerate(filas, 1):
-        table_data.append([
-            str(i),
-            f['fecha'],
-            f['hora'],
-            P(f'S/ {f["monto"]:,.2f}', cell_right),
-            P(f'S/ {f["comision"]:,.2f}', cell_right),
-            P(f['medio']),
-            P(f['usuario']),
-            P(f['sucursal']),
-        ])
+        table_data = [col_headers]
+        for i, f in enumerate(filas, 1):
+            table_data.append([
+                str(i),
+                f['fecha'],
+                f['hora'],
+                P(f'S/ {f["monto"]:,.2f}', cell_right),
+                P(f'S/ {f["comision"]:,.2f}', cell_right),
+                P(f['medio']),
+                P(f['usuario']),
+                P(f['sucursal']),
+            ])
 
-    # Fila de totales
-    total_m = sum(f['monto'] for f in filas)
-    total_c = sum(f['comision'] for f in filas)
-    tot_style = ParagraphStyle('Tot', parent=cell_right,
-                               fontName='Helvetica-Bold', textColor=C_LIGHT)
-    table_data.append(['', '', P('TOTAL', ParagraphStyle('TotC', parent=cell_style,
-                       fontName='Helvetica-Bold', textColor=C_LIGHT, alignment=TA_CENTER)),
-                       P(f'S/ {total_m:,.2f}', tot_style),
-                       P(f'S/ {total_c:,.2f}', tot_style),
-                       '', '', ''])
-
-    t = Table(table_data, colWidths=col_widths, repeatRows=1)
-
-    # Estilos de la tabla
-    style_cmds = [
-        ('BACKGROUND',  (0, 0), (-1, 0),  C_DARK),
-        ('TEXTCOLOR',   (0, 0), (-1, 0),  C_LIGHT),
-        ('FONTNAME',    (0, 0), (-1, 0),  'Helvetica-Bold'),
-        ('FONTSIZE',    (0, 0), (-1, 0),  9),
-        ('ALIGN',       (0, 0), (-1, 0),  'CENTER'),
-        ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
-        ('FONTSIZE',    (0, 1), (-1, -1), 8),
-        ('FONTNAME',    (0, 1), (-1, -1), 'Helvetica'),
-        ('ALIGN',       (3, 1), (4, -1),  'RIGHT'),
-        ('ALIGN',       (0, 1), (0, -1),  'CENTER'),
-        ('GRID',        (0, 0), (-1, -1), 0.4, C_MUTED),
-        ('TOPPADDING',  (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING',(0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 3),
-        ('ROWHEIGHT',   (0, 0), (-1, 0),  16),
         # Fila de totales
-        ('BACKGROUND',  (0, -1), (-1, -1), C_ACCENT),
-        ('TEXTCOLOR',   (0, -1), (-1, -1), C_LIGHT),
-        ('FONTNAME',    (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('ROWHEIGHT',   (0, -1), (-1, -1), 16),
-    ]
-    # Filas alternadas
-    for row_i in range(1, len(table_data) - 1):
-        bg = C_ROW_ODD if row_i % 2 == 1 else C_ROW_EVEN
-        style_cmds.append(('BACKGROUND', (0, row_i), (-1, row_i), bg))
+        total_m = sum(f['monto'] for f in filas)
+        total_c = sum(f['comision'] for f in filas)
+        tot_style = ParagraphStyle('Tot', parent=cell_right,
+                                   fontName='Helvetica-Bold', textColor=C_LIGHT)
+        table_data.append(['', '', P('TOTAL', ParagraphStyle('TotC', parent=cell_style,
+                           fontName='Helvetica-Bold', textColor=C_LIGHT, alignment=TA_CENTER)),
+                           P(f'S/ {total_m:,.2f}', tot_style),
+                           P(f'S/ {total_c:,.2f}', tot_style),
+                           '', '', ''])
 
-    t.setStyle(TableStyle(style_cmds))
-    elements.append(t)
+        t = Table(table_data, colWidths=col_widths, repeatRows=1)
 
-    doc.build(elements)
-    buf.seek(0)
+        # Estilos de la tabla
+        style_cmds = [
+            ('BACKGROUND',  (0, 0), (-1, 0),  C_DARK),
+            ('TEXTCOLOR',   (0, 0), (-1, 0),  C_LIGHT),
+            ('FONTNAME',    (0, 0), (-1, 0),  'Helvetica-Bold'),
+            ('FONTSIZE',    (0, 0), (-1, 0),  9),
+            ('ALIGN',       (0, 0), (-1, 0),  'CENTER'),
+            ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTSIZE',    (0, 1), (-1, -1), 8),
+            ('FONTNAME',    (0, 1), (-1, -1), 'Helvetica'),
+            ('ALIGN',       (3, 1), (4, -1),  'RIGHT'),
+            ('ALIGN',       (0, 1), (0, -1),  'CENTER'),
+            ('GRID',        (0, 0), (-1, -1), 0.4, C_MUTED),
+            ('TOPPADDING',  (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING',(0, 0), (-1, -1), 3),
+            ('ROWHEIGHT',   (0, 0), (-1, 0),  16),
+            # Fila de totales
+            ('BACKGROUND',  (0, -1), (-1, -1), C_ACCENT),
+            ('TEXTCOLOR',   (0, -1), (-1, -1), C_LIGHT),
+            ('FONTNAME',    (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('ROWHEIGHT',   (0, -1), (-1, -1), 16),
+        ]
+        # Filas alternadas
+        for row_i in range(1, len(table_data) - 1):
+            bg = C_ROW_ODD if row_i % 2 == 1 else C_ROW_EVEN
+            style_cmds.append(('BACKGROUND', (0, row_i), (-1, row_i), bg))
 
-    from flask import Response
-    return Response(
-        buf.read(),
-        mimetype='application/pdf',
-        headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
-    )
+        t.setStyle(TableStyle(style_cmds))
+        elements.append(t)
+
+        doc.build(elements)
+        buf.seek(0)
+
+        from flask import Response
+        return Response(
+            buf.read(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': 'attachment; filename=reporte_operaciones.pdf'}
+        )
+    except Exception as e:
+        print(f'[ERROR] PDF export: {e}'); traceback.print_exc()
+        return jsonify({'error': 'Fallo al exportar PDF'}), 500
 
 
 # ========== MÓDULO DE CHATBOT IA (Anthropic Claude Haiku 4.5) ==========
