@@ -3870,10 +3870,15 @@ def _ejecutar_editar_operacion_validada(args, usuario):
             es_manual = False
             motivo = None
 
-    # Actualizar montos en la operación
-    monto_diferencia = monto_nuevo - operacion.monto
-    comision_diferencia = comision_nueva - operacion.comision
+    # Guardar valores anteriores ANTES de actualizar
+    monto_anterior = operacion.monto
+    comision_anterior = operacion.comision
 
+    # Calcular diferencias
+    monto_diferencia = monto_nuevo - monto_anterior
+    comision_diferencia = comision_nueva - comision_anterior
+
+    # Actualizar en la operación
     operacion.monto = monto_nuevo
     operacion.comision = comision_nueva
     operacion.comision_manual = es_manual
@@ -3912,11 +3917,11 @@ def _ejecutar_editar_operacion_validada(args, usuario):
     clear_cache()
 
     # Mensaje
-    _msg = f'Operación {operacion.id} editada: S/ {operacion.monto:.2f}'
+    _msg = f'Operación {operacion.id} editada'
     if monto_diferencia != 0:
-        _msg = f'Monto: S/ {operacion.monto - monto_diferencia:.2f} → S/ {monto_nuevo:.2f}. '
+        _msg += f': S/ {monto_anterior:.2f} → S/ {monto_nuevo:.2f}'
     if es_manual and comision_diferencia != 0:
-        _msg += f' Comisión manual: S/ {comision_nueva:.2f}'
+        _msg += f'. Comisión manual: S/ {comision_nueva:.2f}'
         if motivo:
             _msg += f' (motivo: {motivo})'
     _msg += '.'
@@ -3924,9 +3929,9 @@ def _ejecutar_editar_operacion_validada(args, usuario):
     return {
         "mensaje": _msg,
         "monto": monto_nuevo,
-        "monto_anterior": operacion.monto - monto_diferencia,
+        "monto_anterior": monto_anterior,
         "comision": comision_nueva,
-        "comision_anterior": operacion.comision - comision_diferencia,
+        "comision_anterior": comision_anterior,
         "operacion_id": operacion.id,
     }
 
