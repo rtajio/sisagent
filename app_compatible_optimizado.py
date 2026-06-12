@@ -2154,17 +2154,17 @@ def fix_operacion_sequence():
 
         # Resetear auto-increment según el tipo de BD
         if os.environ.get('DATABASE_URL'):
-            # PostgreSQL
+            # PostgreSQL: setval(seq, N, true) hace que nextval() devuelva N+1
             db.session.execute(
-                db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {next_id}, false)")
+                db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_id}, true)")
             )
         else:
-            # SQLite
+            # SQLite: seq debe ser el PRÓXIMO valor a devolver
             db.session.execute(
                 db.text(f"DELETE FROM sqlite_sequence WHERE name='operacion'")
             )
             db.session.execute(
-                db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {max_id})")
+                db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {next_id})")
             )
 
         db.session.commit()
@@ -5572,22 +5572,23 @@ def init_db():
             try:
                 max_op_id = db.session.query(db.func.max(Operacion.id)).scalar() or 0
                 if max_op_id > 0:
+                    next_op_id = max_op_id + 1
                     if os.environ.get('DATABASE_URL'):
-                        # PostgreSQL
+                        # PostgreSQL: setval(seq, N, true) hace que nextval() devuelva N+1
                         db.session.execute(
-                            db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_op_id}, false)")
+                            db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_op_id}, true)")
                         )
-                        print(f"[OK] Auto-increment de operaciones reseteado a {max_op_id + 1}")
+                        print(f"[OK] Auto-increment de operaciones reseteado. Próximo ID: {next_op_id}")
                     else:
-                        # SQLite
+                        # SQLite: seq debe ser el PRÓXIMO valor a devolver
                         try:
                             db.session.execute(db.text("DELETE FROM sqlite_sequence WHERE name='operacion'"))
                         except:
                             pass
                         db.session.execute(
-                            db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {max_op_id})")
+                            db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {next_op_id})")
                         )
-                        print(f"[OK] Auto-increment de operaciones reseteado a {max_op_id + 1}")
+                        print(f"[OK] Auto-increment de operaciones reseteado. Próximo ID: {next_op_id}")
                     db.session.commit()
             except Exception as e:
                 print(f"[WARN] No se pudo resetear auto-increment: {e}")
