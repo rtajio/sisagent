@@ -967,34 +967,53 @@ def _corregir_autoincrement_operacion():
 @login_required
 def registrar_operacion():
     if request.method == 'POST':
-        monto = float(request.form['monto'])
-        medio = request.form['medio']
+        try:
+            monto = float(request.form.get('monto', 0))
+            medio = (request.form.get('medio') or '').strip()
 
-        # Comisión: si comision_manual=true, usar el valor del form (override del operador).
-        # Si no, recalcular la sugerida server-side (ignorar lo que mande el cliente).
-        es_manual = (request.form.get('comision_manual') or '').lower() in ('true', '1', 'on', 'yes')
-        comision_sugerida = calcular_comision_sugerida(monto)
-        if es_manual:
-            try:
-                comision = float(request.form.get('comision') or comision_sugerida)
-            except (TypeError, ValueError):
+            if not monto or monto <= 0:
+                flash('El monto debe ser mayor a 0', 'error')
+                return redirect(url_for('registrar_operacion'))
+            if not medio:
+                flash('Debes seleccionar un medio de pago', 'error')
+                return redirect(url_for('registrar_operacion'))
+
+            # Comisión: si comision_manual=true, usar el valor del form (override del operador).
+            # Si no, recalcular la sugerida server-side (ignorar lo que mande el cliente).
+            es_manual = (request.form.get('comision_manual') or '').lower() in ('true', '1', 'on', 'yes')
+            comision_sugerida = calcular_comision_sugerida(monto)
+            if es_manual:
+                try:
+                    comision = float(request.form.get('comision') or comision_sugerida)
+                except (TypeError, ValueError):
+                    comision = comision_sugerida
+                if comision < 0:
+                    comision = 0.0
+                motivo = (request.form.get('motivo_descuento') or '').strip() or None
+                # Si terminó siendo igual a la sugerida, no la marcamos como manual
+                if abs(comision - comision_sugerida) < 0.001:
+                    es_manual = False
+                    motivo = None
+            else:
                 comision = comision_sugerida
-            if comision < 0:
-                comision = 0.0
-            motivo = (request.form.get('motivo_descuento') or '').strip() or None
-            # Si terminó siendo igual a la sugerida, no la marcamos como manual
-            if abs(comision - comision_sugerida) < 0.001:
-                es_manual = False
                 motivo = None
-        else:
-            comision = comision_sugerida
-            motivo = None
 
-        # Determinar sucursal
-        if current_user.es_admin:
-            sucursal_id = int(request.form.get('sucursal_id'))
-        else:
-            sucursal_id = current_user.sucursal_id
+            # Determinar sucursal
+            if current_user.es_admin:
+                sucursal_id_str = request.form.get('sucursal_id', '').strip()
+                if not sucursal_id_str:
+                    flash('Debes seleccionar una sucursal', 'error')
+                    return redirect(url_for('registrar_operacion'))
+                try:
+                    sucursal_id = int(sucursal_id_str)
+                except (TypeError, ValueError):
+                    flash('Sucursal inválida', 'error')
+                    return redirect(url_for('registrar_operacion'))
+            else:
+                sucursal_id = current_user.sucursal_id
+                if not sucursal_id:
+                    flash('No tienes una sucursal asignada', 'error')
+                    return redirect(url_for('registrar_operacion'))
 
         # Crear operación con hora Perú (wall-clock naive, sin tzinfo)
         hora_peru = get_peru_time().replace(tzinfo=None)
@@ -1064,9 +1083,19 @@ def registrar_operacion():
         # Limpiar caché después de cambios
         clear_cache()
 
-        flash('Operación bancaria registrada exitosamente', 'success')
-        return redirect(url_for('operaciones'))
-    
+            flash('Operación bancaria registrada exitosamente', 'success')
+            return redirect(url_for('operaciones'))
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] registrar_operacion: {e}")
+            traceback.print_exc()
+            try:
+                db.session.rollback()
+            except:
+                pass
+            flash(f'Error al registrar la operación: {str(e)[:100]}', 'error')
+            return redirect(url_for('registrar_operacion'))
+
     # OPTIMIZACIÓN ULTRA: Cargar sucursales solo si es admin
     sucursales = []
     if current_user.es_admin:
