@@ -1919,7 +1919,7 @@
             let endPhrase = 'cierra el chat';   // frase para TERMINAR el chat de voz (vacía = desactivada)
             let voiceHotkey = null;             // {ctrl,alt,shift,code,label} tecla manual para activar/desactivar voz
             let pendingHotkey = undefined;      // capturada en settings, se aplica al guardar (undefined = sin cambios)
-            let triggerListeningEnabled = false;
+            let triggerListeningEnabled = true; // ACTIVADO POR DEFECTO: escucha continua la frase activadora
             let triggerRecognition = null;
             let dictation = null;
             let dictationActive = false;
@@ -2363,8 +2363,21 @@
                     if (endP !== null) endPhrase = endP.trim();  // '' guardado = desactivada a propósito
                     const hk = localStorage.getItem(HOTKEY_STORAGE_KEY);
                     if (hk) { try { voiceHotkey = JSON.parse(hk); } catch (e) { voiceHotkey = null; } }
-                    triggerListeningEnabled = localStorage.getItem(CONTINUOUS_STORAGE_KEY) === '1';
-                } catch (e) {}
+                    const stored = localStorage.getItem(CONTINUOUS_STORAGE_KEY);
+                    if (stored !== null) {
+                        triggerListeningEnabled = stored === '1';
+                    } else {
+                        triggerListeningEnabled = true;  // DEFAULT: activada si no hay preferencia guardada
+                    }
+                    // HOTKEY POR DEFECTO: Ctrl+Shift+V (si no hay guardado)
+                    if (!voiceHotkey) {
+                        voiceHotkey = { code: 'KeyV', ctrl: true, shift: true, alt: false, meta: false, label: 'Ctrl + Shift + V' };
+                        console.log('[hotkey] Usando default: Ctrl+Shift+V');
+                    }
+                } catch (e) {
+                    console.warn('[voice-settings] Error cargando:', e);
+                    triggerListeningEnabled = true;  // Fallback
+                }
             }
             function saveVoiceSettings() {
                 try {
