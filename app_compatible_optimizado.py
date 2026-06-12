@@ -985,7 +985,7 @@ def registrar_operacion():
             if es_manual:
                 try:
                     comision = float(request.form.get('comision') or comision_sugerida)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError) as comision_err:
                     comision = comision_sugerida
                 if comision < 0:
                     comision = 0.0
@@ -1006,7 +1006,7 @@ def registrar_operacion():
                     return redirect(url_for('registrar_operacion'))
                 try:
                     sucursal_id = int(sucursal_id_str)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError) as suc_err:
                     flash('Sucursal inválida', 'error')
                     return redirect(url_for('registrar_operacion'))
             else:
