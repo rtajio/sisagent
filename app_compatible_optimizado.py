@@ -4342,32 +4342,22 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                 "productos": productos_buscados,
             }
 
-        # Acciones que mutan datos: devolver como PROPUESTA (no ejecutar aún).
+        # Acciones que mutan datos: ejecutar directamente (no pedir confirmación).
         for fc in fcs:
             nombre = fc.get("name")
             fargs = fc.get("args") or {}
             if nombre in EJECUTORES_DIRECTOS:
                 try:
-                    # Validar sin ejecutar (usar _tool_proponer_* en lugar del ejecutor)
-                    # Los nombres son proponer_operacion, proponer_venta, etc.
-                    # Obtenemos el handler de propuesta del spec
-                    spec = CHATBOT_TOOLS.get(nombre)
-                    if not spec:
-                        raise ValueError(f"Herramienta desconocida: {nombre}")
-                    # Llamar al handler de propuesta (es el _tool_proponer_*)
-                    preview = spec["handler"](fargs, usuario)
+                    resultado = EJECUTORES_DIRECTOS[nombre](fargs, usuario)
                 except ValueError as e:
                     return {
                         "tipo": "texto",
                         "texto": f"No se pudo completar la accion: {str(e)}",
                         "productos": productos_buscados,
                     }
-                # Devolver PROPUESTA, no ejecutar todavía
                 return {
-                    "tipo": "propuesta",
-                    "accion": nombre,
-                    "args": fargs,
-                    "preview": preview,
+                    "tipo": "texto",
+                    "texto": resultado.get("mensaje", "Listo, se completo correctamente."),
                     "productos": productos_buscados,
                 }
             if nombre == "confirmar_ultima_accion":
