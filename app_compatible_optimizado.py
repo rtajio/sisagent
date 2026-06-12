@@ -2521,26 +2521,28 @@ def exportar_pdf():
         col_headers = ['N°', 'Fecha', 'Hora', 'Monto (S/)', 'Comisión (S/)', 'Medio', 'Usuario', 'Sucursal']
         col_widths  = [8*mm, 22*mm, 17*mm, 24*mm, 24*mm, 52*mm, 62*mm, 62*mm]
 
-        # Optimización: usar texto plano en lugar de Paragraphs para velocidad
         table_data = [col_headers]
         for i, f in enumerate(filas, 1):
             table_data.append([
                 str(i),
                 f['fecha'],
                 f['hora'],
-                f'S/ {f["monto"]:,.2f}',
-                f'S/ {f["comision"]:,.2f}',
-                f['medio'],
-                f['usuario'][:20],  # truncar nombres largos
-                f['sucursal'][:20],
+                P(f'S/ {f["monto"]:,.2f}', cell_right),
+                P(f'S/ {f["comision"]:,.2f}', cell_right),
+                P(f['medio']),
+                P(f['usuario']),
+                P(f['sucursal']),
             ])
 
         # Fila de totales
         total_m = sum(f['monto'] for f in filas)
         total_c = sum(f['comision'] for f in filas)
-        table_data.append(['', '', 'TOTAL',
-                           f'S/ {total_m:,.2f}',
-                           f'S/ {total_c:,.2f}',
+        tot_style = ParagraphStyle('Tot', parent=cell_right,
+                                   fontName='Helvetica-Bold', textColor=C_LIGHT)
+        table_data.append(['', '', P('TOTAL', ParagraphStyle('TotC', parent=cell_style,
+                           fontName='Helvetica-Bold', textColor=C_LIGHT, alignment=TA_CENTER)),
+                           P(f'S/ {total_m:,.2f}', tot_style),
+                           P(f'S/ {total_c:,.2f}', tot_style),
                            '', '', ''])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=1)
