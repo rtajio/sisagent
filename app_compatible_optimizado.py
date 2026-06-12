@@ -5375,7 +5375,31 @@ def init_db():
             
             db.session.commit()
             print("[OK] Medios de pago básicos creados")
-            
+
+            # Arreglar auto-increment de operaciones si está roto
+            try:
+                max_op_id = db.session.query(db.func.max(Operacion.id)).scalar() or 0
+                if max_op_id > 0:
+                    if os.environ.get('DATABASE_URL'):
+                        # PostgreSQL
+                        db.session.execute(
+                            db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_op_id}, false)")
+                        )
+                        print(f"[OK] Auto-increment de operaciones reseteado a {max_op_id + 1}")
+                    else:
+                        # SQLite
+                        try:
+                            db.session.execute(db.text("DELETE FROM sqlite_sequence WHERE name='operacion'"))
+                        except:
+                            pass
+                        db.session.execute(
+                            db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {max_op_id})")
+                        )
+                        print(f"[OK] Auto-increment de operaciones reseteado a {max_op_id + 1}")
+                    db.session.commit()
+            except Exception as e:
+                print(f"[WARN] No se pudo resetear auto-increment: {e}")
+
         except Exception as e:
             print(f"[!!] Error en inicialización (continuando): {e}")
             # Continuar aunque haya errores menores
