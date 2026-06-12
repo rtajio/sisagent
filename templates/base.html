@@ -982,7 +982,7 @@
                            style="padding:8px 10px;background:var(--bg-inset);color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.82rem;">Quitar</button>
                 </div>
                 <small style="display:block;color:var(--text-muted);font-size:0.75rem;margin-bottom:10px;">
-                    Respaldo manual por si fallara el reconocimiento por voz. Haz clic en el campo y presiona la tecla (o combinación, ej. Ctrl + Espacio). Funciona desde cualquier parte del sistema.
+                    Respaldo manual por si fallara el reconocimiento por voz. Haz clic en el campo y presiona CUALQUIER tecla — sirve una sola (Shift, Ctrl, Mayús, F4…) o una combinación (Ctrl + Espacio). Funciona desde cualquier parte del sistema.
                 </small>
                 <div style="background:var(--bg-inset);border-left:3px solid var(--accent);border-radius:4px;padding:8px 10px;margin-bottom:12px;font-size:0.78rem;color:var(--text-secondary);">
                     <i class="fas fa-graduation-cap me-1" style="color:var(--accent);"></i><strong style="color:var(--text-primary);">Reconocimiento adaptativo</strong><br>
@@ -2730,7 +2730,13 @@
                 liveReady = false;
                 stopTriggerListener();
 
-                // 1. Pedir el stream del mic
+                // 1+2 EN PARALELO (menos latencia): arrancamos el fetch del token de voz
+                //    ANTES de esperar el mic, así ambos corren a la vez.
+                const tokenPromise = fetch('/api/chat/voice_token', { credentials: 'same-origin' })
+                    .then(function(r) { return r.ok ? r.json().then(function(d) { return d.token || ''; }) : ''; })
+                    .catch(function() { return ''; });
+
+                // Pedir el stream del mic (lo más lento la 1ra vez por el permiso)
                 try {
                     liveStream = await navigator.mediaDevices.getUserMedia({
                         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
@@ -2744,24 +2750,8 @@
                     return;
                 }
 
-                // 2. Pedir token de voz (auth del WS por URL, robusto si la cookie no
-                //    llega al handshake detrás del proxy de Railway)
-                let voiceToken = '';
-                try {
-                    const tkResp = await fetch('/api/chat/voice_token', { credentials: 'same-origin' });
-                    if (tkResp.ok) {
-                        const tkData = await tkResp.json();
-                        voiceToken = tkData.token || '';
-                    } else if (tkResp.status === 401 || tkResp.status === 302) {
-                        if (typeof showNotification === 'function') {
-                            showNotification('Tu sesión expiró. Recarga la página e inicia sesión de nuevo.', 'error');
-                        }
-                        liveCleanup();
-                        return;
-                    }
-                } catch (e) {
-                    console.warn('[live] No se pudo obtener voice_token:', e);
-                }
+                // El token ya corrió en paralelo con el mic — recogemos el resultado (auth del WS por URL)
+                const voiceToken = await tokenPromise;
 
                 // 3. Abrir WebSocket a /ws/chat/voice_live
                 const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -2858,8 +2848,8 @@
                 try {
                     liveAudioCtx = new AudioCtx({ sampleRate: 16000 });
                     liveSource = liveAudioCtx.createMediaStreamSource(liveStream);
-                    // ScriptProcessor: 4096 samples ≈ 256ms a 16kHz, balance latencia/CPU
-                    liveProcessor = liveAudioCtx.createScriptProcessor(4096, 1, 1);
+                    // ScriptProcessor: 2048 samples ≈ 128ms a 16kHz (más responsivo que 4096)
+                    liveProcessor = liveAudioCtx.createScriptProcessor(2048, 1, 1);
                     liveProcessor.onaudioprocess = onLiveAudioFrame;
                     liveSource.connect(liveProcessor);
                     liveProcessor.connect(liveAudioCtx.destination);
@@ -3515,7 +3505,7 @@
                         showNotification('🎙 Frase detectada — habla ahora', 'success');
                     }
                     // Abrir el chat de voz EN VIVO (Gemini Live), no la grabación one-shot
-                    setTimeout(function() { liveStart('dictating'); }, 400);
+                    setTimeout(function() { liveStart('dictating'); }, 120);
                 } catch (e) {
                     console.warn('[chatbot] Trigger transcripción error:', e);
                 } finally {
@@ -3755,31 +3745,51 @@
                     liveStart('dictating');
                 }
             }
-            function formatKeyCode(code, key) {
-                if (!code) return key || '?';
+            // Modificadores que se mantienen presionados ADEMÁS de la tecla principal
+            // (si la propia tecla es un modificador, no se cuenta a sí misma).
+            function modsOf(e) {
+                return {
+                    ctrl: !!e.ctrlKey && !/^Control(Left|Right)$/.test(e.code),
+                    alt: !!e.altKey && !/^Alt(Left|Right)$/.test(e.code),
+                    shift: !!e.shiftKey && !/^Shift(Left|Right)$/.test(e.code),
+                    meta: !!e.metaKey && !/^Meta(Left|Right)$/.test(e.code)
+                };
+            }
+            function formatKeyCode(code) {
+                if (!code) return '?';
+                if (/^Control(Left|Right)$/.test(code)) return 'Ctrl';
+                if (/^Shift(Left|Right)$/.test(code)) return 'Shift';
+                if (/^Alt(Left|Right)$/.test(code)) return 'Alt';
+                if (/^Meta(Left|Right)$/.test(code)) return 'Win';
+                if (code === 'CapsLock') return 'Mayús';
                 if (code.indexOf('Key') === 0) return code.slice(3);
                 if (code.indexOf('Digit') === 0) return code.slice(5);
+                if (code.indexOf('Numpad') === 0) return 'Num ' + code.slice(6);
                 if (code === 'Space') return 'Espacio';
-                if (code.indexOf('Arrow') === 0) return code.slice(5);
+                if (code === 'ArrowLeft') return '←';
+                if (code === 'ArrowRight') return '→';
+                if (code === 'ArrowUp') return '↑';
+                if (code === 'ArrowDown') return '↓';
                 if (code === 'Escape') return 'Esc';
                 return code;
             }
             function hotkeyLabel(hk) {
-                if (!hk) return '';
+                if (!hk || !hk.code) return '';
                 const parts = [];
                 if (hk.ctrl) parts.push('Ctrl');
                 if (hk.alt) parts.push('Alt');
                 if (hk.shift) parts.push('Shift');
-                parts.push(formatKeyCode(hk.code, hk.key));
+                if (hk.meta) parts.push('Win');
+                parts.push(formatKeyCode(hk.code));
                 return parts.join(' + ');
             }
             if (hotkeyInput) {
+                // Captura CUALQUIER tecla (incluidos modificadores solos: Ctrl, Shift, Mayús, etc.)
                 hotkeyInput.addEventListener('keydown', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (e.key === 'Escape') { pendingHotkey = undefined; hotkeyInput.value = voiceHotkey ? voiceHotkey.label : ''; hotkeyInput.blur(); return; }
-                    if (['Control', 'Alt', 'Shift', 'Meta'].indexOf(e.key) !== -1) return; // esperar tecla no-modificadora
-                    const hk = { ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, code: e.code, key: e.key };
+                    const m = modsOf(e);
+                    const hk = { code: e.code, ctrl: m.ctrl, alt: m.alt, shift: m.shift, meta: m.meta };
                     hk.label = hotkeyLabel(hk);
                     pendingHotkey = hk;
                     hotkeyInput.value = hk.label;
@@ -3793,13 +3803,16 @@
             }
             // Listener global: dispara la tecla configurada desde cualquier parte del sistema
             document.addEventListener('keydown', function(e) {
-                if (!voiceHotkey || document.activeElement === hotkeyInput) return;
+                if (!voiceHotkey || !voiceHotkey.code || document.activeElement === hotkeyInput) return;
+                if (e.repeat) return;  // ignorar auto-repetición al mantener presionada la tecla
                 if (e.code !== voiceHotkey.code) return;
-                if (!!e.ctrlKey !== !!voiceHotkey.ctrl || !!e.altKey !== !!voiceHotkey.alt || !!e.shiftKey !== !!voiceHotkey.shift) return;
-                // No secuestrar la escritura si la tecla no tiene modificador y el foco está en un campo de texto
+                const m = modsOf(e);
+                if (m.ctrl !== !!voiceHotkey.ctrl || m.alt !== !!voiceHotkey.alt || m.shift !== !!voiceHotkey.shift || m.meta !== !!voiceHotkey.meta) return;
+                // No secuestrar la escritura si es una tecla imprimible sola y el foco está en un campo de texto
                 const ae = document.activeElement;
                 const enCampo = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && !ae.readOnly;
-                if (enCampo && !voiceHotkey.ctrl && !voiceHotkey.alt) return;
+                const imprimibleSola = !voiceHotkey.ctrl && !voiceHotkey.alt && !voiceHotkey.meta && /^(Key|Digit|Numpad|Space)/.test(voiceHotkey.code);
+                if (enCampo && imprimibleSola) return;
                 e.preventDefault();
                 toggleVoiceChat();
             });
