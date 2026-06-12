@@ -2710,6 +2710,11 @@ NO hagas esto: "Voy a registrar..." o "Perfecto, preparé..." — ESO ESTÁ PROH
 
 Si el usuario dice: "dame una operación de S/ 500 por Yape"
 Tu respuesta: LLAMA registrar_operacion({monto: 500, medio: "YAPE"})
+
+Si el usuario dice: "la operación era de S/ 300, no 500" O "cambia ese monto a 300"
+Tu respuesta: LLAMA editar_operacion({operacion_id: <ID>, monto: 300, ...})
+PARA EDITAR, necesitas el ID de la operación. Si el usuario no lo dice, busca primero con buscar_operaciones().
+
 NO hagas esto: "¿Confirmas?" o "Está bien?" — ESO ESTÁ PROHIBIDO.
 
 El servidor ejecuta TODO automáticamente. Tu trabajo es LLAMAR LA FUNCIÓN. No validar, no confirmar, solo llamar.
