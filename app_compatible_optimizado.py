@@ -4090,12 +4090,15 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                 "productos": productos_buscados,
             }
 
-        # Acciones que mutan datos (proponer_*) -> devolver propuesta para confirmación del usuario.
+        # Acciones que requieren confirmación del usuario -> devolver propuesta
+        # Acciones especiales de voz -> ejecutar directo
+        # Todas las demás (lectura) -> ejecutar, anexar respuestas y continuar el loop
         for fc in fcs:
             nombre = fc.get("name")
             fargs = fc.get("args") or {}
+
+            # Propuestas con confirmación explícita
             if nombre in CHATBOT_TOOLS and CHATBOT_TOOLS[nombre].get("requires_confirmation"):
-                # Llamar al handler de propuesta para obtener un preview
                 try:
                     preview = CHATBOT_TOOLS[nombre]["handler"](fargs, usuario)
                 except ValueError as e:
@@ -4104,7 +4107,6 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                         "texto": f"No se pudo proponer la accion: {str(e)}",
                         "productos": productos_buscados,
                     }
-                # Devolver propuesta (el cliente mostrará botones de confirmar/cancelar)
                 return {
                     "tipo": "propuesta",
                     "accion": nombre,
@@ -4112,21 +4114,8 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                     "preview": _construir_preview_propuesta(preview),
                     "productos": productos_buscados,
                 }
-            if nombre in EJECUTORES_DIRECTOS and nombre not in CHATBOT_TOOLS:
-                # Acciones especiales como confirmar_ultima_accion, cancelar_ultima_accion
-                try:
-                    resultado = EJECUTORES_DIRECTOS[nombre](fargs, usuario)
-                except ValueError as e:
-                    return {
-                        "tipo": "texto",
-                        "texto": f"No se pudo completar la accion: {str(e)}",
-                        "productos": productos_buscados,
-                    }
-                return {
-                    "tipo": "texto",
-                    "texto": resultado.get("mensaje", "Listo, se completo correctamente."),
-                    "productos": productos_buscados,
-                }
+
+            # Acciones especiales de voz (confirmar/cancelar)
             if nombre == "confirmar_ultima_accion":
                 resultado = _confirmar_ultima_accion_voz(usuario.id)
                 return {
@@ -4142,7 +4131,7 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                     "productos": productos_buscados,
                 }
 
-        # Todas son de solo lectura — ejecutar, anexar functionResponses y continuar el loop.
+        # Todas las demás son de solo lectura — ejecutar, anexar functionResponses y continuar el loop.
         mensajes.append({"role": "model", "parts": parts})
         respuestas = []
         for fc in fcs:
