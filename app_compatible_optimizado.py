@@ -3216,6 +3216,21 @@ def _tool_proponer_operacion(args, usuario):
             f'Disponibles: {nombres}.'
         )
 
+    # Verificar si una operación con el mismo monto, medio y sucursal ya existe en los últimos 10 minutos
+    hace_10_min = get_peru_time() - __import__('datetime').timedelta(minutes=10)
+    op_existente = Operacion.query.filter(
+        Operacion.monto == monto,
+        Operacion.medio == medio_valido.nombre_abreviado,
+        Operacion.sucursal_id == sucursal.id,
+        Operacion.hora >= hace_10_min
+    ).first()
+
+    if op_existente:
+        raise ValueError(
+            f'Esta operación (S/ {monto} vía {medio_valido.nombre_abreviado} en {sucursal.nombre}) '
+            f'ya fue registrada hace poco (ID: {op_existente.id}, {format_peru_time(op_existente.hora)}).'
+        )
+
     return {
         "monto": monto,
         "comision": comision,
