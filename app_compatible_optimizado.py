@@ -863,6 +863,44 @@ def operaciones():
                          comision_dia=comision_dia,
                          sucursal_nombre=sucursal_nombre)
 
+@app.route('/api/operaciones/lista', methods=['GET'])
+@login_required
+def api_operaciones_lista():
+    """Devuelve lista JSON de operaciones del día para live updates en tabla."""
+    try:
+        ahora = get_peru_time()
+        hoy = ahora.date()
+        inicio_hoy = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
+        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
+        fin_hoy = fin_hoy.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        if current_user.es_admin:
+            query = Operacion.query
+        elif current_user.es_admin_de_sucursal():
+            query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
+        else:
+            query = Operacion.query.filter_by(usuario_id=current_user.id)
+
+        operaciones = query.filter(
+            Operacion.hora >= inicio_hoy,
+            Operacion.hora <= fin_hoy
+        ).order_by(Operacion.hora.desc()).all()
+
+        return jsonify({
+            'success': True,
+            'operaciones': [{
+                'id': op.id,
+                'hora': format_peru_time(op.hora),
+                'monto': float(op.monto),
+                'comision': float(op.comision),
+                'medio': op.medio,
+                'usuario': op.usuario.nombre_completo or op.usuario.username,
+                'sucursal': op.usuario.sucursal.nombre if op.usuario.sucursal else 'N/A'
+            } for op in operaciones]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/operaciones/<int:operacion_id>/eliminar', methods=['POST'])
 @login_required
 def eliminar_operacion(operacion_id):

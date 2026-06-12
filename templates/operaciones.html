@@ -614,5 +614,71 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// ============= Live Updates: actualizar tabla sin refrescar =============
+(function() {
+    const tbody = document.querySelector('table tbody');
+    if (!tbody) return;
+
+    let lastOpIds = new Set();
+    // Detectar si hay columna de usuario (para admins)
+    const hasUserColumn = document.querySelectorAll('th').length > 7;
+
+    function updateTableFromAPI() {
+        fetch('/api/operaciones/lista', { method: 'GET', credentials: 'include' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success || !data.operaciones) return;
+
+                const currentOpIds = new Set(data.operaciones.map(op => op.id));
+                const newOps = data.operaciones.filter(op => !lastOpIds.has(op.id));
+                const deletedOps = Array.from(lastOpIds).filter(id => !currentOpIds.has(id));
+
+                // Eliminar filas de operaciones borradas
+                deletedOps.forEach(id => {
+                    const row = document.getElementById(`fila-${id}`);
+                    if (row) row.remove();
+                });
+
+                // Agregar nuevas filas al principio
+                newOps.forEach(op => {
+                    const existingRow = document.getElementById(`fila-${op.id}`);
+                    if (existingRow) return;
+
+                    const row = document.createElement('tr');
+                    row.id = `fila-${op.id}`;
+
+                    // Construir las celdas con o sin columnas de usuario/sucursal
+                    let userCells = '';
+                    if (hasUserColumn) {
+                        userCells = `<td>${op.usuario}</td><td>${op.sucursal}</td>`;
+                    }
+
+                    row.innerHTML = `
+                        <td>${op.id}</td>
+                        <td>${op.hora}</td>
+                        <td class="font-weight-bold">S/ ${op.monto.toFixed(2)}</td>
+                        <td class="text-success font-weight-bold">S/ ${op.comision.toFixed(2)}</td>
+                        <td><span class="badge bg-primary">${op.medio}</span></td>
+                        ${userCells}
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button class="btn btn-outline-warning" title="Editar"><i class="fas fa-edit"></i></button>
+                                <button class="btn btn-outline-danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.insertBefore(row, tbody.firstChild);
+                });
+
+                lastOpIds = currentOpIds;
+            })
+            .catch(err => console.warn('[live] Error actualizando tabla:', err));
+    }
+
+    // Actualizar tabla cada 3 segundos
+    setInterval(updateTableFromAPI, 3000);
+    updateTableFromAPI(); // Primera actualización inmediata
+})();
 </script>
 {% endblock %} 
