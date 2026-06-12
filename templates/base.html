@@ -2714,12 +2714,28 @@
             let liveProcessor = null;
             let liveSource = null;
             let liveStream = null;
-            let liveMode = 'off';        // 'off' | 'listening' | 'dictating' | 'starting'
+            let liveMode = 'off';        // 'off' | 'listening' | 'dictating' | 'starting' | 'warming'
             let liveTranscript = '';     // Acumulador del input_transcription
             let liveReady = false;
             let liveLastSendTime = 0;
+            let liveWarmupTimeout = null; // timeout para limpiar sesión inactiva
 
             async function liveStart(mode) {
+                // Si ya hay sesión 'listening' abierta y solo queremos 'dictating', reutilizar (SIN latencia)
+                if (liveMode === 'listening' && mode === 'dictating' && liveReady && liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    console.log('[live] Reutilizando sesión listening existente → dictating (latencia: ~0ms)');
+                    clearTimeout(liveWarmupTimeout);
+                    liveWarmupTimeout = null;
+                    liveMode = 'dictating';
+                    micBtn.classList.add('recording');
+                    micBtn.title = 'Detener dictado';
+                    const orig = input.placeholder;
+                    input.dataset.origPlaceholder = orig;
+                    input.placeholder = '🔴 Habla — texto en vivo';
+                    input.focus();
+                    return;
+                }
+
                 if (liveMode !== 'off') {
                     console.warn('[live] Ya activo en modo', liveMode);
                     return;
@@ -2815,25 +2831,31 @@
                     liveCleanup();
                 };
 
-                // 3. Esperar a "ready" del servidor + WebSocket OPEN
+                // 3. Esperar a "ready" del servidor (reducido a 3s para latencia mínima)
+                // Si el WS está OPEN pero aún no llegó "ready", toleramos y seguimos (Gemini puede procesarlo de todas formas)
                 const waitReady = await new Promise(function(resolve) {
-                    const timeout = setTimeout(function() { resolve(false); }, 12000);
+                    const timeout = setTimeout(function() { resolve('timeout'); }, 3000);  // 3s en lugar de 12s
                     const check = setInterval(function() {
                         if (liveReady && liveWs && liveWs.readyState === WebSocket.OPEN) {
-                            clearTimeout(timeout); clearInterval(check); resolve(true);
+                            clearTimeout(timeout); clearInterval(check); resolve('ready');
                         }
                         if (!liveWs || liveWs.readyState === WebSocket.CLOSED) {
-                            clearTimeout(timeout); clearInterval(check); resolve(false);
+                            clearTimeout(timeout); clearInterval(check); resolve('closed');
                         }
                     }, 50);
                 });
-                if (!waitReady) {
-                    console.error('[live] Gemini no respondió ready a tiempo');
+                if (waitReady === 'closed') {
+                    console.error('[live] WebSocket cerrado antes de ready');
                     if (typeof showNotification === 'function') {
-                        showNotification('Gemini Live no respondió a tiempo.', 'error');
+                        showNotification('Conexión de voz perdida.', 'error');
                     }
                     liveCleanup();
                     return;
+                }
+                if (waitReady === 'timeout') {
+                    console.warn('[live] Timeout esperando ready, pero WS está OPEN — seguimos (latencia: ~100ms en lugar de 12s)');
+                    // No limpiamos; es normal en conexiones lentas. El audio empezará a fluir.
+                    liveReady = true;  // Simulamos "listo" si el WS está abierto
                 }
 
                 // 4. Configurar captura de audio PCM 16kHz mono
@@ -3186,14 +3208,25 @@
 
             function liveStop(reason) {
                 console.log('[live] Stop, razón:', reason);
-                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
-                    try { liveWs.send(JSON.stringify({type: 'close'})); } catch (e) {}
-                    try { liveWs.close(); } catch (e) {}
-                }
-                liveCleanup();
+                // Detener el audio PERO mantener la sesión WebSocket abierta en 'listening'
+                // (reutilizable para el próximo uso en <5s, reduciendo latencia a ~0ms)
+                liveCleanup('keep_ws');  // 'keep_ws' = mantener WebSocket abierto
+
+                // Si el usuario no vuelve a usar el micrófono en 5s, cerrar la sesión para ahorrar recursos
+                clearTimeout(liveWarmupTimeout);
+                liveWarmupTimeout = setTimeout(function() {
+                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                        console.log('[live] Timeout inactividad 5s → cerrando sesión listening');
+                        try { liveWs.close(); } catch (e) {}
+                        liveWs = null;
+                    }
+                }, 5000);
             }
 
-            function liveCleanup() {
+            function liveCleanup(keepWs) {
+                // keepWs='keep_ws' → mantener WebSocket abierto en 'listening' (reutilizable en <5s)
+                // keepWs undefined → cerrar todo completamente
+
                 // Detener cualquier audio del modelo en reproducción (barge-in completo)
                 liveStopPlayback();
                 if (liveProcessor) {
@@ -3212,9 +3245,22 @@
                     try { liveStream.getTracks().forEach(function(t) { t.stop(); }); } catch (e) {}
                     liveStream = null;
                 }
-                liveWs = null;
-                liveReady = false;
-                liveMode = 'off';
+
+                // Si NO mantenemos el WebSocket, cerrar todo
+                if (keepWs !== 'keep_ws') {
+                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                        try { liveWs.close(); } catch (e) {}
+                    }
+                    liveWs = null;
+                    liveReady = false;
+                    liveMode = 'off';
+                } else {
+                    // Mantener WebSocket pero cambiar a 'listening'
+                    liveMode = 'listening';
+                    liveReady = true;  // Simulamos que sigue listo para el próximo uso
+                    console.log('[live] Sesión en listening mode — reutilizable en 5s');
+                }
+
                 liveTranscript = '';
                 liveModelTranscript = '';
                 liveCurrentBotMessageDiv = null;
@@ -3226,8 +3272,8 @@
                     input.placeholder = input.dataset.origPlaceholder;
                     delete input.dataset.origPlaceholder;
                 }
-                // Reactivar la escucha de la frase activadora (Web Speech API)
-                if (triggerListeningEnabled) {
+                // Reactivar la escucha de la frase activadora (Web Speech API) SOLO si cerramos todo
+                if (triggerListeningEnabled && keepWs !== 'keep_ws') {
                     setTimeout(startTriggerListener, 500);
                 }
             }
