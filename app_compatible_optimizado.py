@@ -3559,7 +3559,59 @@ def _tool_registrar_operacion(args, usuario):
             f'ya fue registrada hace poco (ID: {op_existente.id}, {format_peru_time(op_existente.hora)}).'
         )
 
+    # Ejecutar directamente (no solo proponer)
+    hora_peru = get_peru_time().replace(tzinfo=None)
+    operacion = Operacion(
+        monto=monto,
+        comision=comision,
+        medio=medio_valido.nombre_abreviado,
+        usuario_id=usuario.id,
+        sucursal_id=sucursal.id,
+        hora=hora_peru,
+        comision_sugerida=comision_sugerida,
+        comision_manual=es_manual,
+        motivo_descuento=motivo,
+    )
+    db.session.add(operacion)
+
+    # Actualizar comisiones
+    hoy = get_peru_time().date()
+    comision_diaria = ComisionDiaria.query.filter_by(fecha=hoy, sucursal_id=sucursal.id).first()
+    if comision_diaria:
+        comision_diaria.total_comision = float(comision_diaria.total_comision) + comision
+    else:
+        comision_diaria = ComisionDiaria(fecha=hoy, sucursal_id=sucursal.id, total_comision=comision)
+        db.session.add(comision_diaria)
+
+    ahora = get_peru_time()
+    comision_mensual = ComisionMensual.query.filter_by(
+        año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id
+    ).first()
+    if comision_mensual:
+        comision_mensual.total_comision = float(comision_mensual.total_comision) + comision
+    else:
+        comision_mensual = ComisionMensual(
+            año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id, total_comision=comision
+        )
+        db.session.add(comision_mensual)
+
+    db.session.commit()
+    _corregir_autoincrement_operacion()
+    clear_cache()
+
+    # Devolver confirmación
+    _msg = f'Operacion registrada: S/ {monto:.2f}'
+    if es_manual:
+        _msg += f' con comision manual de S/ {comision:.2f}'
+        if motivo:
+            _msg += f' (motivo: {motivo})'
+    _msg += f' via {medio_valido.nombre_abreviado}'
+    if getattr(usuario, 'es_admin', False):
+        _msg += f' en {sucursal.nombre}'
+    _msg += '.'
+
     return {
+        "resultado": _msg,
         "monto": monto,
         "comision": comision,
         "comision_sugerida": comision_sugerida,
