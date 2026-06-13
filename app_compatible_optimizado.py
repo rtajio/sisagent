@@ -2142,6 +2142,47 @@ def api_medios_reorganizar():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/debug/fix-operacion-schema', methods=['POST'])
+@login_required
+def debug_fix_operacion_schema():
+    """DEBUG: Agregar columna medio_pago_id si no existe."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        with db.engine.begin() as conn:
+            # PostgreSQL
+            if 'postgresql' in str(db.engine.url):
+                # Verificar si la columna existe
+                result = conn.execute(db.text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='operacion' AND column_name='medio_pago_id'
+                    )
+                """)).scalar()
+
+                if not result:
+                    conn.execute(db.text("""
+                        ALTER TABLE operacion
+                        ADD COLUMN medio_pago_id INTEGER REFERENCES medio_pago(id)
+                    """))
+                    return jsonify({'success': True, 'message': 'Columna medio_pago_id agregada a PostgreSQL'})
+                else:
+                    return jsonify({'success': True, 'message': 'Columna medio_pago_id ya existe'})
+            else:
+                # SQLite
+                try:
+                    conn.execute(db.text("""
+                        ALTER TABLE operacion ADD COLUMN medio_pago_id INTEGER
+                    """))
+                    return jsonify({'success': True, 'message': 'Columna medio_pago_id agregada a SQLite'})
+                except:
+                    return jsonify({'success': True, 'message': 'Columna medio_pago_id ya existe'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/medios/<int:medio_id>/editar', methods=['POST'])
 @login_required
 def api_editar_medio(medio_id):
