@@ -3602,6 +3602,7 @@ def _tool_registrar_operacion(args, usuario):
         db.session.add(comision_mensual)
 
     db.session.commit()
+    db.session.expunge_all()  # Limpiar caché de sesión para reflejar cambios inmediatamente
     _corregir_autoincrement_operacion()
     clear_cache()
 
@@ -4293,6 +4294,7 @@ def _ejecutar_operacion_validada(args, usuario):
         db.session.add(comision_mensual)
 
     db.session.commit()
+    db.session.expunge_all()  # Limpiar caché de sesión para reflejar cambios inmediatamente
 
     # Corregir auto-increment si es necesario
     _corregir_autoincrement_operacion()
