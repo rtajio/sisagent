@@ -2716,10 +2716,11 @@ Si el usuario dice: "dame una operación de S/ 500 por Yape"
 Tu respuesta: LLAMA registrar_operacion({monto: 500, medio: "YAPE"})
 
 Si el usuario dice: "me equivoqué" O "eso era incorrecto" O "era de X soles"
-Tu respuesta EXACTA (en este orden):
-  PASO 1: LLAMA eliminar_operacion() SIN PARÁMETROS (elimina la última automáticamente)
-  PASO 2: LLAMA registrar_operacion() con los datos correctos
-AMBOS PASOS SON OBLIGATORIOS. NO EXISTEN editar_operacion ni editar_venta. SIEMPRE ELIMINA + REGISTRA.
+Tu respuesta EXACTA:
+  LLAMA editar_operacion() con los datos correctos
+  NO LLAMES eliminar + registrar.
+  EDITAR es más correcto: mantiene el ID original, no crea duplicados.
+OBLIGATORIO: usa editar_operacion() para cambios.
 
 NO hagas esto: "¿Confirmas?" o "Está bien?" — ESO ESTÁ PROHIBIDO.
 
@@ -3736,6 +3737,7 @@ CHATBOT_TOOLS = {
     "listar_sucursales":      {"handler": _tool_listar_sucursales,      "requires_confirmation": False},
     "registrar_venta":         {"handler": _tool_registrar_venta,             "requires_confirmation": True},
     "registrar_operacion":     {"handler": _tool_registrar_operacion,         "requires_confirmation": True},
+    "editar_operacion":        {"handler": _tool_editar_operacion,            "requires_confirmation": True},
     "crear_producto":   {"handler": _tool_crear_producto,   "requires_confirmation": True},
     "editar_producto":  {"handler": _tool_editar_producto,  "requires_confirmation": True},
     "eliminar_producto":{"handler": _tool_eliminar_producto,"requires_confirmation": True},
