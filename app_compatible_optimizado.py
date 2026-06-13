@@ -4689,7 +4689,7 @@ def _ejecutar_crear_sucursal_validada(args, usuario):
 # Usado tanto por el chat de texto como por voz para evitar el paso de confirmacion.
 EJECUTORES_DIRECTOS = {
     'registrar_venta':              _ejecutar_venta_validada,
-    'registrar_operacion':          _ejecutar_operacion_validada,
+    'registrar_operacion':          _tool_registrar_operacion,
     'editar_operacion':             _ejecutar_editar_operacion_validada,
     'crear_producto':     _ejecutar_crear_producto_validado,
     'editar_producto':    _ejecutar_editar_producto_validado,
