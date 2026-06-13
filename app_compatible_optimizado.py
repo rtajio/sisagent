@@ -2146,6 +2146,50 @@ def api_medios_reorganizar():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/medios/limpiar-y-reorganizar', methods=['POST'])
+@login_required
+def api_medios_limpiar_y_reorganizar():
+    """Limpia medios duplicados y reorganiza orden secuencial."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        # Encontrar duplicados por nombre_abreviado
+        duplicados = db.session.execute(db.text("""
+            SELECT nombre_abreviado, COUNT(*) as count, ARRAY_AGG(id ORDER BY id) as ids
+            FROM medio_pago
+            GROUP BY nombre_abreviado
+            HAVING COUNT(*) > 1
+        """)).fetchall()
+
+        eliminados = 0
+        for row in duplicados:
+            ids = row[2]  # ARRAY_AGG(id)
+            # Mantener el primero, eliminar los demás
+            for id_a_eliminar in ids[1:]:
+                medio = MedioPago.query.get(id_a_eliminar)
+                if medio:
+                    db.session.delete(medio)
+                    eliminados += 1
+
+        db.session.commit()
+
+        # Reorganizar el campo orden alfabéticamente
+        medios = MedioPago.query.order_by(MedioPago.nombre_abreviado).all()
+        for i, medio in enumerate(medios):
+            medio.orden = i
+
+        db.session.commit()
+        cache.clear()
+
+        return jsonify({
+            'success': True,
+            'message': f'Limpieza completada: {eliminados} duplicados eliminados, {len(medios)} medios reorganizados'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/debug/fix-operacion-schema', methods=['POST'])
 @login_required
 def debug_fix_operacion_schema():
