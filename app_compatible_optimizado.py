@@ -4656,6 +4656,97 @@ def api_chat_mensaje():
         }), 500
 
 
+@app.route('/debug/normalize_db', methods=['POST'])
+@login_required
+def debug_normalize_db():
+    """DEBUG: Normalizar la BD. Solo para admin. REQUIERE TOKEN: ?token=SISAGENT_NORMALIZE"""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    token = request.args.get('token', '')
+    if token != 'SISAGENT_NORMALIZE':
+        return jsonify({'error': 'Token inválido. Usa ?token=SISAGENT_NORMALIZE'}), 403
+
+    results = {}
+
+    try:
+        # PASO 1: Agregar columna FK
+        results['paso_1'] = "Agregando columna medio_pago_id..."
+        db.session.execute(db.text("""
+            ALTER TABLE operacion
+            ADD COLUMN IF NOT EXISTS medio_pago_id INTEGER REFERENCES medio_pago(id)
+        """))
+        db.session.commit()
+        results['paso_1'] = "✓ Columna agregada"
+
+        # PASO 2: Migrar datos
+        results['paso_2'] = "Migrando datos (mapear strings a IDs)..."
+        db.session.execute(db.text("""
+            UPDATE operacion o
+            SET medio_pago_id = m.id
+            FROM medio_pago m
+            WHERE (UPPER(TRIM(o.medio)) = UPPER(TRIM(m.nombre_abreviado)) OR
+                   UPPER(TRIM(o.medio)) = UPPER(TRIM(m.nombre_completo)))
+              AND o.medio_pago_id IS NULL
+        """))
+        db.session.commit()
+
+        # Verificar
+        sin_fk = db.session.execute(db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id IS NULL")).scalar()
+        con_fk = db.session.execute(db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id IS NOT NULL")).scalar()
+        results['paso_2'] = f"✓ Migradas {con_fk} operaciones. Sin migrar: {sin_fk}"
+
+        # PASO 3: Normalizar nombres
+        results['paso_3'] = "Normalizando nombres..."
+        db.session.execute(db.text("""
+            UPDATE medio_pago
+            SET nombre_completo = TRIM(nombre_completo),
+                nombre_abreviado = TRIM(UPPER(nombre_abreviado))
+        """))
+        db.session.commit()
+        results['paso_3'] = "✓ Nombres normalizados"
+
+        # PASO 4: Asignar medios globales a todas las sucursales
+        results['paso_4'] = "Asignando medios globales a todas las sucursales..."
+        db.session.execute(db.text("""
+            INSERT INTO medio_sucursal (sucursal_id, medio_pago_id, activo)
+            SELECT s.id, m.id, true
+            FROM sucursal s
+            CROSS JOIN (
+              SELECT id FROM medio_pago
+              WHERE id NOT IN (SELECT DISTINCT medio_pago_id FROM medio_sucursal)
+            ) m
+            WHERE NOT EXISTS (
+              SELECT 1 FROM medio_sucursal
+              WHERE sucursal_id = s.id AND medio_pago_id = m.id
+            )
+            ON CONFLICT DO NOTHING
+        """))
+        db.session.commit()
+        results['paso_4'] = "✓ Medios asignados a todas las sucursales"
+
+        # PASO 5: Resumen
+        results['paso_5'] = "Resumen final..."
+        total_ops = db.session.execute(db.text("SELECT COUNT(*) FROM operacion")).scalar()
+        ops_con_fk = db.session.execute(db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id IS NOT NULL")).scalar()
+        ops_sin_fk = db.session.execute(db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id IS NULL")).scalar()
+
+        results['paso_5'] = f"✓ Total operaciones: {total_ops} | Con FK: {ops_con_fk} | Sin FK: {ops_sin_fk}"
+
+        # Limpiar caché
+        clear_cache()
+        results['cache'] = "✓ Caché limpiado"
+
+        return jsonify({
+            'success': True,
+            'message': 'Normalización completada',
+            'results': results
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e), 'results': results}), 500
+
 @app.route('/debug/backup_db', methods=['GET'])
 @login_required
 def debug_backup_db():
