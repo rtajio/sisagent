@@ -3646,38 +3646,46 @@ def _tool_registrar_operacion(args, usuario):
 
     db.session.commit()
 
-    # Limpiar caché y sesión (sin bloquear si hay error)
+    # Post-commit: limpiar caché y sesión, armar confirmación
+    # Envuelto en try/except para garantizar que SIEMPRE retorna un dict válido
     try:
-        db.session.expunge_all()
-    except:
-        pass
-    try:
-        clear_cache()
-    except:
-        pass
+        try:
+            db.session.expunge_all()
+        except:
+            pass
+        try:
+            clear_cache()
+        except:
+            pass
 
-    # Devolver confirmación (SIEMPRE retorna exitosamente si llegó aquí)
-    _msg = f'Operacion registrada: S/ {monto:.2f}'
-    if es_manual:
-        _msg += f' con comision manual de S/ {comision:.2f}'
-        if motivo:
-            _msg += f' (motivo: {motivo})'
-    _msg += f' via {medio_valido.nombre_abreviado}'
-    if getattr(usuario, 'es_admin', False):
-        _msg += f' en {sucursal.nombre}'
-    _msg += '.'
+        # Devolver confirmación (SIEMPRE retorna exitosamente si llegó aquí)
+        _msg = f'Operacion registrada: S/ {monto:.2f}'
+        if es_manual:
+            _msg += f' con comision manual de S/ {comision:.2f}'
+            if motivo:
+                _msg += f' (motivo: {motivo})'
+        _msg += f' via {medio_valido.nombre_abreviado}'
+        if getattr(usuario, 'es_admin', False):
+            _msg += f' en {sucursal.nombre}'
+        _msg += '.'
 
-    return {
-        "mensaje": _msg,
-        "monto": monto,
-        "comision": comision,
-        "comision_sugerida": comision_sugerida,
-        "comision_manual": es_manual,
-        "motivo_descuento": motivo,
-        "medio": medio_valido.nombre_abreviado,
-        "sucursal_id": sucursal.id,
-        "sucursal_nombre": sucursal.nombre,
-    }
+        return {
+            "mensaje": _msg,
+            "monto": monto,
+            "comision": comision,
+            "comision_sugerida": comision_sugerida,
+            "comision_manual": es_manual,
+            "motivo_descuento": motivo,
+            "medio": medio_valido.nombre_abreviado,
+            "sucursal_id": sucursal.id,
+            "sucursal_nombre": sucursal.nombre,
+        }
+    except Exception as e:
+        # Si algo falla DESPUÉS del commit, retornar al menos un mensaje básico
+        print(f"[WARN] Error en post-commit de _tool_registrar_operacion: {e}")
+        return {
+            "mensaje": f"Operacion registrada exitosamente (S/ {monto:.2f} via {medio_valido.nombre_abreviado})"
+        }
 
 
 # ---------- Handlers de búsquedas read-only (para localizar entidades a editar/eliminar) ----------
@@ -4901,10 +4909,23 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
             if nombre in herramientas_ejecucion_directa:
                 try:
                     resultado = EJECUTORES_DIRECTOS[nombre](fargs, usuario)
+                    if not isinstance(resultado, dict):
+                        print(f"[ERROR] {nombre} no devolvió dict, devolvió {type(resultado)}: {resultado}")
+                        resultado = {"mensaje": str(resultado)}
                 except ValueError as e:
+                    print(f"[ERROR] ValueError en {nombre}: {e}")
                     return {
                         "tipo": "texto",
                         "texto": f"No se pudo completar la accion: {str(e)}",
+                        "productos": productos_buscados,
+                    }
+                except Exception as e:
+                    print(f"[ERROR] Exception en {nombre}: {type(e).__name__}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return {
+                        "tipo": "texto",
+                        "texto": f"Error interno al registrar: {str(e)}",
                         "productos": productos_buscados,
                     }
                 return {
