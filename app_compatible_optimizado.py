@@ -3602,15 +3602,17 @@ def _tool_registrar_operacion(args, usuario):
 
     db.session.commit()
 
-    # Tareas post-commit: no deben bloquear el retorno si hay error
+    # Limpiar caché y sesión (sin bloquear si hay error)
     try:
-        db.session.expunge_all()  # Limpiar caché de sesión para reflejar cambios inmediatamente
-        _corregir_autoincrement_operacion()
+        db.session.expunge_all()
+    except:
+        pass
+    try:
         clear_cache()
-    except Exception as e:
-        print(f"[WARN] Error en tareas post-commit (pero operación registrada): {e}")
+    except:
+        pass
 
-    # Devolver confirmación
+    # Devolver confirmación (SIEMPRE retorna exitosamente si llegó aquí)
     _msg = f'Operacion registrada: S/ {monto:.2f}'
     if es_manual:
         _msg += f' con comision manual de S/ {comision:.2f}'
@@ -4299,13 +4301,15 @@ def _ejecutar_operacion_validada(args, usuario):
 
     db.session.commit()
 
-    # Tareas post-commit: no deben bloquear el retorno si hay error
+    # Limpiar caché y sesión (sin bloquear si hay error)
     try:
-        db.session.expunge_all()  # Limpiar caché de sesión para reflejar cambios inmediatamente
-        _corregir_autoincrement_operacion()
+        db.session.expunge_all()
+    except:
+        pass
+    try:
         clear_cache()
-    except Exception as e:
-        print(f"[WARN] Error en tareas post-commit (pero operación registrada): {e}")
+    except:
+        pass
 
     # La sucursal solo se nombra a admins (un usuario regular tiene una sola, sobra decirla).
     # La comision solo se nombra si fue MANUAL (la automatica no hace falta mencionarla).
