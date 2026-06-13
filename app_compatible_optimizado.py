@@ -6707,6 +6707,14 @@ def init_db():
                                 "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS origen VARCHAR(20)"))
                             _conn.execute(text(
                                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS vocabulario_voz TEXT"))
+                            # Columnas de Producto agregadas al modelo despues de crear la tabla
+                            # (create_all no las agrega a tablas existentes -> rompia /inventario).
+                            _conn.execute(text(
+                                "ALTER TABLE producto ADD COLUMN IF NOT EXISTS foto_mimetype VARCHAR(50)"))
+                            _conn.execute(text(
+                                "ALTER TABLE producto ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP"))
+                            _conn.execute(text(
+                                "ALTER TABLE producto ADD COLUMN IF NOT EXISTS fecha_vencimiento DATE"))
                         print("[OK] Columnas verificadas (PostgreSQL)")
                     except Exception as e:
                         if "already exists" in str(e) or "duplicate" in str(e).lower():
@@ -6724,6 +6732,10 @@ def init_db():
                         "ALTER TABLE operacion ADD COLUMN motivo_descuento VARCHAR(200)",
                         "ALTER TABLE operacion ADD COLUMN origen VARCHAR(20)",
                         "ALTER TABLE usuario ADD COLUMN vocabulario_voz TEXT",
+                        # Columnas de Producto agregadas al modelo despues de crear la tabla
+                        "ALTER TABLE producto ADD COLUMN foto_mimetype VARCHAR(50)",
+                        "ALTER TABLE producto ADD COLUMN fecha_creacion TIMESTAMP",
+                        "ALTER TABLE producto ADD COLUMN fecha_vencimiento DATE",
                     ]:
                         try:
                             with db.engine.connect() as _conn:
