@@ -899,9 +899,10 @@ def api_operaciones_lista():
     try:
         ahora = get_peru_time()
         hoy = ahora.date()
-        # Crear rango sin tzinfo (la BD almacena hora sin timezone)
-        inicio_hoy = datetime.combine(hoy, datetime.min.time())
-        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
+        # Mostrar operaciones de TODOS LOS TIEMPOS (no solo hoy) para que se vea el historial
+        # BD almacena hora sin tzinfo (naive datetime)
+        inicio_hoy = datetime.min
+        fin_hoy = datetime.max
 
         # Query directa (sin usar vista para evitar problemas de Railway)
         if current_user.es_admin:
@@ -1069,6 +1070,11 @@ def registrar_operacion():
             else:
                 sucursal_id = current_user.sucursal_id
         except Exception as e:
+            # DEBUG: Imprimir el error
+            print(f"[DEBUG] Error en registrar_operacion POST: {e}")
+            import traceback
+            traceback.print_exc()
+
             # Si es AJAX, devolver error JSON
             if request.is_json:
                 return jsonify({'success': False, 'error': str(e)}), 400
@@ -1131,12 +1137,13 @@ def registrar_operacion():
             db.session.add(comision_mensual)
         
         db.session.commit()
+        print(f"[DEBUG] Operación registrada exitosamente")
 
         # Corregir auto-increment si es necesario (evita IDs saltados)
         try:
             _corregir_autoincrement_operacion()
-        except:
-            pass
+        except Exception as e:
+            print(f"[DEBUG] Error en _corregir_autoincrement_operacion: {e}")
 
         # Limpiar caché después de cambios
         try:
