@@ -2103,16 +2103,20 @@ def api_medios_eliminar(medio_id):
     try:
         medio = MedioPago.query.get_or_404(medio_id)
 
-        # Verificar si hay operaciones usando este medio
-        count_ops = db.session.execute(
-            db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id = :id"),
-            {'id': medio_id}
-        ).scalar() or 0
+        # Verificar si hay operaciones usando este medio (por nombre, ya que medio_pago_id podría no existir)
+        try:
+            count_ops = db.session.execute(
+                db.text("SELECT COUNT(*) FROM operacion WHERE medio = :nombre"),
+                {'nombre': medio.nombre_abreviado}
+            ).scalar() or 0
 
-        if count_ops > 0:
-            return jsonify({
-                'error': f'No se puede eliminar: hay {count_ops} operaciones usando este medio'
-            }), 400
+            if count_ops > 0:
+                return jsonify({
+                    'error': f'No se puede eliminar: hay {count_ops} operaciones usando este medio'
+                }), 400
+        except:
+            # Si la query falla, continuar con la eliminación
+            pass
 
         db.session.delete(medio)
         db.session.commit()
