@@ -2105,8 +2105,9 @@ def api_medios_eliminar(medio_id):
 
         # Verificar si hay operaciones usando este medio
         count_ops = db.session.execute(
-            db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id = :id")
-        ).scalar()
+            db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id = :id"),
+            {'id': medio_id}
+        ).scalar() or 0
 
         if count_ops > 0:
             return jsonify({
