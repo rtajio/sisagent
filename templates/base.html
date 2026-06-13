@@ -1771,43 +1771,52 @@
         setTimeout(processFlashMessages, 200);
         
         // Observar cambios en el DOM para capturar nuevos mensajes flash
-        const observer = new MutationObserver(function(mutations) {
-            let shouldProcess = false;
-            
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList') {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) {
-                            // Verificar si el nodo es un mensaje flash
-                            if (node.classList && (
-                                node.classList.contains('alert') ||
-                                node.classList.contains('alert-success') ||
-                                node.classList.contains('alert-warning') ||
-                                node.classList.contains('alert-danger') ||
-                                node.classList.contains('alert-info')
-                            )) {
-                                shouldProcess = true;
+        // CRITICAL FIX: Disable MutationObserver on table pages (causes freeze during scroll)
+        const currentPath = window.location.pathname;
+        const tablePages = ['/operaciones', '/ventas', '/inventario'];
+        const isTablePage = tablePages.some(page => currentPath.includes(page));
+
+        if (!isTablePage) {
+            const observer = new MutationObserver(function(mutations) {
+                let shouldProcess = false;
+
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeType === 1) {
+                                // Verificar si el nodo es un mensaje flash
+                                if (node.classList && (
+                                    node.classList.contains('alert') ||
+                                    node.classList.contains('alert-success') ||
+                                    node.classList.contains('alert-warning') ||
+                                    node.classList.contains('alert-danger') ||
+                                    node.classList.contains('alert-info')
+                                )) {
+                                    shouldProcess = true;
+                                }
+
+                                // Verificar si el nodo contiene mensajes flash
+                                if (node.querySelector && node.querySelector('.alert')) {
+                                    shouldProcess = true;
+                                }
                             }
-                            
-                            // Verificar si el nodo contiene mensajes flash
-                            if (node.querySelector && node.querySelector('.alert')) {
-                                shouldProcess = true;
-                            }
-                        }
-                    });
+                        });
+                    }
+                });
+
+                if (shouldProcess) {
+                    console.log('Cambios detectados, procesando mensajes flash...');
+                    setTimeout(processFlashMessages, 200);
                 }
             });
-            
-            if (shouldProcess) {
-                console.log('🔄 Cambios detectados, procesando mensajes flash...');
-                setTimeout(processFlashMessages, 200);
-            }
-        });
-        
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        } else {
+            console.log('[PERF] MutationObserver disabled on table page to prevent scroll freeze');
+        }
         
         // Actualizar IDs inicialmente
         updateOperationIds();
