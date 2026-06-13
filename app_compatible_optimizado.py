@@ -4394,8 +4394,8 @@ def _ejecutar_operacion_validada(args, usuario):
 
 
 def _ejecutar_editar_operacion_validada(args, usuario):
-    """Edita la última operación del usuario. Busca automáticamente por ID DESC."""
-    # Buscar la última operación del usuario (por ID, no hora - más confiable)
+    """Edita una operación específica (por ID) o la última del usuario."""
+    # Buscar la operación del usuario
     sucursales = sucursales_visibles_para(usuario)
     if not sucursales:
         raise ValueError("No tienes sucursales asignadas.")
@@ -4407,8 +4407,16 @@ def _ejecutar_editar_operacion_validada(args, usuario):
     if not usuario.es_admin and not usuario.es_admin_de_sucursal():
         q = q.filter(Operacion.usuario_id == usuario.id)
 
-    # Obtener la última operación por ID (más confiable que por hora)
-    operacion = q.order_by(Operacion.id.desc()).first()
+    # Si se proporciona ID específico, usar ese; si no, usar la última
+    operacion_id = args.get("id") or args.get("operacion_id")
+    if operacion_id:
+        try:
+            operacion = q.filter(Operacion.id == int(operacion_id)).first()
+        except (TypeError, ValueError):
+            raise ValueError("ID de operación inválido.")
+    else:
+        operacion = q.order_by(Operacion.id.desc()).first()
+
     if not operacion:
         raise ValueError("No hay operaciones para editar.")
 
@@ -4420,7 +4428,7 @@ def _ejecutar_editar_operacion_validada(args, usuario):
             raise ValueError("Solo puedes editar las operaciones que tú registraste.")
 
     # Nuevos valores (o mantener los actuales)
-    monto_nuevo = operacion.monto
+    monto_nuevo = float(operacion.monto)  # Siempre convertir a float
     monto_arg = args.get("monto") or args.get("monto_nuevo")
     if monto_arg is not None:
         try:
@@ -4432,7 +4440,38 @@ def _ejecutar_editar_operacion_validada(args, usuario):
         if monto_nuevo <= 0:
             raise ValueError("El monto debe ser mayor a 0.")
 
-    comision_nueva = operacion.comision
+    # Validar y cambiar medio de pago si se proporciona
+    medio_nuevo = operacion.medio
+    medio_arg = (args.get("medio") or "").strip().upper() if "medio" in args else ""
+    if medio_arg:
+        medio_valido = MedioPago.query.join(
+            MedioSucursal,
+            (MedioSucursal.medio_pago_id == MedioPago.id) &
+            (MedioSucursal.sucursal_id == operacion.sucursal_id) &
+            (MedioSucursal.activo == True)
+        ).filter(
+            MedioPago.activo == True,
+            db.or_(
+                db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+                db.func.upper(MedioPago.nombre_completo) == medio_arg,
+            ),
+        ).first()
+
+        if not medio_valido:
+            habilitados = MedioPago.query.join(
+                MedioSucursal,
+                (MedioSucursal.medio_pago_id == MedioPago.id) &
+                (MedioSucursal.sucursal_id == operacion.sucursal_id) &
+                (MedioSucursal.activo == True)
+            ).filter(MedioPago.activo == True).all()
+            nombres = ", ".join(m.nombre_abreviado for m in habilitados) or "(ninguno habilitado)"
+            raise ValueError(
+                f'El medio "{medio_arg}" no esta habilitado en la sucursal. '
+                f'Disponibles: {nombres}.'
+            )
+        medio_nuevo = medio_valido.nombre_abreviado
+
+    comision_nueva = float(operacion.comision)  # Siempre convertir a float
     es_manual = bool(args.get("comision_manual", False))
     motivo = args.get("motivo")
 
@@ -4446,7 +4485,7 @@ def _ejecutar_editar_operacion_validada(args, usuario):
             raise ValueError("La comision no puede ser negativa.")
     else:
         # Si no pasaron comisión pero cambiaron monto, recalcular
-        if monto_nuevo != operacion.monto:
+        if monto_nuevo != float(operacion.monto):
             comision_nueva = calcular_comision_sugerida(monto_nuevo)
             es_manual = False
             motivo = None
@@ -4454,6 +4493,7 @@ def _ejecutar_editar_operacion_validada(args, usuario):
     # Guardar valores anteriores ANTES de actualizar
     monto_anterior = float(operacion.monto)
     comision_anterior = float(operacion.comision)
+    medio_anterior = operacion.medio
 
     # Calcular diferencias
     monto_diferencia = monto_nuevo - monto_anterior
@@ -4464,6 +4504,7 @@ def _ejecutar_editar_operacion_validada(args, usuario):
     operacion.comision = comision_nueva
     operacion.comision_manual = es_manual
     operacion.motivo_descuento = motivo if es_manual else None
+    operacion.medio = medio_nuevo
 
     # Ajustar comisiones diarias y mensuales
     hoy = get_peru_time().date()
@@ -4499,12 +4540,18 @@ def _ejecutar_editar_operacion_validada(args, usuario):
 
     # Mensaje
     _msg = f'Operación {operacion.id} editada'
+    cambios = []
     if monto_diferencia != 0:
-        _msg += f': S/ {monto_anterior:.2f} → S/ {monto_nuevo:.2f}'
+        cambios.append(f'monto: S/ {monto_anterior:.2f} → S/ {monto_nuevo:.2f}')
+    if medio_nuevo != medio_anterior:
+        cambios.append(f'medio: {medio_anterior} → {medio_nuevo}')
     if es_manual and comision_diferencia != 0:
-        _msg += f'. Comisión manual: S/ {comision_nueva:.2f}'
+        cambios.append(f'comisión: S/ {comision_anterior:.2f} → S/ {comision_nueva:.2f}')
         if motivo:
-            _msg += f' (motivo: {motivo})'
+            cambios.append(f'motivo: {motivo}')
+
+    if cambios:
+        _msg += ': ' + ', '.join(cambios)
     _msg += '.'
 
     return {
@@ -4513,6 +4560,8 @@ def _ejecutar_editar_operacion_validada(args, usuario):
         "monto_anterior": monto_anterior,
         "comision": comision_nueva,
         "comision_anterior": comision_anterior,
+        "medio": medio_nuevo,
+        "medio_anterior": medio_anterior,
         "operacion_id": operacion.id,
     }
 
