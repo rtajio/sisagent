@@ -912,7 +912,14 @@ def api_operaciones_lista():
         operaciones = query.filter(
             Operacion.hora >= inicio_hoy,
             Operacion.hora <= fin_hoy
-        ).order_by(Operacion.hora.desc()).all()
+        ).all()
+
+        # Ordenar en Python: más recientes PRIMERO (reverse=True)
+        operaciones = sorted(
+            operaciones,
+            key=lambda op: op.hora or datetime.min,
+            reverse=True
+        )
 
         return jsonify({
             'success': True,
