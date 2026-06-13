@@ -6286,42 +6286,12 @@ def init_db():
             except Exception as e:
                 print(f"[WARN] Nota sobre migración: {e}")
 
-            # Asegurar que el admin exista con la contraseña correcta
-            asegurar_admin_existe()
-            
-            # Crear sucursal principal si no existe
-            sucursal_principal = Sucursal.query.filter_by(nombre='Principal').first()
-            if not sucursal_principal:
-                sucursal_principal = Sucursal(
-                    nombre='Principal',
-                    direccion='Sede Principal',
-                    activa=True
-                )
-                db.session.add(sucursal_principal)
-                db.session.commit()
-                print("[OK] Sucursal principal creada")
-            
-            # Crear medios de pago básicos si no existen
-            medios_basicos = [
-                ('EFECTIVO', 'Efectivo'),
-                ('TARJETA', 'Tarjeta de Débito/Crédito'),
-                ('TRANSFERENCIA', 'Transferencia Bancaria'),
-                ('YAPE', 'Yape'),
-                ('PLIN', 'Plin')
-            ]
-            
-            for abreviado, completo in medios_basicos:
-                medio = MedioPago.query.filter_by(nombre_abreviado=abreviado).first()
-                if not medio:
-                    medio = MedioPago(
-                        nombre_abreviado=abreviado,
-                        nombre_completo=completo,
-                        activo=True
-                    )
-                    db.session.add(medio)
-            
-            db.session.commit()
-            print("[OK] Medios de pago básicos creados")
+            # [ELIMINADO] Datos precargados removidos - usar API para crear usuarios/sucursales/medios
+            # Era:
+            # - asegurar_admin_existe() → Creaba usuario admin/vivalavida
+            # - Sucursal 'Principal'
+            # - Medios de pago básicos (EFECTIVO, TARJETA, etc.)
+            print("[OK] Init_db sin datos precargados - usar API para crear datos")
 
             # Arreglar auto-increment de operaciones si está roto
             try:
