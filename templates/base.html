@@ -1934,6 +1934,21 @@
 
             if (!panel) return;
 
+            // Abrir/cerrar el panel SIEMPRE adaptando el layout (clase 'chat-open' en #mainContent),
+            // para que el contenido deje espacio en lugar de quedar tapado. Usar estos helpers en
+            // TODOS los caminos de apertura (clic, tecla, frase de voz) y cierre — así no se repite
+            // la lógica ni se olvida el 'chat-open' en alguno (bug: abrir por voz/tecla tapaba la tabla).
+            function showChatPanel() {
+                panel.classList.remove('d-none');
+                const mc = document.getElementById('mainContent');
+                if (mc) mc.classList.add('chat-open');
+            }
+            function hideChatPanel() {
+                panel.classList.add('d-none');
+                const mc = document.getElementById('mainContent');
+                if (mc) mc.classList.remove('chat-open');
+            }
+
             let history = [];
             let pendingImage = null;
             let pending = false;
@@ -2304,20 +2319,16 @@
                 // P0 OPTIMIZATION: Debounce rapid clicks to prevent lag
                 clearTimeout(toggleDebounceTimer);
                 toggleDebounceTimer = setTimeout(function() {
-                    panel.classList.toggle('d-none');
-                    const mainContent = document.getElementById('mainContent');
-                    if (!panel.classList.contains('d-none')) {
-                        if (mainContent) mainContent.classList.add('chat-open');
+                    if (panel.classList.contains('d-none')) {
+                        showChatPanel();
                         input.focus();
                     } else {
-                        if (mainContent) mainContent.classList.remove('chat-open');
+                        hideChatPanel();
                     }
                 }, 50);
             });
             closeBtn.addEventListener('click', function() {
-                panel.classList.add('d-none');
-                const mainContent = document.getElementById('mainContent');
-                if (mainContent) mainContent.classList.remove('chat-open');
+                hideChatPanel();
             });
             clearBtn.addEventListener('click', function() {
                 if (confirm('¿Borrar la conversación?')) clearHistory();
@@ -3320,9 +3331,7 @@
                 listeningBadge.classList.add('d-none');
                 micBtn.classList.add('recording');
                 micBtn.title = 'Dictando — habla normal';
-                if (panel.classList.contains('d-none')) {
-                    panel.classList.remove('d-none');
-                }
+                showChatPanel();
                 if (panel.classList.contains('settings-open')) closeSettings();
                 input.focus();
                 if (input.dataset.origPlaceholder === undefined) {
@@ -3714,9 +3723,7 @@
                     _trigPrevTranscript = '';
                     console.log('[chatbot] ✓✓✓ FRASE ACTIVADORA DETECTADA');
                     stopTriggerListener();
-                    if (panel.classList.contains('d-none')) {
-                        panel.classList.remove('d-none');
-                    }
+                    showChatPanel();
                     if (panel.classList.contains('settings-open')) closeSettings();
                     if (typeof showNotification === 'function') {
                         showNotification('🎙 Frase detectada — habla ahora', 'success');
@@ -3956,7 +3963,7 @@
                 if (liveMode === 'dictating') {
                     liveStop('manual');
                 } else if (liveMode === 'off') {
-                    if (panel.classList.contains('d-none')) panel.classList.remove('d-none');
+                    showChatPanel();
                     if (panel.classList.contains('settings-open')) closeSettings();
                     stopTriggerListener();
                     liveStart('dictating');
