@@ -633,6 +633,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateTableFromAPI() {
+        // No refrescar mientras se edita una fila: sus <input>/<select> viven dentro del
+        // tbody y el re-render los borraria (la edicion se "cerraba muy rapido" al pasar el
+        // refresco de 3s). El formulario de registro tiene sus inputs FUERA del tbody, asi
+        // que esto solo detecta filas en modo edicion.
+        if (tbody.querySelector('input, select')) return;
         fetch('/api/operaciones/lista', { method: 'GET', credentials: 'include' })
             .then(r => r.json())
             .then(data => {
