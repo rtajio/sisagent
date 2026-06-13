@@ -946,8 +946,9 @@ def api_operaciones_lista():
         fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
 
         # Query directa (sin usar vista para evitar problemas de Railway)
+        # PERFORMANCE FIX: Filter by TODAY only (not all operations) to reduce query size
         if current_user.es_admin:
-            # Admin: todas las operaciones (sin filtro de fecha)
+            # Admin: operaciones de HOY (todas las sucursales)
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
                        s.nombre, m.nombre_abreviado
@@ -955,10 +956,11 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
+                WHERE DATE(o.created_at) = :hoy
                 ORDER BY o.hora DESC
-            """))
+            """), {'hoy': hoy})
         elif current_user.es_admin_de_sucursal():
-            # Admin de sucursal: todas sus sucursal (sin filtro de fecha)
+            # Admin de sucursal: operaciones de HOY en su sucursal
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
                        s.nombre, m.nombre_abreviado
@@ -966,9 +968,9 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-                WHERE o.sucursal_id = :sucursal_id
+                WHERE o.sucursal_id = :sucursal_id AND DATE(o.created_at) = :hoy
                 ORDER BY o.hora DESC
-            """), {'sucursal_id': current_user.sucursal_id})
+            """), {'sucursal_id': current_user.sucursal_id, 'hoy': hoy})
         else:
             # Usuario normal: solo sus operaciones de HOY
             query = db.session.execute(db.text("""
