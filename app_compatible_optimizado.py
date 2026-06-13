@@ -4656,6 +4656,46 @@ def api_chat_mensaje():
         }), 500
 
 
+@app.route('/debug/backup_db', methods=['GET'])
+@login_required
+def debug_backup_db():
+    """DEBUG: Crear backup de la BD. Solo para admin."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        import json
+        from datetime import datetime
+
+        backup_data = {}
+        total_rows = 0
+
+        # Inspeccionar todas las tablas
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+
+        for table_name in sorted(inspector.get_table_names()):
+            result = db.session.execute(db.text(f"SELECT * FROM {table_name}"))
+            columns = [col[0] for col in result.description]
+            rows = result.fetchall()
+
+            backup_data[table_name] = {
+                "columns": columns,
+                "row_count": len(rows),
+                "sample": str(rows[:3]) if rows else []  # Solo 3 filas de muestra
+            }
+            total_rows += len(rows)
+
+        return jsonify({
+            'success': True,
+            'timestamp': datetime.now().isoformat(),
+            'backup': backup_data,
+            'total_rows': total_rows,
+            'total_tables': len(backup_data)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/debug/medios_de_pago', methods=['GET'])
 @login_required
 def debug_medios_de_pago():
