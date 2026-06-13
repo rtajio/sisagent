@@ -804,16 +804,24 @@ def operaciones():
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
     
-    # OPTIMIZACIÓN ULTRA: Paginación
-    # Ordenar EXPLÍCITAMENTE por HORA descendente, LUEGO por ID descendente
-    query = query.order_by(Operacion.hora.desc(), Operacion.id.desc())
-
+    # OPTIMIZACIÓN ULTRA: Paginación (sin ORDER BY que no funciona)
     operaciones_paginated = query.paginate(
         page=page, per_page=per_page, error_out=False
     )
 
-    # Pasar items directamente (ya ordenados por SQL)
-    operaciones = list(operaciones_paginated.items)
+    # Ordenar EN PYTHON: MÁS RECIENTES PRIMERO (reverse=True garantizado)
+    operaciones = sorted(
+        operaciones_paginated.items,
+        key=lambda op: op.hora or datetime.min,
+        reverse=True
+    )
+    # Convertir a list para asegurar que es una lista normal
+    operaciones = list(operaciones)
+
+    # DEBUG: Verificar que está ordenado correctamente
+    if operaciones:
+        print(f"[DEBUG ORDEN] Primero: {operaciones[0].id} hora {operaciones[0].hora.strftime('%H:%M:%S') if operaciones[0].hora else 'None'}")
+        print(f"[DEBUG ORDEN] Último: {operaciones[-1].id} hora {operaciones[-1].hora.strftime('%H:%M:%S') if operaciones[-1].hora else 'None'}")
 
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
