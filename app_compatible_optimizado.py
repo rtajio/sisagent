@@ -887,6 +887,8 @@ def operaciones():
 @login_required
 def api_operaciones_lista():
     """Devuelve lista JSON de operaciones del día para live updates en tabla. AHORA DESDE LA VIEW."""
+    # Deshabilitar caché para live updates
+    from flask import make_response
     try:
         ahora = get_peru_time()
         hoy = ahora.date()
@@ -929,10 +931,14 @@ def api_operaciones_lista():
                 'medio': row[7]
             })
 
-        return jsonify({
+        response = make_response(jsonify({
             'success': True,
             'operaciones': operaciones
-        })
+        }))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
