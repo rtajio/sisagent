@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-5">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1>📋 Gestión de Medios de Pago</h1>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-success" id="btn-nuevo-medio" data-bs-toggle="modal" data-bs-target="#modal-crear-medio">
+                <i class="fas fa-plus"></i> Nuevo Medio
+            </button>
+        </div>
+    </div>
+
+    <!-- Tabla de medios -->
+    <div class="table-responsive">
+        <table class="table table-hover table-dark" id="tabla-medios">
+            <thead class="table-secondary">
+                <tr>
+                    <th>ID</th>
+                    <th>Abreviado</th>
+                    <th>Nombre Completo</th>
+                    <th>Sucursales</th>
+                    <th>Activo</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-medios">
+                <!-- Cargado por JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Crear Nuevo Medio -->
+<div class="modal fade" id="modal-crear-medio" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">Nuevo Medio de Pago</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-crear-medio">
+                    <div class="mb-3">
+                        <label class="form-label">Abreviado (ej: BCP)</label>
+                        <input type="text" class="form-control" id="input-abr-crear" placeholder="BCP" maxlength="20" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre Completo</label>
+                        <input type="text" class="form-control" id="input-nombre-crear" placeholder="Banco de Crédito del Perú" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btn-guardar-crear">Crear</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Editar Medio -->
+<div class="modal fade" id="modal-editar-medio" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">Editar Medio de Pago</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-editar-medio">
+                    <input type="hidden" id="input-id-editar">
+                    <div class="mb-3">
+                        <label class="form-label">Abreviado</label>
+                        <input type="text" class="form-control" id="input-abr-editar" maxlength="20" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre Completo</label>
+                        <input type="text" class="form-control" id="input-nombre-editar" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btn-guardar-editar">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .medio-activo { background-color: rgba(40, 167, 69, 0.2); }
+    .medio-inactivo { background-color: rgba(220, 53, 69, 0.2); }
+    .btn-editar { padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+    .btn-eliminar { padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+    .badge { font-size: 0.85rem; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let mediosData = {};
+
+    // Cargar medios al iniciar
+    cargarMedios();
+
+    // Refrescar cada 5 segundos
+    setInterval(cargarMedios, 5000);
+
+    // EVENT LISTENERS
+    document.getElementById('btn-guardar-crear').addEventListener('click', crearMedio);
+    document.getElementById('btn-guardar-editar').addEventListener('click', editarMedio);
+
+    async function cargarMedios() {
+        try {
+            const resp = await fetch('/api/medios/lista');
+            const data = await resp.json();
+
+            if (!data.success) {
+                showNotification('Error al cargar medios', 'error');
+                return;
+            }
+
+            const tbody = document.getElementById('tbody-medios');
+            tbody.innerHTML = '';
+
+            for (const medio of data.medios) {
+                mediosData[medio.id] = medio;
+
+                const tr = document.createElement('tr');
+                tr.className = medio.activo ? 'medio-activo' : 'medio-inactivo';
+                tr.innerHTML = `
+                    <td>${medio.id}</td>
+                    <td><strong>${medio.nombre_abreviado}</strong></td>
+                    <td>${medio.nombre_completo}</td>
+                    <td><span class="badge bg-info">${medio.sucursales_count}</span></td>
+                    <td>
+                        <input type="checkbox" class="form-check-input" ${medio.activo ? 'checked' : ''}
+                               onchange="toggleActivo(${medio.id})">
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-warning btn-editar" onclick="abrirEditar(${medio.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger btn-eliminar" onclick="eliminarMedio(${medio.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+        } catch (e) {
+            console.error('Error en cargarMedios:', e);
+        }
+    }
+
+    window.crearMedio = async function() {
+        const abr = document.getElementById('input-abr-crear').value.trim();
+        const nombre = document.getElementById('input-nombre-crear').value.trim();
+
+        if (!abr || !nombre) {
+            showNotification('Completa todos los campos', 'warning');
+            return;
+        }
+
+        try {
+            const resp = await fetch('/api/medios/crear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre_abreviado: abr,
+                    nombre_completo: nombre
+                })
+            });
+
+            const data = await resp.json();
+
+            if (data.success) {
+                showNotification('Medio creado', 'success');
+                document.getElementById('form-crear-medio').reset();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('modal-crear-medio'));
+                if (modal) modal.hide();
+                cargarMedios();
+            } else {
+                showNotification(data.error, 'error');
+            }
+        } catch (e) {
+            showNotification('Error: ' + e.message, 'error');
+        }
+    };
+
+    window.abrirEditar = function(medioId) {
+        const medio = mediosData[medioId];
+        document.getElementById('input-id-editar').value = medioId;
+        document.getElementById('input-abr-editar').value = medio.nombre_abreviado;
+        document.getElementById('input-nombre-editar').value = medio.nombre_completo;
+        new bootstrap.Modal(document.getElementById('modal-editar-medio')).show();
+    };
+
+    window.editarMedio = async function() {
+        const id = document.getElementById('input-id-editar').value;
+        const abr = document.getElementById('input-abr-editar').value.trim();
+        const nombre = document.getElementById('input-nombre-editar').value.trim();
+
+        if (!abr || !nombre) {
+            showNotification('Completa todos los campos', 'warning');
+            return;
+        }
+
+        try {
+            const resp = await fetch('/api/medios/' + id + '/editar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre_abreviado: abr,
+                    nombre_completo: nombre
+                })
+            });
+
+            const data = await resp.json();
+
+            if (data.success) {
+                showNotification('Medio actualizado', 'success');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('modal-editar-medio'));
+                if (modal) modal.hide();
+                cargarMedios();
+            } else {
+                showNotification(data.error, 'error');
+            }
+        } catch (e) {
+            showNotification('Error: ' + e.message, 'error');
+        }
+    };
+
+    window.toggleActivo = async function(medioId) {
+        const medio = mediosData[medioId];
+        try {
+            const resp = await fetch('/api/medios/' + medioId + '/activar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await resp.json();
+            if (data.ok) {
+                cargarMedios();
+            }
+        } catch (e) {
+            console.error('Error:', e);
+            cargarMedios();
+        }
+    };
+
+    window.eliminarMedio = async function(medioId) {
+        if (!confirm('Eliminar este medio de pago?')) return;
+
+        try {
+            const resp = await fetch('/api/medios/' + medioId + '/eliminar', {
+                method: 'POST'
+            });
+
+            const data = await resp.json();
+
+            if (data.success) {
+                showNotification('Medio eliminado', 'success');
+                cargarMedios();
+            } else {
+                showNotification(data.error, 'error');
+            }
+        } catch (e) {
+            showNotification('Error: ' + e.message, 'error');
+        }
+    };
+});
+</script>
+{% endblock %}

@@ -1891,8 +1891,8 @@ def admin_medios():
     if not current_user.es_admin:
         flash('Acceso denegado', 'error')
         return redirect(url_for('dashboard'))
-    medios = MedioPago.query.order_by(MedioPago.orden, MedioPago.nombre_abreviado).all()
-    return render_template('admin_medios.html', medios=medios)
+    # Usar nueva plantilla con live updates
+    return render_template('admin_medios_editable.html')
 
 @app.route('/admin/medios/<int:medio_id>/editar', methods=['GET', 'POST'])
 @login_required
