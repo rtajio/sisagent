@@ -1925,9 +1925,6 @@
             let dictationActive = false;
             const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-            // P0 OPTIMIZATION: Debounce chat toggle to eliminate lag from rapid clicks
-            let toggleDebounceTimer = null;
-
             function loadHistory() {
                 try {
                     const raw = localStorage.getItem(STORAGE_KEY);
@@ -2190,7 +2187,10 @@
                 if (el) el.remove();
             }
             function scrollToBottom() {
-                messagesEl.scrollTop = messagesEl.scrollHeight;
+                // ULTRA ACCELERATION: Defer scroll to next frame (non-blocking)
+                requestAnimationFrame(function() {
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                });
             }
             function repaintHistory() {
                 messagesEl.innerHTML = '';
@@ -2279,23 +2279,19 @@
             }
 
             toggleBtn.addEventListener('click', function() {
-                // P0 OPTIMIZATION: Debounce rapid clicks to prevent lag
-                clearTimeout(toggleDebounceTimer);
-                toggleDebounceTimer = setTimeout(function() {
-                    panel.classList.toggle('d-none');
-                    const mainContent = document.getElementById('mainContent');
-                    if (!panel.classList.contains('d-none')) {
-                        if (mainContent) mainContent.classList.add('chat-open');
+                // ULTRA ACCELERATION: Minimal DOM operations for instant toggle
+                // Only toggle panel visibility - nothing else
+                panel.classList.toggle('d-none');
+                // Defer focus to next frame to avoid reflow blocking
+                if (!panel.classList.contains('d-none')) {
+                    requestAnimationFrame(function() {
                         input.focus();
-                    } else {
-                        if (mainContent) mainContent.classList.remove('chat-open');
-                    }
-                }, 50);
+                    });
+                }
             });
             closeBtn.addEventListener('click', function() {
+                // ULTRA ACCELERATION: Minimal operation - just hide panel
                 panel.classList.add('d-none');
-                const mainContent = document.getElementById('mainContent');
-                if (mainContent) mainContent.classList.remove('chat-open');
             });
             clearBtn.addEventListener('click', function() {
                 if (confirm('¿Borrar la conversación?')) clearHistory();
