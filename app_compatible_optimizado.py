@@ -3670,7 +3670,7 @@ def _tool_registrar_operacion(args, usuario):
     _msg += '.'
 
     return {
-        "resultado": _msg,
+        "mensaje": _msg,
         "monto": monto,
         "comision": comision,
         "comision_sugerida": comision_sugerida,
