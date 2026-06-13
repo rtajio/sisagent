@@ -630,8 +630,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('[updateTable] Respuesta:', data.operaciones ? data.operaciones.length + ' ops' : 'sin ops', data);
                 if (!data.success || !data.operaciones) return;
 
-                // Re-renderizar completamente la tabla
-                tbody.innerHTML = '';
+                // PERFORMANCE FIX: Use DocumentFragment to batch DOM updates (1 reflow instead of 100+)
+                const fragment = document.createDocumentFragment();
 
                 // Agregar todas las operaciones (ya vienen ordenadas DESC del API)
                 console.log('[updateTable] Renderizando', data.operaciones.length, 'operaciones');
@@ -659,8 +659,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                         </td>
                     `;
-                    tbody.appendChild(row);
+                    fragment.appendChild(row);  // Append to fragment (no reflow)
                 });
+
+                // Single DOM update: clear and append all at once
+                tbody.innerHTML = '';
+                tbody.appendChild(fragment);  // Single reflow for all 100+ rows
             })
             .catch(err => console.warn('[live] Error actualizando tabla:', err));
     }
