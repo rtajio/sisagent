@@ -3668,23 +3668,23 @@ def _tool_registrar_operacion(args, usuario):
         _msg += f' en {sucursal.nombre}'
     _msg += '.'
 
-        return {
-            "mensaje": _msg,
-            "monto": monto,
-            "comision": comision,
-            "comision_sugerida": comision_sugerida,
-            "comision_manual": es_manual,
-            "motivo_descuento": motivo,
-            "medio": medio_valido.nombre_abreviado,
-            "sucursal_id": sucursal.id,
-            "sucursal_nombre": sucursal.nombre,
-        }
-    except Exception as e:
-        # NUNCA lanzar excepción - siempre retornar error en dict
-        print(f"[ERROR] _tool_registrar_operacion: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
+    return {
+        "mensaje": _msg,
+        "monto": monto,
+        "comision": comision,
+        "comision_sugerida": comision_sugerida,
+        "comision_manual": es_manual,
+        "motivo_descuento": motivo,
+        "medio": medio_valido.nombre_abreviado,
+        "sucursal_id": sucursal.id,
+        "sucursal_nombre": sucursal.nombre,
+    }
+except Exception as e:
+    # NUNCA lanzar excepción - siempre retornar error en dict
+    print(f"[ERROR] _tool_registrar_operacion: {e}")
+    import traceback
+    traceback.print_exc()
+    return {"error": str(e)}
 
 
 # ---------- Handlers de búsquedas read-only (para localizar entidades a editar/eliminar) ----------
