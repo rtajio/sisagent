@@ -953,13 +953,24 @@ def eliminar_operacion(operacion_id):
     if not current_user.es_admin:
         # Restringir a sucursal y, si no es admin de sucursal, a su propio registro
         if operacion.sucursal_id != current_user.sucursal_id:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'error': 'No tienes permisos'})
             flash('No tienes permisos para eliminar esta operación', 'error')
             return redirect(url_for('operaciones'))
         if not current_user.es_admin_de_sucursal() and operacion.usuario_id != current_user.id:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'error': 'No tienes permisos'})
             flash('No tienes permisos para eliminar esta operación', 'error')
             return redirect(url_for('operaciones'))
+
     db.session.delete(operacion)
     db.session.commit()
+    clear_cache()
+
+    # Si es AJAX, devolver JSON
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': True, 'message': 'Operación eliminada'})
+
     flash('Operación eliminada', 'success')
     return redirect(url_for('operaciones'))
 

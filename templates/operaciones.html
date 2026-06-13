@@ -685,13 +685,17 @@ document.addEventListener('click', function(e) {
         fetch(`/operaciones/${id}/eliminar`, {
             method: 'POST',
             credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        }).then(resp => {
-            if (resp.ok) {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        }).then(resp => resp.json())
+         .then(data => {
+            if (data.success) {
                 if (window.showNotification) window.showNotification('Operación eliminada', 'success');
                 if (window.refreshOperationsTable) window.refreshOperationsTable();
             } else {
-                if (window.showNotification) window.showNotification('Error al eliminar', 'error');
+                if (window.showNotification) window.showNotification(data.error || 'Error al eliminar', 'error');
             }
         }).catch(err => {
             if (window.showNotification) window.showNotification('Error: ' + err.message, 'error');
