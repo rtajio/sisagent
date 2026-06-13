@@ -947,10 +947,23 @@ def _corregir_autoincrement_operacion():
         if max_id > 0:
             next_id = max_id + 1
             if os.environ.get('DATABASE_URL'):
-                # PostgreSQL
-                db.session.execute(
-                    db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_id}, true)")
-                )
+                # PostgreSQL: usar pg_get_serial_sequence para obtener el nombre de la secuencia
+                try:
+                    # Primero, obtener el valor actual de la secuencia
+                    current_seq = db.session.execute(
+                        db.text("SELECT currval(pg_get_serial_sequence('operacion', 'id'))")
+                    ).scalar()
+
+                    # Si la secuencia está rezagada respecto a max_id, resetearla
+                    if current_seq is None or current_seq < max_id:
+                        db.session.execute(
+                            db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_id}, true)")
+                        )
+                        db.session.commit()
+                        print(f"[+] Secuencia PostgreSQL corregida: {current_seq or 0} → {max_id}")
+                except Exception as e:
+                    print(f"[WARN] Error corrigiendo secuencia PostgreSQL: {e}")
+                    db.session.rollback()
             else:
                 # SQLite
                 try:
@@ -5916,11 +5929,30 @@ def init_db():
                 if max_op_id > 0:
                     next_op_id = max_op_id + 1
                     if os.environ.get('DATABASE_URL'):
-                        # PostgreSQL: setval(seq, N, true) hace que nextval() devuelva N+1
-                        db.session.execute(
-                            db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_op_id}, true)")
-                        )
-                        print(f"[OK] Auto-increment de operaciones reseteado. Próximo ID: {next_op_id}")
+                        # PostgreSQL: detectar y corregir secuencia desfasada
+                        try:
+                            # Obtener valor actual de la secuencia
+                            current_seq = db.session.execute(
+                                db.text("SELECT currval(pg_get_serial_sequence('operacion', 'id'))")
+                            ).scalar()
+                            print(f"[DEBUG] Secuencia actual: {current_seq}, Max ID: {max_op_id}")
+
+                            # Corregir si está desfasada
+                            if current_seq is None or current_seq < max_op_id:
+                                db.session.execute(
+                                    db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_op_id}, true)")
+                                )
+                                db.session.commit()
+                                print(f"[OK] Auto-increment PostgreSQL corregido: {current_seq or 0} → {next_op_id}")
+                            else:
+                                print(f"[OK] Auto-increment PostgreSQL OK (secuencia en {current_seq})")
+                        except Exception as seq_err:
+                            print(f"[WARN] Error verificando secuencia PostgreSQL: {seq_err}")
+                            # Intentar resetear de todas formas
+                            db.session.execute(
+                                db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_op_id}, true)")
+                            )
+                            db.session.commit()
                     else:
                         # SQLite: seq debe ser el PRÓXIMO valor a devolver
                         try:
@@ -5930,10 +5962,11 @@ def init_db():
                         db.session.execute(
                             db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {next_op_id})")
                         )
-                        print(f"[OK] Auto-increment de operaciones reseteado. Próximo ID: {next_op_id}")
-                    db.session.commit()
+                        print(f"[OK] Auto-increment SQLite reseteado. Próximo ID: {next_op_id}")
+                        db.session.commit()
             except Exception as e:
                 print(f"[WARN] No se pudo resetear auto-increment: {e}")
+                db.session.rollback()
 
         except Exception as e:
             print(f"[!!] Error en inicialización (continuando): {e}")
