@@ -189,6 +189,7 @@
                                     <td>
                                         {% set medio_obj = medios_pago|selectattr('nombre_abreviado', 'equalto', operacion.medio)|first %}
                                         <span class="badge bg-primary">{{ medio_obj.nombre_completo if medio_obj else operacion.medio }}</span>
+                                        {% if operacion.origen == 'voz' %}<i class="fas fa-microphone" title="Registrada por voz (asistente)" style="color:#5cb85c;font-size:11px;margin-left:7px;vertical-align:middle;"></i>{% elif operacion.origen == 'chat' %}<i class="fas fa-comment-dots" title="Registrada por chat (asistente)" style="color:#5bc0de;font-size:11px;margin-left:7px;vertical-align:middle;"></i>{% endif %}
                                     </td>
                                     {% if current_user.es_admin %}
                                     <td>{{ operacion.usuario.nombre_completo|default(operacion.usuario.username) }}</td>
@@ -623,6 +624,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Detectar si hay columna de usuario (para admins)
     const hasUserColumn = document.querySelectorAll('th').length > 7;
 
+    // Indicador de origen del registro junto al medio de pago:
+    // 'voz' = micrófono verde, 'chat' = burbuja azul, 'manual' = sin indicador.
+    function iconoOrigen(origen) {
+        if (origen === 'voz') return ' <i class="fas fa-microphone" title="Registrada por voz (asistente)" style="color:#5cb85c;font-size:11px;margin-left:7px;vertical-align:middle;"></i>';
+        if (origen === 'chat') return ' <i class="fas fa-comment-dots" title="Registrada por chat (asistente)" style="color:#5bc0de;font-size:11px;margin-left:7px;vertical-align:middle;"></i>';
+        return '';
+    }
+
     function updateTableFromAPI() {
         fetch('/api/operaciones/lista', { method: 'GET', credentials: 'include' })
             .then(r => r.json())
@@ -664,7 +673,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <td>${op.hora}</td>
                         <td class="font-weight-bold">S/ ${op.monto.toFixed(2)}</td>
                         <td class="text-success font-weight-bold">S/ ${op.comision.toFixed(2)}</td>
-                        <td><span class="badge bg-primary">${op.medio}</span></td>
+                        <td><span class="badge bg-primary">${op.medio}</span>${iconoOrigen(op.origen)}</td>
                         ${userCells}
                         <td>
                             <div class="btn-group btn-group-sm" role="group">

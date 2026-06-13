@@ -329,6 +329,9 @@ class Operacion(db.Model):
     comision_sugerida = db.Column(db.Numeric(10, 2), nullable=True)  # lo que sugirió la fórmula
     comision_manual = db.Column(db.Boolean, default=False)            # TRUE si el operador la cambió
     motivo_descuento = db.Column(db.String(200), nullable=True)       # texto libre opcional
+    # Origen del registro: 'manual' (formulario), 'voz' (asistente por voz), 'chat' (asistente por texto).
+    # NULL en operaciones antiguas (previas al feature) → se tratan como 'manual' (sin indicador).
+    origen = db.Column(db.String(20), nullable=True, default='manual')
 
 class MedioPago(db.Model):
     __tablename__ = 'medio_pago'
@@ -972,7 +975,7 @@ def api_operaciones_lista():
             # Admin: operaciones de HOY de TODAS las sucursales
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
-                       s.nombre, m.nombre_abreviado
+                       s.nombre, m.nombre_abreviado, o.origen
                 FROM operacion o
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
@@ -984,7 +987,7 @@ def api_operaciones_lista():
             # Admin de sucursal: operaciones de HOY en su sucursal
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
-                       s.nombre, m.nombre_abreviado
+                       s.nombre, m.nombre_abreviado, o.origen
                 FROM operacion o
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
@@ -996,7 +999,7 @@ def api_operaciones_lista():
             # Usuario normal: solo SUS operaciones de HOY
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
-                       s.nombre, m.nombre_abreviado
+                       s.nombre, m.nombre_abreviado, o.origen
                 FROM operacion o
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
@@ -1014,7 +1017,8 @@ def api_operaciones_lista():
                 'hora': format_peru_time(row[3]),
                 'usuario': row[5] or row[4],
                 'sucursal': row[6],
-                'medio': row[7]
+                'medio': row[7],
+                'origen': row[8] or 'manual',
             })
 
         response = make_response(jsonify({
@@ -1159,10 +1163,11 @@ def registrar_operacion():
             comision_sugerida=comision_sugerida,
             comision_manual=es_manual,
             motivo_descuento=motivo,
+            origen='manual',
         )
 
         db.session.add(operacion)
-        
+
         # Actualizar comisiones
         hoy = get_peru_time().date()
         comision_diaria = ComisionDiaria.query.filter_by(
@@ -3732,6 +3737,7 @@ def _tool_registrar_operacion(args, usuario):
         comision_sugerida=comision_sugerida,
         comision_manual=es_manual,
         motivo_descuento=motivo,
+        origen=(args.get('_origen') or 'chat'),  # 'voz' si viene del asistente por voz; si no, chat de texto
     )
     db.session.add(operacion)
 
@@ -4489,6 +4495,7 @@ def _ejecutar_operacion_validada(args, usuario):
         comision_sugerida=comision_sugerida,
         comision_manual=es_manual,
         motivo_descuento=motivo,
+        origen=(args.get('_origen') or 'chat'),  # 'voz' si viene del asistente por voz; si no, chat de texto
     )
     db.session.add(operacion)
 
@@ -6099,7 +6106,9 @@ def _ejecutar_accion_confirmada_voz(accion, args, user_id):
         if not ejecutor:
             return {"error": f"Acción '{accion}' no implementada"}
         try:
-            resultado = ejecutor(args or {}, usuario)
+            _args = dict(args or {})
+            _args['_origen'] = 'voz'  # confirmación de acción por voz
+            resultado = ejecutor(_args, usuario)
             return resultado if isinstance(resultado, dict) else {"resultado": resultado}
         except ValueError as e:
             return {"error": str(e)}
@@ -6394,6 +6403,7 @@ def ws_voice_live(browser_ws):
                                 with app.app_context():
                                     usuario_voz = Usuario.query.get(user_id)
                                     try:
+                                        fc_args['_origen'] = 'voz'  # registrado por el asistente de voz
                                         resultado = EJECUTORES_DIRECTOS[fc_name](fc_args, usuario_voz)
                                     except ValueError as e:
                                         resultado = {"error": str(e)}
@@ -6721,6 +6731,8 @@ def init_db():
                             _conn.execute(text(
                                 "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS motivo_descuento VARCHAR(200)"))
                             _conn.execute(text(
+                                "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS origen VARCHAR(20)"))
+                            _conn.execute(text(
                                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS vocabulario_voz TEXT"))
                         print("[OK] Columnas verificadas (PostgreSQL)")
                     except Exception as e:
@@ -6737,6 +6749,7 @@ def init_db():
                         "ALTER TABLE operacion ADD COLUMN comision_sugerida NUMERIC(10,2)",
                         "ALTER TABLE operacion ADD COLUMN comision_manual BOOLEAN DEFAULT 0",
                         "ALTER TABLE operacion ADD COLUMN motivo_descuento VARCHAR(200)",
+                        "ALTER TABLE operacion ADD COLUMN origen VARCHAR(20)",
                         "ALTER TABLE usuario ADD COLUMN vocabulario_voz TEXT",
                     ]:
                         try:
