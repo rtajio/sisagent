@@ -1000,16 +1000,6 @@ def _corregir_autoincrement_operacion():
                 pass
     except Exception as e:
         print(f"[ERROR] Fatal en _corregir_autoincrement_operacion: {e}")
-                db.session.execute(
-                    db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {next_id})")
-                )
-            db.session.commit()
-    except Exception as e:
-        print(f"[WARN] No se pudo corregir auto-increment: {e}")
-        try:
-            db.session.rollback()
-        except:
-            pass
 
 
 @app.route('/operaciones/registrar', methods=['GET', 'POST'])
