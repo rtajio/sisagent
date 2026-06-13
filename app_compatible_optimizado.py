@@ -1029,34 +1029,47 @@ def _corregir_autoincrement_operacion():
 @login_required
 def registrar_operacion():
     if request.method == 'POST':
-        monto = float(request.form['monto'])
-        medio = request.form['medio']
+        # Aceptar tanto JSON como form data
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form
 
-        # Comisión: si comision_manual=true, usar el valor del form (override del operador).
-        # Si no, recalcular la sugerida server-side (ignorar lo que mande el cliente).
-        es_manual = (request.form.get('comision_manual') or '').lower() in ('true', '1', 'on', 'yes')
-        comision_sugerida = calcular_comision_sugerida(monto)
-        if es_manual:
-            try:
-                comision = float(request.form.get('comision') or comision_sugerida)
-            except (TypeError, ValueError):
+        try:
+            monto = float(data.get('monto'))
+            medio = data.get('medio')
+
+            # Comisión: si comision_manual=true, usar el valor del form (override del operador).
+            # Si no, recalcular la sugerida server-side (ignorar lo que mande el cliente).
+            es_manual = (data.get('comision_manual') or '').lower() in ('true', '1', 'on', 'yes')
+            comision_sugerida = calcular_comision_sugerida(monto)
+            if es_manual:
+                try:
+                    comision = float(data.get('comision') or comision_sugerida)
+                except (TypeError, ValueError):
+                    comision = comision_sugerida
+                if comision < 0:
+                    comision = 0.0
+                motivo = (data.get('motivo_descuento') or '').strip() or None
+                # Si terminó siendo igual a la sugerida, no la marcamos como manual
+                if abs(comision - comision_sugerida) < 0.001:
+                    es_manual = False
+                    motivo = None
+            else:
                 comision = comision_sugerida
-            if comision < 0:
-                comision = 0.0
-            motivo = (request.form.get('motivo_descuento') or '').strip() or None
-            # Si terminó siendo igual a la sugerida, no la marcamos como manual
-            if abs(comision - comision_sugerida) < 0.001:
-                es_manual = False
                 motivo = None
-        else:
-            comision = comision_sugerida
-            motivo = None
 
-        # Determinar sucursal
-        if current_user.es_admin:
-            sucursal_id = int(request.form.get('sucursal_id'))
-        else:
-            sucursal_id = current_user.sucursal_id
+            # Determinar sucursal
+            if current_user.es_admin:
+                sucursal_id = int(data.get('sucursal_id') or current_user.sucursal_id)
+            else:
+                sucursal_id = current_user.sucursal_id
+        except Exception as e:
+            # Si es AJAX, devolver error JSON
+            if request.is_json:
+                return jsonify({'success': False, 'error': str(e)}), 400
+            flash(f'Error: {str(e)}', 'error')
+            return redirect(url_for('operaciones'))
 
         # Crear operación con hora Perú (wall-clock naive, sin tzinfo)
         hora_peru = get_peru_time().replace(tzinfo=None)
@@ -1116,10 +1129,20 @@ def registrar_operacion():
         db.session.commit()
 
         # Corregir auto-increment si es necesario (evita IDs saltados)
-        _corregir_autoincrement_operacion()
+        try:
+            _corregir_autoincrement_operacion()
+        except:
+            pass
 
         # Limpiar caché después de cambios
-        clear_cache()
+        try:
+            clear_cache()
+        except:
+            pass
+
+        # Si es AJAX, devolver JSON
+        if request.is_json:
+            return jsonify({'success': True, 'message': 'Operación registrada'})
 
         flash('Operación bancaria registrada exitosamente', 'success')
         return redirect(url_for('operaciones'))
