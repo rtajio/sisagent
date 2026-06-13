@@ -5046,15 +5046,17 @@ def _construir_mensajes_chat(historial, mensaje_usuario, imagen_bytes=None, imag
 
 
 def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
-    """Loop de tool-use con Claude API. Devuelve dict con 'tipo': 'texto'.
+    """Loop de function-calling con Gemini (REST). Devuelve dict con 'tipo': 'texto'.
 
-    Usa Anthropic Claude en lugar de Gemini para mejor obediencia de instrucciones.
-    Los mensajes llegan en formato Gemini (role: user/model, parts: [...]) y se convierten a Claude.
+    'Todo con Gemini': el chat de texto usa el MISMO motor que la voz. Los mensajes ya
+    llegan en formato Gemini (role: 'user'/'model', parts: [...]) e incluyen imagenes como
+    inlineData. Mismo set de herramientas (CHATBOT_TOOLS) y la misma logica de ejecucion
+    (ejecutores directos terminan el turno; herramientas de solo lectura continuan el loop).
     """
-    if not app.config.get("ANTHROPIC_API_KEY"):
-        raise RuntimeError("El asistente IA no esta disponible: falta configurar ANTHROPIC_API_KEY en el servidor.")
+    if not app.config.get("GEMINI_API_KEY"):
+        raise RuntimeError("El asistente IA no esta disponible: falta configurar GEMINI_API_KEY en el servidor.")
 
-    client = _get_anthropic_client()
+    import httpx as _httpx_local
 
     productos_buscados = []
     productos_ids_vistos = set()
@@ -5067,117 +5069,113 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
             productos_ids_vistos.add(pid)
             productos_buscados.append(prod)
 
-    # Convertir mensajes de formato Gemini a Claude
-    # Gemini: {"role": "user"/"model", "parts": [{"text": "..."}, ...]}
-    # Claude: {"role": "user"/"assistant", "content": "text"} o con tool_use blocks
-    mensajes_claude = []
-    for msg in mensajes:
-        rol = msg.get("role", "").lower()
-        parts = msg.get("parts") or []
-        if not parts:
-            continue
-
-        # Extraer texto de los parts
-        textos = []
-        for part in parts:
-            if isinstance(part, dict):
-                if "text" in part:
-                    textos.append(part["text"])
-                # Ignorar inlineData por ahora (fotos) — Claude lo maneja diferente
-
-        contenido = " ".join(textos).strip()
-        if not contenido:
-            continue
-
-        if rol == "user":
-            mensajes_claude.append({"role": "user", "content": contenido})
-        elif rol == "model":
-            mensajes_claude.append({"role": "assistant", "content": contenido})
-
-    # Construir herramientas para Claude
-    herramientas = []
+    # Herramientas en formato Gemini, construidas desde el MISMO registro CHATBOT_TOOLS
+    # que usaba el camino anterior (reutiliza _convertir_schema_a_gemini, ya probado en voz).
+    funcs = []
     for nombre, spec in CHATBOT_TOOLS.items():
         decl = spec.get("_tool_declaration", {})
         if decl:
-            herramientas.append({
+            funcs.append({
                 "name": nombre,
                 "description": decl.get("description", ""),
-                "input_schema": decl.get("input_schema", {})
+                "parameters": _convertir_schema_a_gemini(decl.get("input_schema", {"type": "OBJECT"})),
             })
+    tools = [{"functionDeclarations": funcs}] if funcs else None
 
-    system_prompt = SYSTEM_PROMPT_CHATBOT + _contexto_fecha_hora()
+    system_instruction = {"parts": [{"text": SYSTEM_PROMPT_CHATBOT + _contexto_fecha_hora()}]}
 
-    for iteracion in range(max_iteraciones):
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2048,
-            system=system_prompt,
-            tools=herramientas if herramientas else None,
-            messages=mensajes_claude
-        )
+    # contents mutable (copia para no mutar el historial del cliente). Ya en formato Gemini.
+    contents = [dict(m) for m in mensajes if m.get("parts")]
 
-        # Procesar respuesta de Claude
+    url = f"{GEMINI_API_URL}/{GEMINI_CHAT_MODEL}:generateContent"
+    headers = {"x-goog-api-key": app.config["GEMINI_API_KEY"]}
+
+    for _iteracion in range(max_iteraciones):
+        payload = {
+            "contents": contents,
+            "systemInstruction": system_instruction,
+            "generationConfig": {"temperature": 0.0, "maxOutputTokens": 2048},
+        }
+        if tools:
+            payload["tools"] = tools
+
+        # Llamada con reintentos para errores transitorios de red (igual que en transcripcion).
+        resp = None
+        last_error = None
+        for intento in range(3):
+            try:
+                resp = _httpx_local.post(url, json=payload, headers=headers, timeout=30.0)
+                break
+            except _httpx_local.TimeoutException:
+                return {"tipo": "texto", "texto": "El asistente tardo demasiado en responder. Intenta de nuevo.", "productos": productos_buscados}
+            except (_httpx_local.ConnectError, _httpx_local.ReadError,
+                    _httpx_local.RemoteProtocolError, OSError) as e:
+                last_error = e
+                if intento < 2:
+                    time.sleep(0.5 + intento)
+                    continue
+            except _httpx_local.HTTPError as e:
+                return {"tipo": "texto", "texto": f"No se pudo conectar con el asistente: {str(e)}", "productos": productos_buscados}
+
+        if resp is None:
+            return {"tipo": "texto", "texto": f"No se pudo conectar con el asistente tras 3 intentos: {str(last_error)}.", "productos": productos_buscados}
+
+        if resp.status_code != 200:
+            try:
+                err_msg = resp.json().get("error", {}).get("message", "")[:300]
+            except Exception:
+                err_msg = resp.text[:200]
+            return {"tipo": "texto", "texto": f"El asistente tuvo un problema ({resp.status_code}): {err_msg or 'sin detalle'}.", "productos": productos_buscados}
+
+        data = resp.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            return {"tipo": "texto", "texto": "(Sin respuesta)", "productos": productos_buscados}
+
+        parts = (candidates[0].get("content") or {}).get("parts") or []
         texto = ""
-        tool_calls = []
+        function_calls = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            if part.get("text"):
+                texto += part["text"]
+            fc = part.get("functionCall")
+            if fc and fc.get("name"):
+                function_calls.append({"name": fc["name"], "args": fc.get("args") or {}})
 
-        for block in response.content:
-            if hasattr(block, "text"):
-                texto = (block.text or "").strip()
-            elif hasattr(block, "type") and block.type == "tool_use":
-                tool_calls.append({
-                    "name": block.name,
-                    "id": block.id,
-                    "input": block.input or {}
-                })
+        # Sin function calls -> respuesta final de texto
+        if not function_calls:
+            return {"tipo": "texto", "texto": (texto.strip() or "(Sin respuesta)"), "productos": productos_buscados}
 
-        # Sin llamadas a herramienta -> respuesta final
-        if not tool_calls:
-            return {
-                "tipo": "texto",
-                "texto": texto or "(Sin respuesta)",
-                "productos": productos_buscados,
-            }
+        # Registrar el turno del modelo (con sus functionCall) en el historial Gemini.
+        contents.append({
+            "role": "model",
+            "parts": [{"functionCall": {"name": fc["name"], "args": fc["args"]}} for fc in function_calls],
+        })
 
-        # Procesar tool calls
         herramientas_ejecucion_directa = list(EJECUTORES_DIRECTOS.keys())
-        tool_calls_no_mutativos = []
-        print(f"[DEBUG] herramientas_ejecucion_directa: {herramientas_ejecucion_directa}")
+        function_responses_parts = []
 
-        for tool_call in tool_calls:
-            nombre = tool_call.get("name")
-            fargs = tool_call.get("input") or {}
-            print(f"[DEBUG] tool_call nombre: {nombre}, en ejecutores directos: {nombre in herramientas_ejecucion_directa}")
+        for fc in function_calls:
+            nombre = fc["name"]
+            fargs = fc["args"] or {}
 
-            # Herramientas que ejecutan directamente (sin confirmacion)
+            # Ejecutores directos (registrar/editar/eliminar/crear): ejecutan y TERMINAN el turno.
             if nombre in herramientas_ejecucion_directa:
                 try:
                     resultado = EJECUTORES_DIRECTOS[nombre](fargs, usuario)
                     if not isinstance(resultado, dict):
-                        print(f"[ERROR] {nombre} no devolvió dict, devolvió {type(resultado)}: {resultado}")
                         resultado = {"mensaje": str(resultado)}
                 except ValueError as e:
-                    print(f"[ERROR] ValueError en {nombre}: {e}")
-                    return {
-                        "tipo": "texto",
-                        "texto": f"No se pudo completar la accion: {str(e)}",
-                        "productos": productos_buscados,
-                    }
+                    return {"tipo": "texto", "texto": f"No se pudo completar la accion: {str(e)}", "productos": productos_buscados}
                 except Exception as e:
-                    print(f"[ERROR] Exception en {nombre}: {type(e).__name__}: {e}")
                     import traceback
                     traceback.print_exc()
-                    return {
-                        "tipo": "texto",
-                        "texto": f"Error interno al registrar: {str(e)}",
-                        "productos": productos_buscados,
-                    }
-                return {
-                    "tipo": "texto",
-                    "texto": resultado.get("mensaje", "Listo."),
-                    "productos": productos_buscados,
-                }
+                    return {"tipo": "texto", "texto": f"Error interno al registrar: {str(e)}", "productos": productos_buscados}
+                return {"tipo": "texto", "texto": resultado.get("mensaje", "Listo."), "productos": productos_buscados}
 
-            # Herramientas de solo lectura - ejecutar y continuar loop
+            # Herramientas de solo lectura: ejecutar y continuar el loop con su resultado.
             spec = CHATBOT_TOOLS.get(nombre)
             if spec:
                 try:
@@ -5190,45 +5188,20 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
                         prod = resultado.get("producto")
                         if prod:
                             _registrar_productos([prod])
-                except (ValueError, Exception) as e:
+                except Exception as e:
                     resultado = {"error": str(e)}
+            else:
+                resultado = {"error": f"Herramienta desconocida: {nombre}"}
 
-                tool_calls_no_mutativos.append({
-                    "tool_use_id": tool_call.get("id"),
-                    "content": resultado
-                })
-
-        # Si hay tool calls para procesar, agregar al historial y continuar
-        if tool_calls_no_mutativos:
-            # Agregar respuesta del asistente con los tool_use blocks
-            # Convertir response.content a un formato que Claude pueda procesar
-            assistant_content = []
-            for block in response.content:
-                if hasattr(block, "text") and block.text:
-                    assistant_content.append({"type": "text", "text": block.text})
-                elif hasattr(block, "type") and block.type == "tool_use":
-                    assistant_content.append({
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input
-                    })
-
-            mensajes_claude.append({"role": "assistant", "content": assistant_content})
-
-            # Agregar resultados de las herramientas
-            tool_results = []
-            for tr in tool_calls_no_mutativos:
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tr["tool_use_id"],
-                    "content": json.dumps(tr["content"])
-                })
-
-            mensajes_claude.append({
-                "role": "user",
-                "content": tool_results
+            function_responses_parts.append({
+                "functionResponse": {"name": nombre, "response": resultado}
             })
+
+        # Anexar las respuestas de herramientas como turno 'user' y volver a iterar.
+        if function_responses_parts:
+            contents.append({"role": "user", "parts": function_responses_parts})
+        else:
+            break
 
     return {
         "tipo": "texto",
