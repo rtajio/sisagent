@@ -892,6 +892,27 @@ def api_operaciones_lista():
     """Devuelve lista JSON de operaciones del día para live updates en tabla. AHORA DESDE LA VIEW."""
     # Deshabilitar caché para live updates
     from flask import make_response
+
+    # Asegurar que la vista existe (por si no se inicializó)
+    try:
+        db.session.execute(db.text("""
+            CREATE VIEW IF NOT EXISTS vista_operaciones AS
+            SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
+                   s.nombre as sucursal, m.nombre_abreviado as medio_nombre, o.usuario_id, o.sucursal_id, m.id as medio_pago_id
+            FROM operacion o
+            JOIN usuario u ON o.usuario_id = u.id
+            JOIN sucursal s ON o.sucursal_id = s.id
+            LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
+            ORDER BY o.hora DESC
+        """))
+        db.session.commit()
+    except Exception as e:
+        print(f"[WARN] Error creando vista: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+
     try:
         ahora = get_peru_time()
         hoy = ahora.date()
