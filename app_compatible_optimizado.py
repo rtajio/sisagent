@@ -4656,6 +4656,35 @@ def api_chat_mensaje():
         }), 500
 
 
+@app.route('/debug/medios_de_pago', methods=['GET'])
+@login_required
+def debug_medios_de_pago():
+    """DEBUG: Verificar medios de pago por sucursal. Solo para admin."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    result = db.session.execute(db.text("""
+        SELECT m.id, m.nombre_abreviado, m.nombre_completo, m.activo, s.id, s.nombre, ms.activo as activo_sucursal
+        FROM medio_pago m
+        LEFT JOIN medio_sucursal ms ON m.id = ms.medio_pago_id
+        LEFT JOIN sucursal s ON ms.sucursal_id = s.id
+        ORDER BY m.nombre_abreviado, s.nombre;
+    """)).fetchall()
+
+    medios = []
+    for row in result:
+        medios.append({
+            'medio_id': row[0],
+            'abreviado': row[1],
+            'completo': row[2],
+            'activo_global': row[3],
+            'sucursal_id': row[4],
+            'sucursal_nombre': row[5],
+            'activo_en_sucursal': row[6]
+        })
+
+    return jsonify({'medios': medios})
+
 @app.route('/api/chat/confirmar_accion', methods=['POST'])
 @login_required
 def api_chat_confirmar_accion():
