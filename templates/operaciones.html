@@ -671,6 +671,41 @@ document.addEventListener('DOMContentLoaded', function() {
     // Actualizar tabla cada 3 segundos
     setInterval(updateTableFromAPI, 3000);
     updateTableFromAPI(); // Primera actualización inmediata
+
+    // ============= Interceptar formulario de registro para AJAX sin refresh =============
+    const formRegistro = document.getElementById('formInlineOperacion');
+    if (formRegistro) {
+        formRegistro.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(formRegistro);
+            const datos = Object.fromEntries(formData);
+
+            fetch('{{ url_for("registrar_operacion") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(datos),
+                redirect: 'manual'
+            })
+            .then(resp => {
+                if (resp.status === 200 || resp.status === 201) {
+                    formRegistro.reset();
+                    if (window.showNotification) window.showNotification('Operación registrada', 'success');
+                    if (window.refreshOperationsTable) window.refreshOperationsTable();
+                } else {
+                    return resp.text().then(text => {
+                        throw new Error(text || 'Error al registrar');
+                    });
+                }
+            })
+            .catch(err => {
+                if (window.showNotification) window.showNotification('Error: ' + err.message, 'error');
+            });
+        });
+    }
 });
 
 // Event delegation para botones de editar y eliminar (funciona incluso cuando tabla se reemplaza)
@@ -685,11 +720,18 @@ document.addEventListener('click', function(e) {
         fetch(`/operaciones/${id}/eliminar`, {
             method: 'POST',
             credentials: 'same-origin',
+            redirect: 'manual',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Type': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             }
-        }).then(resp => resp.json())
+        }).then(resp => {
+            if (resp.status === 200 || resp.status === 201) {
+                return resp.json();
+            } else {
+                throw new Error('Error: ' + resp.status);
+            }
+        })
          .then(data => {
             if (data.success) {
                 if (window.showNotification) window.showNotification('Operación eliminada', 'success');
