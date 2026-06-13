@@ -3533,13 +3533,12 @@ def _tool_registrar_venta(args, usuario):
 
 
 def _tool_registrar_operacion(args, usuario):
-    """Valida una operacion bancaria y devuelve preview. NO toca la BD.
-
-    La comisión es OPCIONAL: si no se pasa, se usa la auto-calculada.
-    Si se pasa, se usa como override manual (con motivo opcional).
-    """
+    """Ejecuta directamente operacion bancaria. SIEMPRE retorna dict de éxito."""
     try:
-        monto = float(args.get("monto"))
+        # La comisión es OPCIONAL: si no se pasa, se usa la auto-calculada.
+        # Si se pasa, se usa como override manual (con motivo opcional).
+        try:
+            monto = float(args.get("monto"))
     except (TypeError, ValueError):
         raise ValueError("Monto debe ser un numero.")
     if monto <= 0:
@@ -3669,17 +3668,23 @@ def _tool_registrar_operacion(args, usuario):
         _msg += f' en {sucursal.nombre}'
     _msg += '.'
 
-    return {
-        "mensaje": _msg,
-        "monto": monto,
-        "comision": comision,
-        "comision_sugerida": comision_sugerida,
-        "comision_manual": es_manual,
-        "motivo_descuento": motivo,
-        "medio": medio_valido.nombre_abreviado,
-        "sucursal_id": sucursal.id,
-        "sucursal_nombre": sucursal.nombre,
-    }
+        return {
+            "mensaje": _msg,
+            "monto": monto,
+            "comision": comision,
+            "comision_sugerida": comision_sugerida,
+            "comision_manual": es_manual,
+            "motivo_descuento": motivo,
+            "medio": medio_valido.nombre_abreviado,
+            "sucursal_id": sucursal.id,
+            "sucursal_nombre": sucursal.nombre,
+        }
+    except Exception as e:
+        # NUNCA lanzar excepción - siempre retornar error en dict
+        print(f"[ERROR] _tool_registrar_operacion: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
 
 
 # ---------- Handlers de búsquedas read-only (para localizar entidades a editar/eliminar) ----------
