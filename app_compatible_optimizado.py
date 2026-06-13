@@ -946,7 +946,7 @@ def api_operaciones_lista():
         fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
 
         # Query directa (sin usar vista para evitar problemas de Railway)
-        # PERFORMANCE FIX: Filter by TODAY only (not all operations) to reduce query size
+        # PERFORMANCE FIX: Filter by TODAY's operations (based on 'hora' column = operation datetime)
         if current_user.es_admin:
             # Admin: operaciones de HOY (todas las sucursales)
             query = db.session.execute(db.text("""
@@ -956,7 +956,7 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-                WHERE DATE(o.created_at) = :hoy
+                WHERE DATE(o.hora) = :hoy
                 ORDER BY o.hora DESC
             """), {'hoy': hoy})
         elif current_user.es_admin_de_sucursal():
@@ -968,7 +968,7 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-                WHERE o.sucursal_id = :sucursal_id AND DATE(o.created_at) = :hoy
+                WHERE o.sucursal_id = :sucursal_id AND DATE(o.hora) = :hoy
                 ORDER BY o.hora DESC
             """), {'sucursal_id': current_user.sucursal_id, 'hoy': hoy})
         else:
