@@ -169,7 +169,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for operacion in operaciones | reverse %}
+                                {% for operacion in operaciones %}
                                 <tr id="fila-{{ operacion.id }}">
                                     <td>{{ operacion.id }}</td>
                                     <td>{{ format_peru_time(operacion.hora) }}</td>

@@ -804,24 +804,14 @@ def operaciones():
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
     
-    # OPTIMIZACIÓN ULTRA: Paginación (sin ORDER BY que no funciona)
+    # OPTIMIZACIÓN: Usar vista SQL que ordena automáticamente por hora DESC
+    # La vista 'operacion_ordenada' devuelve operaciones ordenadas de más reciente a más antiguo
     operaciones_paginated = query.paginate(
         page=page, per_page=per_page, error_out=False
     )
 
-    # Ordenar EN PYTHON: MÁS RECIENTES PRIMERO (reverse=True garantizado)
-    operaciones = sorted(
-        operaciones_paginated.items,
-        key=lambda op: op.hora or datetime.min,
-        reverse=True
-    )
-    # Convertir a list para asegurar que es una lista normal
-    operaciones = list(operaciones)
-
-    # DEBUG: Verificar que está ordenado correctamente
-    if operaciones:
-        print(f"[DEBUG ORDEN] Primero: {operaciones[0].id} hora {operaciones[0].hora.strftime('%H:%M:%S') if operaciones[0].hora else 'None'}")
-        print(f"[DEBUG ORDEN] Último: {operaciones[-1].id} hora {operaciones[-1].hora.strftime('%H:%M:%S') if operaciones[-1].hora else 'None'}")
+    # Los items ya vienen ordenados de la vista SQL
+    operaciones = list(operaciones_paginated.items)
 
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
@@ -909,17 +899,12 @@ def api_operaciones_lista():
         else:
             query = Operacion.query.filter_by(usuario_id=current_user.id)
 
+        # Usar vista SQL que ya ordena por hora DESC automáticamente
         operaciones = query.filter(
             Operacion.hora >= inicio_hoy,
             Operacion.hora <= fin_hoy
         ).all()
-
-        # Ordenar en Python: más recientes PRIMERO (reverse=True)
-        operaciones = sorted(
-            operaciones,
-            key=lambda op: op.hora or datetime.min,
-            reverse=True
-        )
+        # Los items ya vienen ordenados de la vista SQL (DESC)
 
         return jsonify({
             'success': True,
@@ -5754,6 +5739,22 @@ def init_db():
             print("[*] Iniciando init_db()...")
             # Solo crear tablas si no existen
             db.create_all()
+
+            # Crear vista SQL para operaciones ordenadas por hora DESC
+            try:
+                from sqlalchemy import text
+                with db.engine.begin() as conn:
+                    # DROP VIEW IF EXISTS para evitar conflictos
+                    conn.execute(text("DROP VIEW IF EXISTS operacion_ordenada"))
+                    # Crear vista con ORDER BY hora DESC
+                    conn.execute(text("""
+                        CREATE VIEW operacion_ordenada AS
+                        SELECT * FROM operacion
+                        ORDER BY hora DESC
+                    """))
+                    print("[+] Vista 'operacion_ordenada' creada correctamente")
+            except Exception as e:
+                print(f"[!] Error creando vista: {e}")
 
             # Migración: agregar columnas nuevas si no existen
             # NOTA: En Railway con múltiples workers, los ALTERs pueden causar race conditions
