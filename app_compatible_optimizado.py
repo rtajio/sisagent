@@ -1991,7 +1991,7 @@ def api_medios_lista():
         FROM medio_pago m
         LEFT JOIN medio_sucursal ms ON m.id = ms.medio_pago_id AND ms.activo = true
         GROUP BY m.id, m.nombre_abreviado, m.nombre_completo, m.activo, m.orden
-        ORDER BY m.orden, m.nombre_abreviado
+        ORDER BY m.id ASC
     """)).fetchall()
 
     medios = []
