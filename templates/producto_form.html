@@ -54,6 +54,22 @@
                         </div>
                     </div>
 
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="lote" class="form-label">Lote <small class="text-muted">(opcional)</small></label>
+                            <input type="text" class="form-control" id="lote" name="lote" maxlength="50"
+                                   placeholder="Ej: L-2026-04"
+                                   value="{{ producto.lote if producto and producto.lote else '' }}">
+                            <small class="text-muted">Distingue tandas del mismo producto.</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="fecha_vencimiento" class="form-label">Fecha de vencimiento <small class="text-muted">(opcional)</small></label>
+                            <input type="date" class="form-control" id="fecha_vencimiento" name="fecha_vencimiento"
+                                   value="{{ producto.fecha_vencimiento.isoformat() if producto and producto.fecha_vencimiento else '' }}">
+                            <small class="text-muted">Déjalo vacío si el producto no vence.</small>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label for="foto" class="form-label">Fotografía <small class="text-muted">(opcional, máx. 2 MB)</small></label>
                         {% if producto and producto.foto %}

@@ -384,6 +384,7 @@ class Producto(db.Model):
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
     fecha_vencimiento = db.Column(db.Date, nullable=True)  # NULL si no vence
+    lote = db.Column(db.String(50), nullable=True)  # identificador de lote/tanda (para distinguir mismo producto)
     sucursal = db.relationship('Sucursal', backref='productos')
 
 class Venta(db.Model):
@@ -1469,7 +1470,13 @@ def inventario():
         sucursal_id = current_user.sucursal_id
         query = Producto.query.filter_by(activo=True, sucursal_id=current_user.sucursal_id)
 
-    productos = query.order_by(Producto.nombre).all()
+    # Ordenar por nombre y, dentro del mismo producto, por vencimiento mas proximo primero
+    # (los sin fecha al final) para que los lotes por vencer salten a la vista.
+    productos = query.order_by(
+        Producto.nombre,
+        Producto.fecha_vencimiento.is_(None),
+        Producto.fecha_vencimiento,
+    ).all()
     puede_gestionar = current_user.es_admin_o_admin_sucursal()
 
     return render_template(
@@ -1477,7 +1484,8 @@ def inventario():
         productos=productos,
         sucursales=sucursales,
         sucursal_id=sucursal_id,
-        puede_gestionar=puede_gestionar
+        puede_gestionar=puede_gestionar,
+        hoy=get_peru_time().date(),
     )
 
 
@@ -1516,6 +1524,17 @@ def nuevo_producto():
             else:
                 sucursal_id = current_user.sucursal_id
 
+            lote = (request.form.get('lote') or '').strip() or None
+            fecha_venc = None
+            fv = (request.form.get('fecha_vencimiento') or '').strip()
+            if fv:
+                try:
+                    from datetime import date as _date
+                    fecha_venc = _date.fromisoformat(fv)
+                except ValueError:
+                    flash('Fecha de vencimiento inválida (usa el selector de fecha).', 'error')
+                    return redirect(url_for('nuevo_producto'))
+
             try:
                 foto, foto_mimetype = leer_foto_producto(request.files.get('foto'))
             except ValueError as e:
@@ -1529,7 +1548,9 @@ def nuevo_producto():
                 stock=stock,
                 foto=foto,
                 foto_mimetype=foto_mimetype,
-                sucursal_id=sucursal_id
+                sucursal_id=sucursal_id,
+                lote=lote,
+                fecha_vencimiento=fecha_venc,
             )
             db.session.add(producto)
             db.session.commit()
@@ -1576,6 +1597,17 @@ def editar_producto(producto_id):
                 flash('El stock no puede ser negativo', 'error')
                 return redirect(url_for('editar_producto', producto_id=producto_id))
 
+            lote = (request.form.get('lote') or '').strip() or None
+            fecha_venc = None
+            fv = (request.form.get('fecha_vencimiento') or '').strip()
+            if fv:
+                try:
+                    from datetime import date as _date
+                    fecha_venc = _date.fromisoformat(fv)
+                except ValueError:
+                    flash('Fecha de vencimiento inválida (usa el selector de fecha).', 'error')
+                    return redirect(url_for('editar_producto', producto_id=producto_id))
+
             try:
                 foto, foto_mimetype = leer_foto_producto(request.files.get('foto'))
             except ValueError as e:
@@ -1586,6 +1618,8 @@ def editar_producto(producto_id):
             producto.descripcion = descripcion
             producto.precio = precio
             producto.stock = stock
+            producto.lote = lote
+            producto.fecha_vencimiento = fecha_venc
             if foto is not None:
                 producto.foto = foto
                 producto.foto_mimetype = foto_mimetype
@@ -6715,6 +6749,8 @@ def init_db():
                                 "ALTER TABLE producto ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP"))
                             _conn.execute(text(
                                 "ALTER TABLE producto ADD COLUMN IF NOT EXISTS fecha_vencimiento DATE"))
+                            _conn.execute(text(
+                                "ALTER TABLE producto ADD COLUMN IF NOT EXISTS lote VARCHAR(50)"))
                         print("[OK] Columnas verificadas (PostgreSQL)")
                     except Exception as e:
                         if "already exists" in str(e) or "duplicate" in str(e).lower():
@@ -6736,6 +6772,7 @@ def init_db():
                         "ALTER TABLE producto ADD COLUMN foto_mimetype VARCHAR(50)",
                         "ALTER TABLE producto ADD COLUMN fecha_creacion TIMESTAMP",
                         "ALTER TABLE producto ADD COLUMN fecha_vencimiento DATE",
+                        "ALTER TABLE producto ADD COLUMN lote VARCHAR(50)",
                     ]:
                         try:
                             with db.engine.connect() as _conn:
