@@ -889,30 +889,9 @@ def operaciones():
 @app.route('/api/operaciones/lista', methods=['GET'])
 @login_required
 def api_operaciones_lista():
-    """Devuelve lista JSON de operaciones del día para live updates en tabla. AHORA DESDE LA VIEW."""
+    """Devuelve lista JSON de operaciones del día para live updates en tabla."""
     # Deshabilitar caché para live updates
     from flask import make_response
-
-    # Asegurar que la vista existe (por si no se inicializó)
-    try:
-        db.session.execute(db.text("""
-            CREATE VIEW IF NOT EXISTS vista_operaciones AS
-            SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
-                   s.nombre as sucursal, m.nombre_abreviado as medio_nombre, o.usuario_id, o.sucursal_id, m.id as medio_pago_id
-            FROM operacion o
-            JOIN usuario u ON o.usuario_id = u.id
-            JOIN sucursal s ON o.sucursal_id = s.id
-            LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-            ORDER BY o.hora DESC
-        """))
-        db.session.commit()
-    except Exception as e:
-        print(f"[WARN] Error creando vista: {e}")
-        try:
-            db.session.rollback()
-        except:
-            pass
-
     try:
         ahora = get_peru_time()
         hoy = ahora.date()
@@ -920,27 +899,39 @@ def api_operaciones_lista():
         inicio_hoy = datetime.combine(hoy, datetime.min.time())
         fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        # Query desde la vista SQL vista_operaciones (ya tiene ORDER BY DESC)
+        # Query directa (sin usar vista para evitar problemas de Railway)
         if current_user.es_admin:
             query = db.session.execute(db.text("""
-                SELECT id, monto, comision, hora, username, nombre_completo,
-                       sucursal, medio_nombre, medio_pago_id
-                FROM vista_operaciones
-                WHERE hora >= :inicio AND hora <= :fin
+                SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
+                       s.nombre, m.nombre_abreviado
+                FROM operacion o
+                JOIN usuario u ON o.usuario_id = u.id
+                JOIN sucursal s ON o.sucursal_id = s.id
+                LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
+                WHERE o.hora >= :inicio AND o.hora <= :fin
+                ORDER BY o.hora DESC
             """), {'inicio': inicio_hoy, 'fin': fin_hoy})
         elif current_user.es_admin_de_sucursal():
             query = db.session.execute(db.text("""
-                SELECT id, monto, comision, hora, username, nombre_completo,
-                       sucursal, medio_nombre, medio_pago_id
-                FROM vista_operaciones
-                WHERE sucursal_id = :sucursal_id AND hora >= :inicio AND hora <= :fin
+                SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
+                       s.nombre, m.nombre_abreviado
+                FROM operacion o
+                JOIN usuario u ON o.usuario_id = u.id
+                JOIN sucursal s ON o.sucursal_id = s.id
+                LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
+                WHERE o.sucursal_id = :sucursal_id AND o.hora >= :inicio AND o.hora <= :fin
+                ORDER BY o.hora DESC
             """), {'sucursal_id': current_user.sucursal_id, 'inicio': inicio_hoy, 'fin': fin_hoy})
         else:
             query = db.session.execute(db.text("""
-                SELECT id, monto, comision, hora, username, nombre_completo,
-                       sucursal, medio_nombre, medio_pago_id
-                FROM vista_operaciones
-                WHERE usuario_id = :user_id AND hora >= :inicio AND hora <= :fin
+                SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
+                       s.nombre, m.nombre_abreviado
+                FROM operacion o
+                JOIN usuario u ON o.usuario_id = u.id
+                JOIN sucursal s ON o.sucursal_id = s.id
+                LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
+                WHERE o.usuario_id = :user_id AND o.hora >= :inicio AND o.hora <= :fin
+                ORDER BY o.hora DESC
             """), {'user_id': current_user.id, 'inicio': inicio_hoy, 'fin': fin_hoy})
 
         operaciones = []
