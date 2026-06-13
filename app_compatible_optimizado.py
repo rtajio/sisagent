@@ -3549,135 +3549,135 @@ def _tool_registrar_operacion(args, usuario):
     # La comisión es OPCIONAL: si no se pasa, se usa la auto-calculada.
     # Si se pasa, se usa como override manual (con motivo opcional).
     try:
-            monto = float(args.get("monto"))
-        except (TypeError, ValueError):
-            raise ValueError("Monto debe ser un numero.")
-        if monto <= 0:
-            raise ValueError("El monto debe ser mayor a 0.")
+        monto = float(args.get("monto"))
+    except (TypeError, ValueError):
+        raise ValueError("Monto debe ser un numero.")
+    if monto <= 0:
+        raise ValueError("El monto debe ser mayor a 0.")
 
-        comision_sugerida = calcular_comision_sugerida(monto)
-        es_manual = False
-        motivo = None
-        if "comision" in args and args.get("comision") is not None:
-            try:
-                comision = float(args.get("comision"))
-            except (TypeError, ValueError):
-                raise ValueError("Comision debe ser un numero.")
-            if comision < 0:
-                raise ValueError("La comision no puede ser negativa.")
-            if abs(comision - comision_sugerida) > 0.001:
-                es_manual = True
-                motivo = (args.get("motivo_descuento") or "").strip() or None
-            else:
-                comision = comision_sugerida
+    comision_sugerida = calcular_comision_sugerida(monto)
+    es_manual = False
+    motivo = None
+    if "comision" in args and args.get("comision") is not None:
+        try:
+            comision = float(args.get("comision"))
+        except (TypeError, ValueError):
+            raise ValueError("Comision debe ser un numero.")
+        if comision < 0:
+            raise ValueError("La comision no puede ser negativa.")
+        if abs(comision - comision_sugerida) > 0.001:
+            es_manual = True
+            motivo = (args.get("motivo_descuento") or "").strip() or None
         else:
             comision = comision_sugerida
+    else:
+        comision = comision_sugerida
 
-        medio_arg = (args.get("medio") or "").strip().upper()
-        if not medio_arg:
-            raise ValueError("Falta el medio de pago.")
+    medio_arg = (args.get("medio") or "").strip().upper()
+    if not medio_arg:
+        raise ValueError("Falta el medio de pago.")
 
-        sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
+    sucursal = _resolver_sucursal_para_accion(args.get("sucursal_id"), usuario)
 
-        medio_valido = MedioPago.query.join(
+    medio_valido = MedioPago.query.join(
+        MedioSucursal,
+        (MedioSucursal.medio_pago_id == MedioPago.id) &
+        (MedioSucursal.sucursal_id == sucursal.id) &
+        (MedioSucursal.activo == True)
+    ).filter(
+        MedioPago.activo == True,
+        db.or_(
+            db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
+            db.func.upper(MedioPago.nombre_completo) == medio_arg,
+        ),
+    ).first()
+
+    if not medio_valido:
+        habilitados = MedioPago.query.join(
             MedioSucursal,
             (MedioSucursal.medio_pago_id == MedioPago.id) &
             (MedioSucursal.sucursal_id == sucursal.id) &
             (MedioSucursal.activo == True)
-        ).filter(
-            MedioPago.activo == True,
-            db.or_(
-                db.func.upper(MedioPago.nombre_abreviado) == medio_arg,
-                db.func.upper(MedioPago.nombre_completo) == medio_arg,
-            ),
-        ).first()
-
-        if not medio_valido:
-            habilitados = MedioPago.query.join(
-                MedioSucursal,
-                (MedioSucursal.medio_pago_id == MedioPago.id) &
-                (MedioSucursal.sucursal_id == sucursal.id) &
-                (MedioSucursal.activo == True)
-            ).filter(MedioPago.activo == True).all()
-            nombres = ", ".join(m.nombre_abreviado for m in habilitados) or "(ninguno habilitado)"
-            raise ValueError(
-                f'El medio "{medio_arg}" no esta habilitado en "{sucursal.nombre}". '
-                f'Disponibles: {nombres}.'
-            )
-
-        # Nota: Validación de duplicado removida para permitir múltiples registros iguales
-        # (el usuario podría necesitar registrar varias operaciones idénticas)
-
-        # Ejecutar directamente (no solo proponer)
-        hora_peru = get_peru_time().replace(tzinfo=None)
-        operacion = Operacion(
-            monto=monto,
-            comision=comision,
-            medio=medio_valido.nombre_abreviado,
-            usuario_id=usuario.id,
-            sucursal_id=sucursal.id,
-            hora=hora_peru,
-            comision_sugerida=comision_sugerida,
-            comision_manual=es_manual,
-            motivo_descuento=motivo,
+        ).filter(MedioPago.activo == True).all()
+        nombres = ", ".join(m.nombre_abreviado for m in habilitados) or "(ninguno habilitado)"
+        raise ValueError(
+            f'El medio "{medio_arg}" no esta habilitado en "{sucursal.nombre}". '
+            f'Disponibles: {nombres}.'
         )
-        db.session.add(operacion)
 
-        # Actualizar comisiones
-        hoy = get_peru_time().date()
-        comision_diaria = ComisionDiaria.query.filter_by(fecha=hoy, sucursal_id=sucursal.id).first()
-        if comision_diaria:
-            comision_diaria.total_comision = float(comision_diaria.total_comision) + comision
-        else:
-            comision_diaria = ComisionDiaria(fecha=hoy, sucursal_id=sucursal.id, total_comision=comision)
-            db.session.add(comision_diaria)
+    # Nota: Validación de duplicado removida para permitir múltiples registros iguales
+    # (el usuario podría necesitar registrar varias operaciones idénticas)
 
-        ahora = get_peru_time()
-        comision_mensual = ComisionMensual.query.filter_by(
-            año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id
-        ).first()
-        if comision_mensual:
-            comision_mensual.total_comision = float(comision_mensual.total_comision) + comision
-        else:
-            comision_mensual = ComisionMensual(
-                año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id, total_comision=comision
-            )
-            db.session.add(comision_mensual)
+    # Ejecutar directamente (no solo proponer)
+    hora_peru = get_peru_time().replace(tzinfo=None)
+    operacion = Operacion(
+        monto=monto,
+        comision=comision,
+        medio=medio_valido.nombre_abreviado,
+        usuario_id=usuario.id,
+        sucursal_id=sucursal.id,
+        hora=hora_peru,
+        comision_sugerida=comision_sugerida,
+        comision_manual=es_manual,
+        motivo_descuento=motivo,
+    )
+    db.session.add(operacion)
 
-        db.session.commit()
+    # Actualizar comisiones
+    hoy = get_peru_time().date()
+    comision_diaria = ComisionDiaria.query.filter_by(fecha=hoy, sucursal_id=sucursal.id).first()
+    if comision_diaria:
+        comision_diaria.total_comision = float(comision_diaria.total_comision) + comision
+    else:
+        comision_diaria = ComisionDiaria(fecha=hoy, sucursal_id=sucursal.id, total_comision=comision)
+        db.session.add(comision_diaria)
 
-        # Limpiar caché y sesión (sin bloquear si hay error)
-        try:
-            db.session.expunge_all()
-        except:
-            pass
-        try:
-            clear_cache()
-        except:
-            pass
+    ahora = get_peru_time()
+    comision_mensual = ComisionMensual.query.filter_by(
+        año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id
+    ).first()
+    if comision_mensual:
+        comision_mensual.total_comision = float(comision_mensual.total_comision) + comision
+    else:
+        comision_mensual = ComisionMensual(
+            año=ahora.year, mes=ahora.month, sucursal_id=sucursal.id, total_comision=comision
+        )
+        db.session.add(comision_mensual)
 
-        # Devolver confirmación (SIEMPRE retorna exitosamente si llegó aquí)
-        _msg = f'Operacion registrada: S/ {monto:.2f}'
-        if es_manual:
-            _msg += f' con comision manual de S/ {comision:.2f}'
-            if motivo:
-                _msg += f' (motivo: {motivo})'
-        _msg += f' via {medio_valido.nombre_abreviado}'
-        if getattr(usuario, 'es_admin', False):
-            _msg += f' en {sucursal.nombre}'
-        _msg += '.'
+    db.session.commit()
 
-        return {
-            "mensaje": _msg,
-            "monto": monto,
-            "comision": comision,
-            "comision_sugerida": comision_sugerida,
-            "comision_manual": es_manual,
-            "motivo_descuento": motivo,
-            "medio": medio_valido.nombre_abreviado,
-            "sucursal_id": sucursal.id,
-            "sucursal_nombre": sucursal.nombre,
-        }
+    # Limpiar caché y sesión (sin bloquear si hay error)
+    try:
+        db.session.expunge_all()
+    except:
+        pass
+    try:
+        clear_cache()
+    except:
+        pass
+
+    # Devolver confirmación (SIEMPRE retorna exitosamente si llegó aquí)
+    _msg = f'Operacion registrada: S/ {monto:.2f}'
+    if es_manual:
+        _msg += f' con comision manual de S/ {comision:.2f}'
+        if motivo:
+            _msg += f' (motivo: {motivo})'
+    _msg += f' via {medio_valido.nombre_abreviado}'
+    if getattr(usuario, 'es_admin', False):
+        _msg += f' en {sucursal.nombre}'
+    _msg += '.'
+
+    return {
+        "mensaje": _msg,
+        "monto": monto,
+        "comision": comision,
+        "comision_sugerida": comision_sugerida,
+        "comision_manual": es_manual,
+        "motivo_descuento": motivo,
+        "medio": medio_valido.nombre_abreviado,
+        "sucursal_id": sucursal.id,
+        "sucursal_nombre": sucursal.nombre,
+    }
 
 
 # ---------- Handlers de búsquedas read-only (para localizar entidades a editar/eliminar) ----------
