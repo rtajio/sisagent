@@ -4396,6 +4396,10 @@ def _ejecutar_operacion_validada(args, usuario):
 
 def _ejecutar_editar_operacion_validada(args, usuario):
     """Edita una operación específica (por ID) o la última del usuario."""
+    # Asegurar que el usuario está en la sesión actual
+    if usuario not in db.session:
+        usuario = db.session.merge(usuario)
+
     # Buscar la operación del usuario
     sucursales = sucursales_visibles_para(usuario)
     if not sucursales:
