@@ -2122,6 +2122,25 @@ def api_medios_eliminar(medio_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/medios/reorganizar', methods=['POST'])
+@login_required
+def api_medios_reorganizar():
+    """Reorganiza los medios por orden alfabético del abreviado."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        medios = MedioPago.query.order_by(MedioPago.nombre_abreviado).all()
+        for i, medio in enumerate(medios):
+            medio.orden = i
+        db.session.commit()
+        cache.clear()
+
+        return jsonify({'success': True, 'message': f'{len(medios)} medios reorganizados'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/medios/<int:medio_id>/editar', methods=['POST'])
 @login_required
 def api_editar_medio(medio_id):

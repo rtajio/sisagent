@@ -112,6 +112,22 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btn-guardar-crear').addEventListener('click', crearMedio);
     document.getElementById('btn-guardar-editar').addEventListener('click', editarMedio);
 
+    // Event delegation para botones dinámicos
+    document.getElementById('tbody-medios').addEventListener('click', function(e) {
+        const btnEditar = e.target.closest('.btn-editar');
+        const btnEliminar = e.target.closest('.btn-eliminar');
+
+        if (btnEditar) {
+            const medioId = btnEditar.dataset.id;
+            abrirEditar(medioId);
+        }
+
+        if (btnEliminar) {
+            const medioId = btnEliminar.dataset.id;
+            eliminarMedio(medioId);
+        }
+    });
+
     async function cargarMedios() {
         try {
             const resp = await fetch('/api/medios/lista');
@@ -140,10 +156,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                onchange="toggleActivo(${medio.id})">
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-warning btn-editar" onclick="abrirEditar(${medio.id})">
+                        <button class="btn btn-sm btn-warning btn-editar" data-id="${medio.id}" type="button">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button class="btn btn-sm btn-danger btn-eliminar" onclick="eliminarMedio(${medio.id})">
+                        <button class="btn btn-sm btn-danger btn-eliminar" data-id="${medio.id}" type="button">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
