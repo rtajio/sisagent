@@ -363,6 +363,7 @@ class Producto(db.Model):
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'), nullable=False)
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
+    fecha_vencimiento = db.Column(db.Date, nullable=True)  # NULL si no vence
     sucursal = db.relationship('Sucursal', backref='productos')
 
 class Venta(db.Model):
@@ -3115,6 +3116,11 @@ Reglas críticas:
 - No inventes valores: si falta información, pregunta en lenguaje natural ("¿en qué sucursal?", "¿qué precio?", "¿con qué stock inicial?").
 - Los permisos se respetan en el servidor automáticamente. Si el usuario no tiene acceso, la herramienta devolverá un error claro que debes transmitir.
 - Roles: admin global (puede TODO), admin de sucursal (gestiona su sucursal — productos, usuarios, operaciones de su sucursal), usuario regular (solo sus propias ventas/operaciones).
+- **SMART PRODUCT EDITING**: Si el usuario dice "añade X unidades de [producto]" o "suma 15 coca cola al inventario":
+  1. PRIMERO llama `buscar_productos` con el nombre del producto
+  2. Si lo encuentra (stock actual, precio existente), llama `editar_producto` para aumentar el stock
+  3. Si NO lo encuentra, llama `crear_producto` para crear uno nuevo con los datos que el usuario da
+  Esta logica evita duplicados y reutiliza productos existentes inteligentemente.
 - Responde SIEMPRE en español, conciso, amable y orientado a la acción. En cuanto tengas los datos necesarios para una acción, invoca la herramienta `proponer_*` directamente en ese turno.
 - FORMATO en texto: los montos van con símbolo y número ("S/ 200", no "doscientos soles"). Las horas van en formato 12h compacto "HH:MMam/pm" (ej: "04:29pm", "09:05am") — NO las escribas con palabras ("las cuatro con veintinueve de la tarde").
 - ZONA HORARIA CRÍTICA: SIEMPRE usa la zona horaria de Perú (UTC-5) que viene en el contexto. NUNCA uses UTC ni conversiones de zona horaria. Si el usuario pregunta la hora, repite exactamente la hora del contexto injected (ej: si dice "09:05am Perú", responde "son las nueve con cinco a eme", no otra hora).
@@ -3232,6 +3238,16 @@ _HERRAMIENTAS_DECLARACIONES = [
         "name": "listar_sucursales",
         "description": "Lista todas las sucursales (activas e inactivas).",
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "productos_por_agotar",
+        "description": "Busca productos con stock bajo (por agotar) en las sucursales del usuario. Útil para saber qué hay que reponer.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limite_stock": {"type": "integer", "description": "(Opcional) Stock máximo considerado 'por agotar'. Default: 10."},
+            },
+        },
     },
     # ===== Acciones que requieren confirmación =====
     {
@@ -3559,7 +3575,10 @@ def _tool_registrar_operacion(args, usuario):
     comision_sugerida = calcular_comision_sugerida(monto)
     es_manual = False
     motivo = None
-    comision_str = (args.get("comision") or "").strip() if "comision" in args else ""
+    comision_raw = args.get("comision")
+    comision_str = ""
+    if comision_raw is not None:
+        comision_str = str(comision_raw).strip() if comision_raw != "" else ""
     if comision_str:  # Solo procesar si hay valor no vacío
         try:
             comision = float(comision_str)
@@ -3832,6 +3851,39 @@ def _tool_listar_sucursales(args, usuario):
             {"id": s.id, "nombre": s.nombre, "direccion": s.direccion or "", "activa": s.activa}
             for s in sucs
         ],
+    }
+
+
+def _tool_productos_por_agotar(args, usuario):
+    """Busca productos con stock bajo (por agotar)."""
+    sucursales = sucursales_visibles_para(usuario)
+    if not sucursales:
+        return {"productos": [], "mensaje": "No tienes sucursales asignadas."}
+
+    sucursal_ids = [s.id for s in sucursales]
+    limite_stock = int(args.get("limite_stock", 10))  # Stock mínimo considerado "por agotar"
+
+    productos = Producto.query.filter(
+        Producto.sucursal_id.in_(sucursal_ids),
+        Producto.activo == True,
+        Producto.stock <= limite_stock,
+    ).order_by(Producto.stock).limit(30).all()
+
+    return {
+        "productos": [
+            {
+                "id": p.id,
+                "nombre": p.nombre,
+                "descripcion": p.descripcion or "",
+                "precio": float(p.precio),
+                "stock": p.stock,
+                "sucursal_id": p.sucursal_id,
+                "sucursal_nombre": p.sucursal.nombre if p.sucursal else "",
+                "fecha_vencimiento": p.fecha_vencimiento.isoformat() if p.fecha_vencimiento else None,
+            }
+            for p in productos
+        ],
+        "limite_stock": limite_stock,
     }
 
 
@@ -4183,6 +4235,7 @@ CHATBOT_TOOLS = {
     "buscar_ventas":          {"handler": _tool_buscar_ventas,          "requires_confirmation": False},
     "listar_usuarios":        {"handler": _tool_listar_usuarios,        "requires_confirmation": False},
     "listar_sucursales":      {"handler": _tool_listar_sucursales,      "requires_confirmation": False},
+    "productos_por_agotar":   {"handler": _tool_productos_por_agotar,   "requires_confirmation": False},
     "registrar_venta":         {"handler": _tool_registrar_venta,             "requires_confirmation": True},
     "registrar_operacion":     {"handler": _tool_registrar_operacion,         "requires_confirmation": False},
     "editar_operacion":        {"handler": _tool_editar_operacion,            "requires_confirmation": False},
@@ -4626,6 +4679,23 @@ def _ejecutar_editar_producto_validado(args, usuario):
         if st < 0: raise ValueError("Stock no puede ser negativo.")
         if st != producto.stock:
             producto.stock = st; cambios.append("stock")
+
+    if args.get("fecha_vencimiento") is not None:
+        fecha_venc_str = args.get("fecha_vencimiento")
+        if fecha_venc_str and fecha_venc_str.strip():
+            try:
+                from datetime import datetime
+                fecha_venc = datetime.fromisoformat(fecha_venc_str).date()
+                if fecha_venc != producto.fecha_vencimiento:
+                    producto.fecha_vencimiento = fecha_venc
+                    cambios.append("fecha de vencimiento")
+            except (ValueError, TypeError):
+                raise ValueError("Fecha de vencimiento inválida (use formato YYYY-MM-DD).")
+        elif not fecha_venc_str:
+            # String vacío = sin vencimiento
+            if producto.fecha_vencimiento is not None:
+                producto.fecha_vencimiento = None
+                cambios.append("vencimiento removido")
 
     if not cambios:
         raise ValueError("Nada que cambiar.")
