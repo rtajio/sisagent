@@ -1866,9 +1866,12 @@
     
     // Inicializar actualización de comisión cuando se carga la página
     document.addEventListener('DOMContentLoaded', function() {
+        const tablePages = ['/operaciones', '/ventas', '/inventario'];
+        if (tablePages.some(p => window.location.pathname.includes(p))) return;
+
         // Cargar comisión inicial
         actualizarComisionTurno();
-        
+
         // Actualizar comisión cada 30 segundos
         setInterval(actualizarComisionTurno, 30000);
     });
@@ -4219,6 +4222,9 @@
 {% if get_flashed_messages(with_categories=true) %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const tablePages = ['/operaciones', '/ventas', '/inventario'];
+        if (tablePages.some(p => window.location.pathname.includes(p))) return;
+
         // Evitar doble notificación si viene de AJAX
         if (!localStorage.getItem('notificacion_actualizacion')) {
             {% for category, message in get_flashed_messages(with_categories=true) %}
