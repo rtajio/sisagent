@@ -805,17 +805,15 @@ def operaciones():
         query = query.filter(Operacion.hora <= hora_fin)
     
     # OPTIMIZACIÓN ULTRA: Paginación
-    # Obtener sin ordenar SQL, ordenar en Python DESCENDENTEMENTE
+    # Ordenar EXPLÍCITAMENTE por HORA descendente, LUEGO por ID descendente
+    query = query.order_by(Operacion.hora.desc(), Operacion.id.desc())
+
     operaciones_paginated = query.paginate(
         page=page, per_page=per_page, error_out=False
     )
 
-    # Ordenar en Python: más recientes PRIMERO (reverse=True)
-    operaciones = sorted(
-        operaciones_paginated.items,
-        key=lambda x: x.hora if x.hora else datetime.min,
-        reverse=True
-    )
+    # Pasar items directamente (ya ordenados por SQL)
+    operaciones = list(operaciones_paginated.items)
 
     # Detectar si hay filtros aplicados
     filtros_aplicados = bool(fecha or medio or hora_inicio or hora_fin or (current_user.es_admin and request.args.get('sucursal_id')))
