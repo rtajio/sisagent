@@ -803,14 +803,16 @@ def operaciones():
     
     if hora_fin:
         query = query.filter(Operacion.hora <= hora_fin)
-    
-    # OPTIMIZACIÓN: Usar vista SQL que ordena automáticamente por hora DESC
-    # La vista 'operacion_ordenada' devuelve operaciones ordenadas de más reciente a más antiguo
+
+    # ORDENAR POR HORA DESCENDENTE (más reciente primero)
+    query = query.order_by(Operacion.hora.desc())
+
+    # Paginar
     operaciones_paginated = query.paginate(
         page=page, per_page=per_page, error_out=False
     )
 
-    # Los items ya vienen ordenados de la vista SQL
+    # Los items están ordenados por hora descendente
     operaciones = list(operaciones_paginated.items)
 
     # Detectar si hay filtros aplicados
