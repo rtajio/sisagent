@@ -263,8 +263,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Actualizar inmediatamente al cargar
     actualizarComisiones();
     
-    // Actualizar cada 10 segundos
-    setInterval(actualizarComisiones, 10000);
+    // ULTRA ACCELERATION: Actualizar cada 30s en lugar de 10s para evitar lag
+    setInterval(actualizarComisiones, 30000);
     
     // Actualizar hora de última actualización cada segundo
     const horaEl = document.getElementById('hora-actualizacion');

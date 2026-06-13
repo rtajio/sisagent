@@ -143,8 +143,8 @@
             .catch(err => console.warn('[live] Error actualizando tabla operaciones:', err));
     }
 
-    // Actualizar tabla cada 3 segundos
-    setInterval(updateOperacionesTable, 3000);
+    // ULTRA ACCELERATION: Actualizar tabla cada 30s en lugar de 3s para evitar lag
+    setInterval(updateOperacionesTable, 30000);
     updateOperacionesTable(); // Primera actualización inmediata
 })();
 

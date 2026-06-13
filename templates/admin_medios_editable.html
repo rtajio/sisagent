@@ -265,8 +265,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Cargar medios al iniciar
     cargarMedios();
 
-    // Refrescar cada 5 segundos
-    setInterval(cargarMedios, 5000);
+    // ULTRA ACCELERATION: Refrescar cada 30s en lugar de 5s
+    setInterval(cargarMedios, 30000);
 
     // Event listeners para botones
     document.getElementById('btn-guardar-crear').addEventListener('click', crearMedio);

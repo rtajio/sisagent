@@ -668,8 +668,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Hacer accesible globalmente para que el chat pueda actualizar
     window.refreshOperationsTable = updateTableFromAPI;
 
-    // Actualizar tabla cada 3 segundos
-    setInterval(updateTableFromAPI, 3000);
+    // ULTRA ACCELERATION: Actualizar tabla cada 30s en lugar de 3s para evitar lag al scrollear
+    // Esto sigue siendo "en vivo" (actualización automática) pero sin bloquear scroll
+    setInterval(updateTableFromAPI, 30000);
     updateTableFromAPI(); // Primera actualización inmediata
 
     // ============= Interceptar formulario de registro para AJAX sin refresh =============
