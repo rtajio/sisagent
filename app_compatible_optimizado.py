@@ -507,8 +507,11 @@ def actualizar_ultimo_acceso():
 
 # OPTIMIZACIÓN ULTRA: Función para limpiar caché
 def clear_cache():
-    """Limpiar todo el caché"""
-    cache.clear()
+    """Limpiar todo el caché - no debe fallar si hay error"""
+    try:
+        cache.clear()
+    except Exception as e:
+        print(f"[WARN] Error al limpiar caché: {e}")
 
 def asegurar_admin_existe():
     """Asegurar que el usuario admin exista con la contraseña 'vivalavida'"""
@@ -964,33 +967,39 @@ def eliminar_operacion(operacion_id):
 def _corregir_autoincrement_operacion():
     """Asegura que el auto-increment esté correcto tras registrar una operación."""
     try:
-        max_id = db.session.query(db.func.max(Operacion.id)).scalar() or 0
-        if max_id > 0:
-            next_id = max_id + 1
-            if os.environ.get('DATABASE_URL'):
-                # PostgreSQL: usar pg_get_serial_sequence para obtener el nombre de la secuencia
-                try:
-                    # Primero, obtener el valor actual de la secuencia
-                    current_seq = db.session.execute(
-                        db.text("SELECT currval(pg_get_serial_sequence('operacion', 'id'))")
-                    ).scalar()
+        # Esta función es SOLO para limpieza. No debe bloquear si hay error.
+        try:
+            max_id = db.session.query(db.func.max(Operacion.id)).scalar() or 0
+            if max_id <= 0:
+                return
 
-                    # Si la secuencia está rezagada respecto a max_id, resetearla
-                    if current_seq is None or current_seq < max_id:
-                        db.session.execute(
-                            db.text(f"SELECT setval(pg_get_serial_sequence('operacion', 'id'), {max_id}, true)")
-                        )
-                        db.session.commit()
-                        print(f"[+] Secuencia PostgreSQL corregida: {current_seq or 0} → {max_id}")
-                except Exception as e:
-                    print(f"[WARN] Error corrigiendo secuencia PostgreSQL: {e}")
-                    db.session.rollback()
-            else:
-                # SQLite
+            if os.environ.get('DATABASE_URL'):
+                # PostgreSQL: intentar usar nextval para establecer la secuencia
                 try:
-                    db.session.execute(db.text("DELETE FROM sqlite_sequence WHERE name='operacion'"))
-                except:
-                    pass
+                    seq_name = "operacion_id_seq"
+                    # Usar nextval para asegurar que la secuencia está en el valor correcto
+                    db.session.execute(
+                        db.text(f"SELECT setval('{seq_name}', {max_id}, true)")
+                    )
+                    db.session.commit()
+                except Exception as e:
+                    # Si falla, solo loguear. No lanzar excepción.
+                    print(f"[WARN] No se pudo corregir secuencia PostgreSQL: {e}")
+                    try:
+                        db.session.rollback()
+                    except:
+                        pass
+            else:
+                # SQLite: no necesita corrección de secuencia
+                pass
+        except Exception as e:
+            print(f"[WARN] Error en _corregir_autoincrement_operacion: {e}")
+            try:
+                db.session.rollback()
+            except:
+                pass
+    except Exception as e:
+        print(f"[ERROR] Fatal en _corregir_autoincrement_operacion: {e}")
                 db.session.execute(
                     db.text(f"INSERT INTO sqlite_sequence (name, seq) VALUES ('operacion', {next_id})")
                 )
