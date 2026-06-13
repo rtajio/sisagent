@@ -611,12 +611,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         });
     }
-});
 
-// ============= Live Updates: actualizar tabla sin refrescar =============
-(function() {
+    // ============= Live Updates: actualizar tabla sin refrescar =============
     const tbody = document.querySelector('table tbody');
-    if (!tbody) return;
+    if (!tbody) {
+        console.warn('[polling] No se encontró tabla tbody');
+        return;
+    }
 
     let lastOpIds = new Set();
     // Detectar si hay columna de usuario (para admins)
@@ -670,7 +671,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Actualizar tabla cada 3 segundos
     setInterval(updateTableFromAPI, 3000);
     updateTableFromAPI(); // Primera actualización inmediata
-})();
+});
 
 // Event delegation para botones de editar y eliminar (funciona incluso cuando tabla se reemplaza)
 document.addEventListener('click', function(e) {
