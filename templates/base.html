@@ -1899,20 +1899,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.error('[trigger] base.html JS cargado — version voiceTrigger-v3-esES');
 
-            // PERFORMANCE FIX: Disable chat widget on table pages to prevent scroll lag
-            // Pages: operaciones, ventas, inventario
-            const currentPath = window.location.pathname;
-            const disableChatOnPages = ['/operaciones', '/ventas', '/inventario'];
-            const shouldDisableChat = disableChatOnPages.some(page => currentPath.includes(page));
-
-            if (shouldDisableChat) {
-                console.log('[chat] Disabled on table pages to prevent scroll lag');
-                // Just hide the chat widget completely on these pages
-                const chatWidget = document.querySelector('.chatbot-widget');
-                if (chatWidget) {
-                    chatWidget.style.display = 'none';
-                }
-                return; // Exit early, don't initialize chat
+            // Chat widget now enabled everywhere (lag fixed with DocumentFragment optimization)
             }
 
             const panel = document.getElementById('chatbot-panel');
