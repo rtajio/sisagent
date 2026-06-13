@@ -626,12 +626,14 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch('/api/operaciones/lista', { method: 'GET', credentials: 'include' })
             .then(r => r.json())
             .then(data => {
+                console.log('[updateTable] Respuesta:', data.operaciones ? data.operaciones.length + ' ops' : 'sin ops', data);
                 if (!data.success || !data.operaciones) return;
 
                 // Re-renderizar completamente la tabla
                 tbody.innerHTML = '';
 
                 // Agregar todas las operaciones (ya vienen ordenadas DESC del API)
+                console.log('[updateTable] Renderizando', data.operaciones.length, 'operaciones');
                 data.operaciones.forEach(op => {
                     const row = document.createElement('tr');
                     row.id = `fila-${op.id}`;
