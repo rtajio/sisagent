@@ -899,13 +899,13 @@ def api_operaciones_lista():
     try:
         ahora = get_peru_time()
         hoy = ahora.date()
-        # Mostrar operaciones de TODOS LOS TIEMPOS (no solo hoy) para que se vea el historial
-        # BD almacena hora sin tzinfo (naive datetime)
-        inicio_hoy = datetime.min
-        fin_hoy = datetime.max
+        # Crear rango sin tzinfo (la BD almacena hora sin timezone)
+        inicio_hoy = datetime.combine(hoy, datetime.min.time())
+        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
 
         # Query directa (sin usar vista para evitar problemas de Railway)
         if current_user.es_admin:
+            # Admin: todas las operaciones (sin filtro de fecha)
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
                        s.nombre, m.nombre_abreviado
@@ -913,10 +913,10 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-                WHERE o.hora >= :inicio AND o.hora <= :fin
                 ORDER BY o.hora DESC
-            """), {'inicio': inicio_hoy, 'fin': fin_hoy})
+            """))
         elif current_user.es_admin_de_sucursal():
+            # Admin de sucursal: todas sus sucursal (sin filtro de fecha)
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
                        s.nombre, m.nombre_abreviado
@@ -924,10 +924,11 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-                WHERE o.sucursal_id = :sucursal_id AND o.hora >= :inicio AND o.hora <= :fin
+                WHERE o.sucursal_id = :sucursal_id
                 ORDER BY o.hora DESC
-            """), {'sucursal_id': current_user.sucursal_id, 'inicio': inicio_hoy, 'fin': fin_hoy})
+            """), {'sucursal_id': current_user.sucursal_id})
         else:
+            # Usuario normal: solo sus operaciones de HOY
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
                        s.nombre, m.nombre_abreviado
