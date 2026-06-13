@@ -3558,9 +3558,10 @@ def _tool_registrar_operacion(args, usuario):
     comision_sugerida = calcular_comision_sugerida(monto)
     es_manual = False
     motivo = None
-    if "comision" in args and args.get("comision") is not None:
+    comision_str = (args.get("comision") or "").strip() if "comision" in args else ""
+    if comision_str:  # Solo procesar si hay valor no vacío
         try:
-            comision = float(args.get("comision"))
+            comision = float(comision_str)
         except (TypeError, ValueError):
             raise ValueError("Comision debe ser un numero.")
         if comision < 0:
@@ -3608,12 +3609,18 @@ def _tool_registrar_operacion(args, usuario):
     # Nota: Validación de duplicado removida para permitir múltiples registros iguales
     # (el usuario podría necesitar registrar varias operaciones idénticas)
 
+    # Extraer valores de objetos ANTES del commit (para evitar DetachedInstanceError después)
+    medio_nombre = medio_valido.nombre_abreviado
+    sucursal_id = sucursal.id
+    sucursal_nombre = sucursal.nombre
+    usuario_es_admin = getattr(usuario, 'es_admin', False)
+
     # Ejecutar directamente (no solo proponer)
     hora_peru = get_peru_time().replace(tzinfo=None)
     operacion = Operacion(
         monto=monto,
         comision=comision,
-        medio=medio_valido.nombre_abreviado,
+        medio=medio_nombre,
         usuario_id=usuario.id,
         sucursal_id=sucursal.id,
         hora=hora_peru,
@@ -3664,9 +3671,9 @@ def _tool_registrar_operacion(args, usuario):
             _msg += f' con comision manual de S/ {comision:.2f}'
             if motivo:
                 _msg += f' (motivo: {motivo})'
-        _msg += f' via {medio_valido.nombre_abreviado}'
-        if getattr(usuario, 'es_admin', False):
-            _msg += f' en {sucursal.nombre}'
+        _msg += f' via {medio_nombre}'
+        if usuario_es_admin:
+            _msg += f' en {sucursal_nombre}'
         _msg += '.'
 
         return {
@@ -3676,15 +3683,15 @@ def _tool_registrar_operacion(args, usuario):
             "comision_sugerida": comision_sugerida,
             "comision_manual": es_manual,
             "motivo_descuento": motivo,
-            "medio": medio_valido.nombre_abreviado,
-            "sucursal_id": sucursal.id,
-            "sucursal_nombre": sucursal.nombre,
+            "medio": medio_nombre,
+            "sucursal_id": sucursal_id,
+            "sucursal_nombre": sucursal_nombre,
         }
     except Exception as e:
         # Si algo falla DESPUÉS del commit, retornar al menos un mensaje básico
         print(f"[WARN] Error en post-commit de _tool_registrar_operacion: {e}")
         return {
-            "mensaje": f"Operacion registrada exitosamente (S/ {monto:.2f} via {medio_valido.nombre_abreviado})"
+            "mensaje": f"Operacion registrada exitosamente (S/ {monto:.2f} via {medio_nombre})"
         }
 
 
