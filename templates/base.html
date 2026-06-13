@@ -1925,6 +1925,9 @@
             let dictationActive = false;
             const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+            // P0 OPTIMIZATION: Debounce chat toggle to eliminate lag from rapid clicks
+            let toggleDebounceTimer = null;
+
             function loadHistory() {
                 try {
                     const raw = localStorage.getItem(STORAGE_KEY);
@@ -2195,7 +2198,24 @@
                     renderWelcome();
                     return;
                 }
-                history.forEach(function(m) {
+                // P0 OPTIMIZATION: Lazy load - show only last 20 messages for instant render
+                const MAX_VISIBLE = 20;
+                const visibleMessages = history.length > MAX_VISIBLE
+                    ? history.slice(-MAX_VISIBLE)
+                    : history;
+
+                // If there are older messages, add a "Load older" indicator
+                if (history.length > MAX_VISIBLE) {
+                    const olderDiv = document.createElement('div');
+                    olderDiv.className = 'chatbot-msg system';
+                    olderDiv.style.textAlign = 'center';
+                    olderDiv.style.fontSize = '0.85em';
+                    olderDiv.style.opacity = '0.6';
+                    olderDiv.textContent = `... ${history.length - MAX_VISIBLE} mensajes anteriores`;
+                    messagesEl.appendChild(olderDiv);
+                }
+
+                visibleMessages.forEach(function(m) {
                     if (m.role === 'user') renderTextMessage(m.content, 'user');
                     else if (m.role === 'assistant') renderTextMessage(m.content, 'bot');
                 });
@@ -2259,14 +2279,18 @@
             }
 
             toggleBtn.addEventListener('click', function() {
-                panel.classList.toggle('d-none');
-                const mainContent = document.getElementById('mainContent');
-                if (!panel.classList.contains('d-none')) {
-                    if (mainContent) mainContent.classList.add('chat-open');
-                    input.focus();
-                } else {
-                    if (mainContent) mainContent.classList.remove('chat-open');
-                }
+                // P0 OPTIMIZATION: Debounce rapid clicks to prevent lag
+                clearTimeout(toggleDebounceTimer);
+                toggleDebounceTimer = setTimeout(function() {
+                    panel.classList.toggle('d-none');
+                    const mainContent = document.getElementById('mainContent');
+                    if (!panel.classList.contains('d-none')) {
+                        if (mainContent) mainContent.classList.add('chat-open');
+                        input.focus();
+                    } else {
+                        if (mainContent) mainContent.classList.remove('chat-open');
+                    }
+                }, 50);
             });
             closeBtn.addEventListener('click', function() {
                 panel.classList.add('d-none');

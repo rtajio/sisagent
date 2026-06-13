@@ -6457,6 +6457,7 @@ def ws_voice_live(browser_ws):
 # Healthcheck optimizado
 @app.route('/api/comisiones')
 @login_required
+@cache.cached(timeout=30, query_string=True)  # P1 OPTIMIZATION: Cache for 30 seconds to reduce DB queries
 def api_dashboard_comisiones():
     """API para obtener comisiones actualizadas del dashboard"""
     try:
