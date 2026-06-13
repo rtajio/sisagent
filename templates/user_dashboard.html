@@ -77,9 +77,8 @@
                 </a>
             </div>
             <div class="card-body">
-                {% if operaciones_hoy %}
                 <div class="table-responsive">
-                    <table class="table table-bordered" width="100%" cellspacing="0">
+                    <table class="table table-bordered" width="100%" cellspacing="0" id="tabla-operaciones-dashboard">
                         <thead>
                             <tr>
                                 <th>N°</th>
@@ -89,25 +88,15 @@
                                 <th>Medio</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for operacion in operaciones_hoy %}
-                            <tr>
-                                <td>{{ loop.index }}</td>
-                                                                    <td>{{ format_peru_time(operacion.hora) }}</td>
-                                <td class="font-weight-bold">S/ {{ "%.2f"|format(operacion.monto) }}</td>
-                                <td class="text-success font-weight-bold">S/ {{ "%.2f"|format(operacion.comision) }}</td>
-                                <td><span class="badge bg-primary">{{ operacion.medio }}</span></td>
-                            </tr>
-                            {% endfor %}
+                        <tbody id="tbody-operaciones-dashboard">
+                            <!-- Cargado dinámicamente por JS -->
                         </tbody>
                     </table>
                 </div>
-                {% else %}
-                <div class="text-center py-4">
+                <div class="text-center py-4" id="empty-state-dashboard" style="display: none;">
                     <i class="fas fa-clock fa-3x text-muted mb-3"></i>
                     <p class="text-muted">No hay operaciones registradas hoy</p>
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -117,13 +106,55 @@
 
 {% block scripts %}
 <script>
+// ============= Live Updates: Tabla de operaciones sin refrescar =============
+(function() {
+    const tbody = document.getElementById('tbody-operaciones-dashboard');
+    const emptyState = document.getElementById('empty-state-dashboard');
+    if (!tbody) return;
+
+    function updateOperacionesTable() {
+        fetch('/api/operaciones/lista', { method: 'GET', credentials: 'include' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success || !data.operaciones) return;
+
+                // Re-renderizar completamente la tabla
+                tbody.innerHTML = '';
+
+                if (data.operaciones.length === 0) {
+                    emptyState.style.display = 'block';
+                } else {
+                    emptyState.style.display = 'none';
+
+                    // Agregar todas las operaciones (ya vienen ordenadas DESC del API)
+                    data.operaciones.forEach((op, index) => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${index + 1}</td>
+                            <td>${op.hora}</td>
+                            <td class="font-weight-bold">S/ ${op.monto.toFixed(2)}</td>
+                            <td class="text-success font-weight-bold">S/ ${op.comision.toFixed(2)}</td>
+                            <td><span class="badge bg-primary">${op.medio}</span></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            })
+            .catch(err => console.warn('[live] Error actualizando tabla operaciones:', err));
+    }
+
+    // Actualizar tabla cada 3 segundos
+    setInterval(updateOperacionesTable, 3000);
+    updateOperacionesTable(); // Primera actualización inmediata
+})();
+
 // OPTIMIZACIÓN ULTRA FLUIDA: Actualizar comisión con debounce y caché
 let comisionCache = null;
 function actualizarComision() {
     // Usar fetch con timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
+
     fetch('/api/comisiones?tipo=diaria', { signal: controller.signal })
         .then(response => {
             clearTimeout(timeoutId);
@@ -134,7 +165,7 @@ function actualizarComision() {
             // Solo actualizar si cambió
             if (comisionCache !== data.total_comision) {
                 comisionCache = data.total_comision;
-                
+
                 // Actualizar el valor en la página
                 const comisionElement = document.querySelector('.text-success .h5, .h5.mb-0.font-weight-bold');
                 if (comisionElement) {
