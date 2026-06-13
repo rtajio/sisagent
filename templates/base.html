@@ -1475,6 +1475,10 @@
     
     // Inicializar sidebar en móvil
     document.addEventListener('DOMContentLoaded', function() {
+        // NUCLEAR FIX: Skip all initialization on table pages
+        const tablePages = ['/operaciones', '/ventas', '/inventario'];
+        if (tablePages.some(p => window.location.pathname.includes(p))) return;
+
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('mainContent');
         
@@ -1514,8 +1518,11 @@
     
     // Inicializar audio cuando se carga la página
     document.addEventListener('DOMContentLoaded', function() {
+        const tablePages = ['/operaciones', '/ventas', '/inventario'];
+        if (tablePages.some(p => window.location.pathname.includes(p))) return;
+
         console.log('Inicializando sistema de audio...');
-        
+
         // Intentar inicializar AudioContext
         initAudioContext();
         
