@@ -2968,6 +2968,19 @@ _HERRAMIENTAS_DECLARACIONES = [
             "required": ["nombre"],
         },
     },
+    {
+        "name": "editar_operacion",
+        "description": "EDITA una operación bancaria existente directamente (sin confirmación). Cambia el monto y/o comisión. Si no se proporciona operacion_id, edita automáticamente la última operación del día. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las que él registró.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "operacion_id": {"type": "integer", "description": "(Opcional) ID de la operación a editar. Si se omite, edita la última del día."},
+                "monto": {"type": "number", "description": "(Opcional) Nuevo monto en soles"},
+                "comision": {"type": "number", "description": "(Opcional) Nueva comisión manual en soles"},
+                "motivo_descuento": {"type": "string", "description": "(Opcional) Motivo de la comisión manual"},
+            },
+        },
+    },
 ]
 
 
@@ -4314,6 +4327,7 @@ def _ejecutar_crear_sucursal_validada(args, usuario):
 EJECUTORES_DIRECTOS = {
     'registrar_venta':              _ejecutar_venta_validada,
     'registrar_operacion':          _ejecutar_operacion_validada,
+    'editar_operacion':             _ejecutar_editar_operacion_validada,
     'crear_producto':     _ejecutar_crear_producto_validado,
     'editar_producto':    _ejecutar_editar_producto_validado,
     'eliminar_producto':  _ejecutar_eliminar_producto_validado,
