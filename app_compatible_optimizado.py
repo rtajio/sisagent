@@ -223,12 +223,16 @@ def handle_error(e):
     except:
         pass
 
-    # Si el usuario está autenticado, redirigir al dashboard con mensaje de error
+    # Si es una request a /api/, devolver JSON; si no, redirigir al dashboard
+    from flask import request
     try:
         from flask_login import current_user
         if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
-            flash(f'Error: {str(e)}', 'error')
-            return redirect(url_for('dashboard'))
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': str(e)}), 500
+            else:
+                flash(f'Error: {str(e)}', 'error')
+                return redirect(url_for('dashboard'))
     except:
         pass
 
