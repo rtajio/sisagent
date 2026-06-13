@@ -1965,6 +1965,150 @@ def api_medios_orden():
     cache.clear()
     return {'ok': True}
 
+@app.route('/api/medios/lista', methods=['GET'])
+@login_required
+def api_medios_lista():
+    """Retorna lista de medios de pago para live updates."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    result = db.session.execute(db.text("""
+        SELECT m.id, m.nombre_abreviado, m.nombre_completo, m.activo, m.orden,
+               COUNT(DISTINCT ms.sucursal_id) as sucursales_count
+        FROM medio_pago m
+        LEFT JOIN medio_sucursal ms ON m.id = ms.medio_pago_id AND ms.activo = true
+        GROUP BY m.id, m.nombre_abreviado, m.nombre_completo, m.activo, m.orden
+        ORDER BY m.orden, m.nombre_abreviado
+    """)).fetchall()
+
+    medios = []
+    for row in result:
+        medios.append({
+            'id': row[0],
+            'nombre_abreviado': row[1],
+            'nombre_completo': row[2],
+            'activo': row[3],
+            'orden': row[4],
+            'sucursales_count': row[5] or 0
+        })
+
+    return jsonify({'success': True, 'medios': medios})
+
+@app.route('/api/medios/crear', methods=['POST'])
+@login_required
+def api_medios_crear():
+    """Crea un nuevo medio de pago."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        data = request.get_json()
+        abreviado = (data.get('nombre_abreviado') or '').strip().upper()
+        completo = (data.get('nombre_completo') or '').strip()
+
+        if not abreviado or not completo:
+            return jsonify({'error': 'Datos incompletos'}), 400
+
+        if MedioPago.query.filter_by(nombre_abreviado=abreviado).first():
+            return jsonify({'error': f'Medio "{abreviado}" ya existe'}), 400
+
+        nuevo = MedioPago(
+            nombre_abreviado=abreviado,
+            nombre_completo=completo,
+            activo=True,
+            orden=MedioPago.query.count()
+        )
+        db.session.add(nuevo)
+        db.session.commit()
+        cache.clear()
+
+        return jsonify({
+            'success': True,
+            'medio': {
+                'id': nuevo.id,
+                'nombre_abreviado': nuevo.nombre_abreviado,
+                'nombre_completo': nuevo.nombre_completo,
+                'activo': nuevo.activo,
+                'orden': nuevo.orden,
+                'sucursales_count': 0
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/medios/<int:medio_id>/editar', methods=['POST'])
+@login_required
+def api_medios_editar(medio_id):
+    """Edita un medio de pago."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        medio = MedioPago.query.get_or_404(medio_id)
+        data = request.get_json()
+
+        if 'nombre_abreviado' in data:
+            abreviado = (data['nombre_abreviado'] or '').strip().upper()
+            if abreviado and abreviado != medio.nombre_abreviado:
+                if MedioPago.query.filter_by(nombre_abreviado=abreviado).first():
+                    return jsonify({'error': f'Abreviado "{abreviado}" ya existe'}), 400
+                medio.nombre_abreviado = abreviado
+
+        if 'nombre_completo' in data:
+            completo = (data['nombre_completo'] or '').strip()
+            if completo:
+                medio.nombre_completo = completo
+
+        if 'activo' in data:
+            medio.activo = bool(data['activo'])
+
+        db.session.commit()
+        cache.clear()
+
+        return jsonify({
+            'success': True,
+            'medio': {
+                'id': medio.id,
+                'nombre_abreviado': medio.nombre_abreviado,
+                'nombre_completo': medio.nombre_completo,
+                'activo': medio.activo,
+                'orden': medio.orden
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/medios/<int:medio_id>/eliminar', methods=['POST'])
+@login_required
+def api_medios_eliminar(medio_id):
+    """Elimina un medio de pago."""
+    if not current_user.es_admin:
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    try:
+        medio = MedioPago.query.get_or_404(medio_id)
+
+        # Verificar si hay operaciones usando este medio
+        count_ops = db.session.execute(
+            db.text("SELECT COUNT(*) FROM operacion WHERE medio_pago_id = :id")
+        ).scalar()
+
+        if count_ops > 0:
+            return jsonify({
+                'error': f'No se puede eliminar: hay {count_ops} operaciones usando este medio'
+            }), 400
+
+        db.session.delete(medio)
+        db.session.commit()
+        cache.clear()
+
+        return jsonify({'success': True, 'message': 'Medio eliminado'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/medios/<int:medio_id>/editar', methods=['POST'])
 @login_required
 def api_editar_medio(medio_id):
@@ -5963,16 +6107,99 @@ def init_db():
                 from sqlalchemy import text
                 with db.engine.begin() as conn:
                     # DROP VIEW IF EXISTS para evitar conflictos
-                    conn.execute(text("DROP VIEW IF EXISTS operacion_ordenada"))
-                    # Crear vista con ORDER BY hora DESC
+                    conn.execute(text("DROP VIEW IF EXISTS vista_operaciones CASCADE"))
+                    conn.execute(text("DROP VIEW IF EXISTS vista_ventas CASCADE"))
+                    conn.execute(text("DROP VIEW IF EXISTS vista_productos CASCADE"))
+                    conn.execute(text("DROP VIEW IF EXISTS vista_usuarios CASCADE"))
+                    conn.execute(text("DROP VIEW IF EXISTS vista_medios_pago CASCADE"))
+                    conn.execute(text("DROP VIEW IF EXISTS operacion_ordenada CASCADE"))
+
+                    # Vista: Operaciones con detalles de usuario, sucursal y medio
+                    conn.execute(text("""
+                        CREATE VIEW vista_operaciones AS
+                        SELECT
+                            o.id, o.monto, o.comision, o.hora, o.usuario_id, o.sucursal_id,
+                            o.comision_sugerida, o.comision_manual, o.motivo_descuento,
+                            o.medio_pago_id, o.medio,
+                            u.username, u.nombre_completo, u.email,
+                            s.nombre as sucursal,
+                            m.nombre_abreviado, m.nombre_completo as medio_nombre
+                        FROM operacion o
+                        LEFT JOIN usuario u ON o.usuario_id = u.id
+                        LEFT JOIN sucursal s ON o.sucursal_id = s.id
+                        LEFT JOIN medio_pago m ON o.medio_pago_id = m.id
+                        ORDER BY o.hora DESC
+                    """))
+
+                    # Vista: Ventas con detalles de producto, usuario, sucursal
+                    conn.execute(text("""
+                        CREATE VIEW vista_ventas AS
+                        SELECT
+                            v.id, v.cantidad, v.precio_unitario, v.monto, v.fecha,
+                            v.producto_id, v.usuario_id, v.sucursal_id,
+                            p.nombre as producto, p.precio as precio_actual,
+                            u.username, u.nombre_completo,
+                            s.nombre as sucursal
+                        FROM venta v
+                        LEFT JOIN producto p ON v.producto_id = p.id
+                        LEFT JOIN usuario u ON v.usuario_id = u.id
+                        LEFT JOIN sucursal s ON v.sucursal_id = s.id
+                        ORDER BY v.fecha DESC
+                    """))
+
+                    # Vista: Productos con detalles de sucursal y stock
+                    conn.execute(text("""
+                        CREATE VIEW vista_productos AS
+                        SELECT
+                            p.id, p.nombre, p.descripcion, p.precio, p.stock,
+                            p.sucursal_id, p.activo, p.foto,
+                            s.nombre as sucursal,
+                            (SELECT COUNT(*) FROM venta WHERE producto_id = p.id) as total_vendidas
+                        FROM producto p
+                        LEFT JOIN sucursal s ON p.sucursal_id = s.id
+                        ORDER BY s.nombre, p.nombre
+                    """))
+
+                    # Vista: Usuarios con detalles de rol y sucursal
+                    conn.execute(text("""
+                        CREATE VIEW vista_usuarios AS
+                        SELECT
+                            u.id, u.username, u.email, u.nombre_completo,
+                            u.es_admin, u.sucursal_id, u.activo,
+                            s.nombre as sucursal,
+                            CASE
+                                WHEN u.es_admin THEN 'Admin Global'
+                                WHEN u.es_admin_de_sucursal THEN 'Admin Sucursal'
+                                ELSE 'Usuario Regular'
+                            END as rol
+                        FROM usuario u
+                        LEFT JOIN sucursal s ON u.sucursal_id = s.id
+                        ORDER BY u.nombre_completo
+                    """))
+
+                    # Vista: Medios de pago con sucursales asignadas
+                    conn.execute(text("""
+                        CREATE VIEW vista_medios_pago AS
+                        SELECT
+                            m.id, m.nombre_abreviado, m.nombre_completo, m.activo, m.orden,
+                            COUNT(DISTINCT ms.sucursal_id) as sucursales_asignadas,
+                            STRING_AGG(DISTINCT s.nombre, ', ' ORDER BY s.nombre) as sucursales_lista
+                        FROM medio_pago m
+                        LEFT JOIN medio_sucursal ms ON m.id = ms.medio_pago_id AND ms.activo = true
+                        LEFT JOIN sucursal s ON ms.sucursal_id = s.id
+                        GROUP BY m.id, m.nombre_abreviado, m.nombre_completo, m.activo, m.orden
+                        ORDER BY m.orden, m.nombre_abreviado
+                    """))
+
+                    # Vista: Operaciones ordenadas (mantener compatibilidad)
                     conn.execute(text("""
                         CREATE VIEW operacion_ordenada AS
-                        SELECT * FROM operacion
-                        ORDER BY hora DESC
+                        SELECT * FROM vista_operaciones
                     """))
-                    print("[+] Vista 'operacion_ordenada' creada correctamente")
+
+                    print("[+] Todas las vistas creadas correctamente")
             except Exception as e:
-                print(f"[!] Error creando vista: {e}")
+                print(f"[!] Error creando vistas: {e}")
 
             # Migración: agregar columnas nuevas si no existen
             # NOTA: En Railway con múltiples workers, los ALTERs pueden causar race conditions
