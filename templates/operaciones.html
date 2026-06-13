@@ -628,21 +628,11 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (!data.success || !data.operaciones) return;
 
-                const currentOpIds = new Set(data.operaciones.map(op => op.id));
-                const newOps = data.operaciones.filter(op => !lastOpIds.has(op.id));
-                const deletedOps = Array.from(lastOpIds).filter(id => !currentOpIds.has(id));
+                // Re-renderizar completamente la tabla
+                tbody.innerHTML = '';
 
-                // Eliminar filas de operaciones borradas
-                deletedOps.forEach(id => {
-                    const row = document.getElementById(`fila-${id}`);
-                    if (row) row.remove();
-                });
-
-                // Agregar nuevas filas al principio
-                newOps.forEach(op => {
-                    const existingRow = document.getElementById(`fila-${op.id}`);
-                    if (existingRow) return;
-
+                // Agregar todas las operaciones (ya vienen ordenadas DESC del API)
+                data.operaciones.forEach(op => {
                     const row = document.createElement('tr');
                     row.id = `fila-${op.id}`;
 
@@ -666,10 +656,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                         </td>
                     `;
-                    tbody.insertBefore(row, tbody.firstChild);
+                    tbody.appendChild(row);
                 });
-
-                lastOpIds = currentOpIds;
             })
             .catch(err => console.warn('[live] Error actualizando tabla:', err));
     }
