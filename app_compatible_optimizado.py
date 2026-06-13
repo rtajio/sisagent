@@ -3071,8 +3071,8 @@ Tu respuesta EXACTA:
 OBLIGATORIO: usa editar_operacion() para cambios de monto/comisión.
 
 Si el usuario pide cambiar el medio de pago:
-  LLAMA editar_operacion({monto: <nuevo_monto>}) para cambiar el monto primero.
-  LUEGO explica que el medio NO se puede cambiar (solo después de ejecutar la función).
+  LLAMA editar_operacion({medio: "NUEVO_MEDIO"}) para cambiar el medio.
+  Sí se puede cambiar el medio (siempre que esté habilitado en la sucursal).
 
 NO HAGAS ESTO JAMÁS:
 - Responder en texto diciendo "Disculpa, no puedo..."
@@ -3326,13 +3326,14 @@ _HERRAMIENTAS_DECLARACIONES = [
     },
     {
         "name": "editar_operacion",
-        "description": "EDITA una operación bancaria existente directamente (sin confirmación). Cambia el monto y/o comisión. Si no se proporciona operacion_id, edita automáticamente la última operación del día. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las que él registró.",
+        "description": "EDITA una operación bancaria existente directamente (sin confirmación). Cambia el monto, comisión y/o medio de pago. Si no se proporciona operacion_id, edita automáticamente la última operación del día. Permisos: admin global cualquiera; admin de sucursal cualquiera de su sucursal; usuario regular solo las que él registró.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "operacion_id": {"type": "integer", "description": "(Opcional) ID de la operación a editar. Si se omite, edita la última del día."},
                 "monto": {"type": "number", "description": "(Opcional) Nuevo monto en soles"},
                 "comision": {"type": "number", "description": "(Opcional) Nueva comisión manual en soles"},
+                "medio": {"type": "string", "description": "(Opcional) Nuevo medio de pago (ej: BCP, BBVA, YAPE, etc. - debe estar habilitado en la sucursal)"},
                 "motivo_descuento": {"type": "string", "description": "(Opcional) Motivo de la comisión manual"},
             },
         },
