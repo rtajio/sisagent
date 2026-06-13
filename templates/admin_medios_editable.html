@@ -99,16 +99,176 @@
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    let mediosData = {};
+let mediosData = {};
 
+// Funciones globales para edición
+function abrirEditar(medioId) {
+    const medio = mediosData[medioId];
+    if (!medio) {
+        console.error('Medio no encontrado:', medioId);
+        return;
+    }
+    document.getElementById('input-id-editar').value = medioId;
+    document.getElementById('input-abr-editar').value = medio.nombre_abreviado;
+    document.getElementById('input-nombre-editar').value = medio.nombre_completo;
+    const modal = new bootstrap.Modal(document.getElementById('modal-editar-medio'));
+    modal.show();
+}
+
+function editarMedio() {
+    const id = document.getElementById('input-id-editar').value;
+    const abr = document.getElementById('input-abr-editar').value.trim();
+    const nombre = document.getElementById('input-nombre-editar').value.trim();
+
+    if (!abr || !nombre) {
+        showNotification('Completa todos los campos', 'warning');
+        return;
+    }
+
+    fetch('/api/medios/' + id + '/editar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            nombre_abreviado: abr,
+            nombre_completo: nombre
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Medio actualizado', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('modal-editar-medio')).hide();
+            cargarMedios();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(e => showNotification('Error: ' + e.message, 'error'));
+}
+
+function eliminarMedio(medioId) {
+    if (!confirm('Eliminar este medio de pago?')) return;
+
+    fetch('/api/medios/' + medioId + '/eliminar', {
+        method: 'POST'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Medio eliminado', 'success');
+            cargarMedios();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(e => showNotification('Error: ' + e.message, 'error'));
+}
+
+function toggleActivo(medioId) {
+    const medio = mediosData[medioId];
+    fetch('/api/medios/' + medioId + '/activar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            cargarMedios();
+        }
+    })
+    .catch(e => {
+        console.error('Error:', e);
+        cargarMedios();
+    });
+}
+
+function cargarMedios() {
+    fetch('/api/medios/lista')
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            showNotification('Error al cargar medios', 'error');
+            return;
+        }
+
+        const tbody = document.getElementById('tbody-medios');
+        tbody.innerHTML = '';
+
+        for (const medio of data.medios) {
+            mediosData[medio.id] = medio;
+
+            const tr = document.createElement('tr');
+            tr.className = medio.activo ? 'medio-activo' : 'medio-inactivo';
+
+            tr.innerHTML = `
+                <td>${medio.id}</td>
+                <td><strong>${medio.nombre_abreviado}</strong></td>
+                <td>${medio.nombre_completo}</td>
+                <td><span class="badge bg-info">${medio.sucursales_count}</span></td>
+                <td>
+                    <input type="checkbox" class="form-check-input"
+                           data-medio-id="${medio.id}"
+                           onchange="toggleActivo(${medio.id})"
+                           ${medio.activo ? 'checked' : ''}>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-warning btn-editar" data-id="${medio.id}" type="button">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger btn-eliminar" data-id="${medio.id}" type="button">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+    })
+    .catch(e => {
+        console.error('Error en cargarMedios:', e);
+        showNotification('Error al cargar medios: ' + e.message, 'error');
+    });
+}
+
+function crearMedio() {
+    const abr = document.getElementById('input-abr-crear').value.trim();
+    const nombre = document.getElementById('input-nombre-crear').value.trim();
+
+    if (!abr || !nombre) {
+        showNotification('Completa todos los campos', 'warning');
+        return;
+    }
+
+    fetch('/api/medios/crear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            nombre_abreviado: abr,
+            nombre_completo: nombre
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Medio creado', 'success');
+            document.getElementById('form-crear-medio').reset();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modal-crear-medio'));
+            if (modal) modal.hide();
+            cargarMedios();
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(e => showNotification('Error: ' + e.message, 'error'));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
     // Cargar medios al iniciar
     cargarMedios();
 
     // Refrescar cada 5 segundos
     setInterval(cargarMedios, 5000);
 
-    // EVENT LISTENERS
+    // Event listeners para botones
     document.getElementById('btn-guardar-crear').addEventListener('click', crearMedio);
     document.getElementById('btn-guardar-editar').addEventListener('click', editarMedio);
 
@@ -119,174 +279,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (btnEditar) {
             const medioId = btnEditar.dataset.id;
-            abrirEditar(medioId);
+            abrirEditar(parseInt(medioId));
         }
 
         if (btnEliminar) {
             const medioId = btnEliminar.dataset.id;
-            eliminarMedio(medioId);
+            eliminarMedio(parseInt(medioId));
         }
     });
-
-    async function cargarMedios() {
-        try {
-            const resp = await fetch('/api/medios/lista');
-            const data = await resp.json();
-
-            if (!data.success) {
-                showNotification('Error al cargar medios', 'error');
-                return;
-            }
-
-            const tbody = document.getElementById('tbody-medios');
-            tbody.innerHTML = '';
-
-            for (const medio of data.medios) {
-                mediosData[medio.id] = medio;
-
-                const tr = document.createElement('tr');
-                tr.className = medio.activo ? 'medio-activo' : 'medio-inactivo';
-                tr.innerHTML = `
-                    <td>${medio.id}</td>
-                    <td><strong>${medio.nombre_abreviado}</strong></td>
-                    <td>${medio.nombre_completo}</td>
-                    <td><span class="badge bg-info">${medio.sucursales_count}</span></td>
-                    <td>
-                        <input type="checkbox" class="form-check-input" ${medio.activo ? 'checked' : ''}
-                               onchange="toggleActivo(${medio.id})">
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-warning btn-editar" data-id="${medio.id}" type="button">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-danger btn-eliminar" data-id="${medio.id}" type="button">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            }
-        } catch (e) {
-            console.error('Error en cargarMedios:', e);
-        }
-    }
-
-    window.crearMedio = async function() {
-        const abr = document.getElementById('input-abr-crear').value.trim();
-        const nombre = document.getElementById('input-nombre-crear').value.trim();
-
-        if (!abr || !nombre) {
-            showNotification('Completa todos los campos', 'warning');
-            return;
-        }
-
-        try {
-            const resp = await fetch('/api/medios/crear', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nombre_abreviado: abr,
-                    nombre_completo: nombre
-                })
-            });
-
-            const data = await resp.json();
-
-            if (data.success) {
-                showNotification('Medio creado', 'success');
-                document.getElementById('form-crear-medio').reset();
-                const modal = bootstrap.Modal.getInstance(document.getElementById('modal-crear-medio'));
-                if (modal) modal.hide();
-                cargarMedios();
-            } else {
-                showNotification(data.error, 'error');
-            }
-        } catch (e) {
-            showNotification('Error: ' + e.message, 'error');
-        }
-    };
-
-    window.abrirEditar = function(medioId) {
-        const medio = mediosData[medioId];
-        document.getElementById('input-id-editar').value = medioId;
-        document.getElementById('input-abr-editar').value = medio.nombre_abreviado;
-        document.getElementById('input-nombre-editar').value = medio.nombre_completo;
-        new bootstrap.Modal(document.getElementById('modal-editar-medio')).show();
-    };
-
-    window.editarMedio = async function() {
-        const id = document.getElementById('input-id-editar').value;
-        const abr = document.getElementById('input-abr-editar').value.trim();
-        const nombre = document.getElementById('input-nombre-editar').value.trim();
-
-        if (!abr || !nombre) {
-            showNotification('Completa todos los campos', 'warning');
-            return;
-        }
-
-        try {
-            const resp = await fetch('/api/medios/' + id + '/editar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nombre_abreviado: abr,
-                    nombre_completo: nombre
-                })
-            });
-
-            const data = await resp.json();
-
-            if (data.success) {
-                showNotification('Medio actualizado', 'success');
-                const modal = bootstrap.Modal.getInstance(document.getElementById('modal-editar-medio'));
-                if (modal) modal.hide();
-                cargarMedios();
-            } else {
-                showNotification(data.error, 'error');
-            }
-        } catch (e) {
-            showNotification('Error: ' + e.message, 'error');
-        }
-    };
-
-    window.toggleActivo = async function(medioId) {
-        const medio = mediosData[medioId];
-        try {
-            const resp = await fetch('/api/medios/' + medioId + '/activar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-
-            const data = await resp.json();
-            if (data.ok) {
-                cargarMedios();
-            }
-        } catch (e) {
-            console.error('Error:', e);
-            cargarMedios();
-        }
-    };
-
-    window.eliminarMedio = async function(medioId) {
-        if (!confirm('Eliminar este medio de pago?')) return;
-
-        try {
-            const resp = await fetch('/api/medios/' + medioId + '/eliminar', {
-                method: 'POST'
-            });
-
-            const data = await resp.json();
-
-            if (data.success) {
-                showNotification('Medio eliminado', 'success');
-                cargarMedios();
-            } else {
-                showNotification(data.error, 'error');
-            }
-        } catch (e) {
-            showNotification('Error: ' + e.message, 'error');
-        }
-    };
 });
 </script>
 {% endblock %}
