@@ -884,7 +884,7 @@ def operaciones():
 @app.route('/api/operaciones/lista', methods=['GET'])
 @login_required
 def api_operaciones_lista():
-    """Devuelve lista JSON de operaciones del día para live updates en tabla."""
+    """Devuelve lista JSON de operaciones del día para live updates en tabla. AHORA DESDE LA VIEW."""
     try:
         ahora = get_peru_time()
         hoy = ahora.date()
@@ -892,31 +892,44 @@ def api_operaciones_lista():
         inicio_hoy = datetime.combine(hoy, datetime.min.time())
         fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
 
+        # Query desde la vista SQL vista_operaciones (ya tiene ORDER BY DESC)
         if current_user.es_admin:
-            query = Operacion.query
+            query = db.session.execute(db.text("""
+                SELECT id, monto, comision, hora, username, nombre_completo,
+                       sucursal, medio_nombre, medio_pago_id
+                FROM vista_operaciones
+                WHERE hora >= :inicio AND hora <= :fin
+            """), {'inicio': inicio_hoy, 'fin': fin_hoy})
         elif current_user.es_admin_de_sucursal():
-            query = Operacion.query.filter_by(sucursal_id=current_user.sucursal_id)
+            query = db.session.execute(db.text("""
+                SELECT id, monto, comision, hora, username, nombre_completo,
+                       sucursal, medio_nombre, medio_pago_id
+                FROM vista_operaciones
+                WHERE sucursal_id = :sucursal_id AND hora >= :inicio AND hora <= :fin
+            """), {'sucursal_id': current_user.sucursal_id, 'inicio': inicio_hoy, 'fin': fin_hoy})
         else:
-            query = Operacion.query.filter_by(usuario_id=current_user.id)
+            query = db.session.execute(db.text("""
+                SELECT id, monto, comision, hora, username, nombre_completo,
+                       sucursal, medio_nombre, medio_pago_id
+                FROM vista_operaciones
+                WHERE usuario_id = :user_id AND hora >= :inicio AND hora <= :fin
+            """), {'user_id': current_user.id, 'inicio': inicio_hoy, 'fin': fin_hoy})
 
-        # Usar vista SQL que ya ordena por hora DESC automáticamente
-        operaciones = query.filter(
-            Operacion.hora >= inicio_hoy,
-            Operacion.hora <= fin_hoy
-        ).all()
-        # Los items ya vienen ordenados de la vista SQL (DESC)
+        operaciones = []
+        for row in query.fetchall():
+            operaciones.append({
+                'id': row[0],
+                'monto': float(row[1]),
+                'comision': float(row[2]),
+                'hora': format_peru_time(row[3]),
+                'usuario': row[5] or row[4],
+                'sucursal': row[6],
+                'medio': row[7]
+            })
 
         return jsonify({
             'success': True,
-            'operaciones': [{
-                'id': op.id,
-                'hora': format_peru_time(op.hora),
-                'monto': float(op.monto),
-                'comision': float(op.comision),
-                'medio': op.medio,
-                'usuario': op.usuario.nombre_completo or op.usuario.username,
-                'sucursal': op.usuario.sucursal.nombre if op.usuario.sucursal else 'N/A'
-            } for op in operaciones]
+            'operaciones': operaciones
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
