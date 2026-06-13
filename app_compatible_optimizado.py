@@ -65,6 +65,23 @@ def _to_peru(dt):
     """
     if dt is None:
         return None
+    # Robustez: el SQL crudo (db.text) puede devolver la fecha/hora como string
+    # en algunos backends (p.ej. SQLite). Parsear a datetime antes de usar tzinfo.
+    if isinstance(dt, str):
+        s = dt.strip()
+        if not s:
+            return None
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            for _fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+                try:
+                    dt = datetime.strptime(s, _fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return None
     if dt.tzinfo is not None:
         # Ya tiene zona horaria → convertir a Perú
         return dt.astimezone(peru_tz)
@@ -946,9 +963,13 @@ def api_operaciones_lista():
         fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
 
         # Query directa (sin usar vista para evitar problemas de Railway)
-        # PERFORMANCE FIX: Filter by TODAY's operations (based on 'hora' column = operation datetime)
+        # CONSISTENCIA: filtrar el día con RANGO de 'hora' (hora >= inicio AND hora <= fin),
+        # el MISMO método que usa el render server-side y el cálculo de comisión del día.
+        # (DATE(o.hora) = :hoy daba resultados vacíos en producción mientras el rango sí
+        #  encontraba las operaciones — por eso la tabla quedaba vacía aunque la comisión
+        #  del día mostraba S/ > 0. Unificar el filtro elimina esa discrepancia.)
         if current_user.es_admin:
-            # Admin: operaciones de HOY (todas las sucursales)
+            # Admin: operaciones de HOY de TODAS las sucursales
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
                        s.nombre, m.nombre_abreviado
@@ -956,9 +977,9 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-                WHERE DATE(o.hora) = :hoy
+                WHERE o.hora >= :inicio AND o.hora <= :fin
                 ORDER BY o.hora DESC
-            """), {'hoy': hoy})
+            """), {'inicio': inicio_hoy, 'fin': fin_hoy})
         elif current_user.es_admin_de_sucursal():
             # Admin de sucursal: operaciones de HOY en su sucursal
             query = db.session.execute(db.text("""
@@ -968,11 +989,11 @@ def api_operaciones_lista():
                 JOIN usuario u ON o.usuario_id = u.id
                 JOIN sucursal s ON o.sucursal_id = s.id
                 LEFT JOIN medio_pago m ON o.medio = m.nombre_abreviado
-                WHERE o.sucursal_id = :sucursal_id AND DATE(o.hora) = :hoy
+                WHERE o.sucursal_id = :sucursal_id AND o.hora >= :inicio AND o.hora <= :fin
                 ORDER BY o.hora DESC
-            """), {'sucursal_id': current_user.sucursal_id, 'hoy': hoy})
+            """), {'sucursal_id': current_user.sucursal_id, 'inicio': inicio_hoy, 'fin': fin_hoy})
         else:
-            # Usuario normal: solo sus operaciones de HOY
+            # Usuario normal: solo SUS operaciones de HOY
             query = db.session.execute(db.text("""
                 SELECT o.id, o.monto, o.comision, o.hora, u.username, u.nombre_completo,
                        s.nombre, m.nombre_abreviado
@@ -1633,9 +1654,13 @@ def ventas():
         sucursal_id = current_user.sucursal_id
         query = Venta.query.filter(Venta.usuario_id == current_user.id)
 
-    # Solo las ventas de hoy (hora de Perú)
+    # Solo las ventas de hoy (hora de Perú).
+    # CONSISTENCIA: filtrar por RANGO de 'fecha' (igual que operaciones), NO con func.date().
+    # Venta.fecha es DateTime naive (wall-clock Perú); el rango es el método robusto y uniforme.
     hoy = get_peru_time().date()
-    query = query.filter(db.func.date(Venta.fecha) == hoy)
+    inicio_hoy = datetime.combine(hoy, datetime.min.time())
+    fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
+    query = query.filter(Venta.fecha >= inicio_hoy, Venta.fecha <= fin_hoy)
 
     ventas_hoy = query.order_by(Venta.fecha.desc()).all()
     total_ventas = sum(float(v.monto) for v in ventas_hoy)
@@ -3802,9 +3827,13 @@ def _tool_buscar_operaciones(args, usuario):
 
     limite = max(1, min(int(args.get("limite", 10) or 10), 30))
 
+    # CONSISTENCIA: rango de 'hora' (no func.date()), igual que /operaciones.
+    _inicio = datetime.combine(fecha, datetime.min.time())
+    _fin = datetime.combine(fecha, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
     q = Operacion.query.filter(
         Operacion.sucursal_id.in_(sucursal_ids),
-        db.func.date(Operacion.hora) == fecha,
+        Operacion.hora >= _inicio,
+        Operacion.hora <= _fin,
     )
     # Usuario regular solo ve sus propias operaciones
     if not usuario.es_admin and not usuario.es_admin_de_sucursal():
@@ -3852,9 +3881,13 @@ def _tool_buscar_ventas(args, usuario):
 
     limite = max(1, min(int(args.get("limite", 10) or 10), 30))
 
+    # CONSISTENCIA: rango de 'fecha' (no func.date()), igual que /ventas y /operaciones.
+    _inicio = datetime.combine(fecha, datetime.min.time())
+    _fin = datetime.combine(fecha, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
     q = Venta.query.filter(
         Venta.sucursal_id.in_(sucursal_ids),
-        db.func.date(Venta.fecha) == fecha,
+        Venta.fecha >= _inicio,
+        Venta.fecha <= _fin,
     )
     if not usuario.es_admin and not usuario.es_admin_de_sucursal():
         q = q.filter(Venta.usuario_id == usuario.id)
@@ -4073,9 +4106,13 @@ def _tool_eliminar_operacion(args, usuario):
         # Buscar la última operación de hoy
         from datetime import datetime as _datetime
         hoy = get_peru_time().date()
+        # CONSISTENCIA: rango de 'hora' (no func.date()) para seleccionar la última de hoy.
+        _inicio = datetime.combine(hoy, datetime.min.time())
+        _fin = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
         q = Operacion.query.filter(
             Operacion.sucursal_id.in_(sucursal_ids),
-            db.func.date(Operacion.hora) == hoy,
+            Operacion.hora >= _inicio,
+            Operacion.hora <= _fin,
         )
         if not usuario.es_admin:
             q = q.filter_by(usuario_id=usuario.id)
@@ -4119,9 +4156,13 @@ def _tool_editar_operacion(args, usuario):
             raise ValueError("No tienes sucursales asignadas.")
         sucursal_ids = [s.id for s in sucursales]
         hoy = get_peru_time().date()
+        # CONSISTENCIA: rango de 'hora' (no func.date()) para seleccionar la última de hoy.
+        _inicio = datetime.combine(hoy, datetime.min.time())
+        _fin = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
         q = Operacion.query.filter(
             Operacion.sucursal_id.in_(sucursal_ids),
-            db.func.date(Operacion.hora) == hoy,
+            Operacion.hora >= _inicio,
+            Operacion.hora <= _fin,
         )
         if not usuario.es_admin:
             q = q.filter_by(usuario_id=usuario.id)
@@ -4792,9 +4833,13 @@ def _ejecutar_eliminar_operacion_validada(args, usuario):
             raise ValueError("No tienes sucursales asignadas.")
         sucursal_ids = [s.id for s in sucursales]
         hoy = get_peru_time().date()
+        # CONSISTENCIA: rango de 'hora' (no func.date()) para seleccionar la última de hoy.
+        _inicio = datetime.combine(hoy, datetime.min.time())
+        _fin = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
         q = Operacion.query.filter(
             Operacion.sucursal_id.in_(sucursal_ids),
-            db.func.date(Operacion.hora) == hoy,
+            Operacion.hora >= _inicio,
+            Operacion.hora <= _fin,
         )
         if not usuario.es_admin:
             q = q.filter_by(usuario_id=usuario.id)

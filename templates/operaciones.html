@@ -628,10 +628,24 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(r => r.json())
             .then(data => {
                 console.log('[updateTable] Respuesta:', data.operaciones ? data.operaciones.length + ' ops' : 'sin ops', data);
-                if (!data.success || !data.operaciones) return;
+                // Solo reemplazar la tabla con datos AUTORITATIVOS. Si la respuesta no es
+                // válida (error o transitoria), PRESERVAR las filas ya renderizadas en lugar
+                // de borrarlas — así un hipo del backend nunca deja la tabla en blanco.
+                if (!data.success || !Array.isArray(data.operaciones)) return;
 
                 // PERFORMANCE FIX: Use DocumentFragment to batch DOM updates (1 reflow instead of 100+)
                 const fragment = document.createDocumentFragment();
+
+                if (data.operaciones.length === 0) {
+                    // Estado vacío autoritativo: la API respondió OK con cero operaciones hoy.
+                    const emptyRow = document.createElement('tr');
+                    const colspan = hasUserColumn ? 8 : 6;
+                    emptyRow.innerHTML = `<td colspan="${colspan}" class="text-center text-muted py-4">No hay operaciones registradas hoy</td>`;
+                    fragment.appendChild(emptyRow);
+                    tbody.innerHTML = '';
+                    tbody.appendChild(fragment);
+                    return;
+                }
 
                 // Agregar todas las operaciones (ya vienen ordenadas DESC del API)
                 console.log('[updateTable] Renderizando', data.operaciones.length, 'operaciones');
