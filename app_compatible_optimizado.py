@@ -4452,8 +4452,8 @@ def _ejecutar_editar_operacion_validada(args, usuario):
             motivo = None
 
     # Guardar valores anteriores ANTES de actualizar
-    monto_anterior = operacion.monto
-    comision_anterior = operacion.comision
+    monto_anterior = float(operacion.monto)
+    comision_anterior = float(operacion.comision)
 
     # Calcular diferencias
     monto_diferencia = monto_nuevo - monto_anterior
