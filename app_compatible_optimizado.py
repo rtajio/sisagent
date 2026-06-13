@@ -405,6 +405,47 @@ class PronunciacionAprendida(db.Model):
         db.UniqueConstraint('usuario_id', 'termino_original', 'termino_correcto', name='uq_pronunciacion'),
     )
 
+class BotCustomFunction(db.Model):
+    """Funciones personalizadas enseñadas por admin al chatbot"""
+    __tablename__ = 'bot_custom_function'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(255), nullable=False, unique=True)  # "registrar_pago_yape"
+    descripcion = db.Column(db.Text, nullable=False)
+    parametros = db.Column(db.JSON, nullable=False)  # [{"name": "monto", "type": "float"}, ...]
+    logica = db.Column(db.Text, nullable=False)  # Instrucciones/pseudocódigo
+    admin_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creada = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
+    admin = db.relationship('Usuario', foreign_keys=[admin_id], backref='funciones_enseñadas')
+
+class BotLearnedPhrase(db.Model):
+    """Frases/jerga aprendidas del usuario (auto-learning)"""
+    __tablename__ = 'bot_learned_phrase'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    frase_original = db.Column(db.String(500), nullable=False)  # "registra una opa"
+    frase_normalizada = db.Column(db.String(500), nullable=False)  # "registra una operación"
+    categoria = db.Column(db.String(50))  # "operacion", "producto", "venta"
+    confianza = db.Column(db.Float, default=0.8)  # 0.0-1.0
+    frecuencia = db.Column(db.Integer, default=1)
+    fecha_aprendida = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
+    usuario = db.relationship('Usuario', backref='frases_aprendidas')
+
+    __table_args__ = (
+        db.UniqueConstraint('usuario_id', 'frase_original', 'frase_normalizada', name='uq_learned_phrase'),
+    )
+
+class BotTeachingHistory(db.Model):
+    """Historial de auditoría: qué enseñó el admin"""
+    __tablename__ = 'bot_teaching_history'
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    tipo = db.Column(db.String(50), nullable=False)  # "function", "phrase", "pronunciation"
+    contenido = db.Column(db.Text, nullable=False)
+    usuarios_afectados = db.Column(db.Integer, default=1)
+    fecha = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
+    admin = db.relationship('Usuario', foreign_keys=[admin_id], backref='historial_enseñanza')
+
 # OPTIMIZACIÓN ULTRA: Cache de medios de pago
 @cache.memoize(timeout=300)
 def get_medios_pago_cache():
@@ -6729,6 +6770,208 @@ except Exception as e:
     import traceback
     print(f"[WARN] Advertencia en init_db: {e}")
     # NO mostrar traceback completo - puede ser silencioso
+
+# ========== FASE 2: MACHINE LEARNING & VOICE (Gemini) ==========
+
+# Helper: Fuzzy matching de frases aprendidas
+def _buscar_frase_aprendida(usuario_id, frase_ingresada, umbral_confianza=0.7):
+    """
+    Busca en frases aprendidas si la frase ingresada coincide.
+    Usa similitud de palabras simple (no embeddings) para rapidez.
+    """
+    from difflib import SequenceMatcher
+
+    frases = BotLearnedPhrase.query.filter_by(usuario_id=usuario_id).all()
+
+    mejores = []
+    for frase_db in frases:
+        # Comparar original con ingresada
+        ratio = SequenceMatcher(None,
+                                frase_ingresada.lower().split(),
+                                frase_db.frase_original.lower().split()).ratio()
+
+        if ratio >= umbral_confianza:
+            mejores.append({
+                'frase_normalizada': frase_db.frase_normalizada,
+                'confianza': ratio,
+                'categoria': frase_db.categoria
+            })
+
+    # Retornar la mejor coincidencia si la hay
+    if mejores:
+        mejores.sort(key=lambda x: x['confianza'], reverse=True)
+        return mejores[0]
+
+    return None
+
+# Endpoint: Admin enseña función nueva
+@app.route('/api/bot/teach_function', methods=['POST'])
+@login_required
+def api_teach_function():
+    """Admin enseña nueva función al chatbot"""
+    if not current_user.es_admin:
+        return jsonify({'success': False, 'message': 'Solo admin puede enseñar funciones'}), 403
+
+    try:
+        data = request.json
+        nombre = data.get('nombre', '').strip()
+        descripcion = data.get('descripcion', '').strip()
+        parametros = data.get('parametros', [])  # JSON list
+        logica = data.get('logica', '').strip()
+
+        if not all([nombre, descripcion, logica]):
+            return jsonify({'success': False, 'message': 'Faltan campos requeridos'}), 400
+
+        # Verificar que no exista
+        if BotCustomFunction.query.filter_by(nombre=nombre).first():
+            return jsonify({'success': False, 'message': f'Función "{nombre}" ya existe'}), 400
+
+        # Crear función
+        func = BotCustomFunction(
+            nombre=nombre,
+            descripcion=descripcion,
+            parametros=parametros,
+            logica=logica,
+            admin_id=current_user.id,
+            activo=True
+        )
+        db.session.add(func)
+
+        # Registrar en historial
+        historial = BotTeachingHistory(
+            admin_id=current_user.id,
+            tipo='function',
+            contenido=f"Función: {nombre}",
+            usuarios_afectados=Usuario.query.filter_by(activo=True).count()
+        )
+        db.session.add(historial)
+        db.session.commit()
+
+        clear_cache()
+        return jsonify({
+            'success': True,
+            'message': f'Función "{nombre}" enseñada exitosamente',
+            'function_id': func.id
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# Endpoint: Sistema aprende frase del usuario
+@app.route('/api/bot/learn_phrase', methods=['POST'])
+@login_required
+def api_learn_phrase():
+    """Sistema aprende frase/jerga del usuario (auto-learning)"""
+    try:
+        data = request.json
+        frase_original = data.get('frase_original', '').strip()
+        frase_normalizada = data.get('frase_normalizada', '').strip()
+        categoria = data.get('categoria', '').strip()
+
+        if not all([frase_original, frase_normalizada]):
+            return jsonify({'success': False, 'message': 'Faltan campos'}), 400
+
+        # Limit: máx 500 frases por usuario (evitar explotar)
+        count = BotLearnedPhrase.query.filter_by(usuario_id=current_user.id).count()
+        if count >= 500:
+            return jsonify({'success': False, 'message': 'Máximo de frases aprendidas alcanzado'}), 400
+
+        # Ver si ya existe
+        existente = BotLearnedPhrase.query.filter_by(
+            usuario_id=current_user.id,
+            frase_original=frase_original,
+            frase_normalizada=frase_normalizada
+        ).first()
+
+        if existente:
+            # Incrementar frecuencia
+            existente.frecuencia += 1
+            existente.fecha_aprendida = get_peru_time().replace(tzinfo=None)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Frase reforzada'})
+
+        # Crear nueva
+        frase = BotLearnedPhrase(
+            usuario_id=current_user.id,
+            frase_original=frase_original,
+            frase_normalizada=frase_normalizada,
+            categoria=categoria,
+            confianza=0.85,
+            frecuencia=1
+        )
+        db.session.add(frase)
+        db.session.commit()
+
+        clear_cache()
+        return jsonify({'success': True, 'message': 'Frase aprendida'})
+
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# Endpoint: Listar funciones custom para usuario
+@app.route('/api/bot/custom_functions/<int:user_id>', methods=['GET'])
+@login_required
+def api_get_custom_functions(user_id):
+    """Lista funciones personalizadas disponibles para usuario"""
+    try:
+        # Admin ve todas, usuario ve todas disponibles
+        funciones = BotCustomFunction.query.filter_by(activo=True).all()
+
+        return jsonify({
+            'success': True,
+            'funciones': [
+                {
+                    'id': f.id,
+                    'nombre': f.nombre,
+                    'descripcion': f.descripcion,
+                    'parametros': f.parametros,
+                    'enseñada_por': f.admin.username if f.admin else 'sistema'
+                }
+                for f in funciones
+            ]
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# Endpoint: Listar frases aprendidas del usuario
+@app.route('/api/bot/learned_phrases/<int:user_id>', methods=['GET'])
+@login_required
+def api_get_learned_phrases(user_id):
+    """Lista frases que el usuario ha aprendido"""
+    if user_id != current_user.id and not current_user.es_admin:
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+
+    try:
+        frases = BotLearnedPhrase.query.filter_by(usuario_id=user_id).all()
+
+        return jsonify({
+            'success': True,
+            'frases': [
+                {
+                    'id': f.id,
+                    'original': f.frase_original,
+                    'normalizada': f.frase_normalizada,
+                    'categoria': f.categoria,
+                    'confianza': f.confianza,
+                    'frecuencia': f.frecuencia,
+                    'fecha_aprendida': f.fecha_aprendida.isoformat() if f.fecha_aprendida else None
+                }
+                for f in frases
+            ],
+            'total': len(frases)
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ========== FIN FASE 2 ==========
 
 # Para desarrollo local
 if __name__ == '__main__':
