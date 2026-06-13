@@ -4059,15 +4059,15 @@ CHATBOT_TOOLS = {
     "listar_usuarios":        {"handler": _tool_listar_usuarios,        "requires_confirmation": False},
     "listar_sucursales":      {"handler": _tool_listar_sucursales,      "requires_confirmation": False},
     "registrar_venta":         {"handler": _tool_registrar_venta,             "requires_confirmation": True},
-    "registrar_operacion":     {"handler": _tool_registrar_operacion,         "requires_confirmation": True},
-    "editar_operacion":        {"handler": _tool_editar_operacion,            "requires_confirmation": True},
-    "crear_producto":   {"handler": _tool_crear_producto,   "requires_confirmation": True},
-    "editar_producto":  {"handler": _tool_editar_producto,  "requires_confirmation": True},
-    "eliminar_producto":{"handler": _tool_eliminar_producto,"requires_confirmation": True},
+    "registrar_operacion":     {"handler": _tool_registrar_operacion,         "requires_confirmation": False},
+    "editar_operacion":        {"handler": _tool_editar_operacion,            "requires_confirmation": False},
+    "crear_producto":   {"handler": _tool_crear_producto,   "requires_confirmation": False},
+    "editar_producto":  {"handler": _tool_editar_producto,  "requires_confirmation": False},
+    "eliminar_producto":{"handler": _tool_eliminar_producto,"requires_confirmation": False},
     "eliminar_operacion":{"handler": _tool_eliminar_operacion,"requires_confirmation": False},
-    "eliminar_venta":   {"handler": _tool_eliminar_venta,   "requires_confirmation": True},
-    "crear_usuario":    {"handler": _tool_crear_usuario,    "requires_confirmation": True},
-    "crear_sucursal":   {"handler": _tool_crear_sucursal,   "requires_confirmation": True},
+    "eliminar_venta":   {"handler": _tool_eliminar_venta,   "requires_confirmation": False},
+    "crear_usuario":    {"handler": _tool_crear_usuario,    "requires_confirmation": False},
+    "crear_sucursal":   {"handler": _tool_crear_sucursal,   "requires_confirmation": False},
 }
 
 # Agregar declaraciones de herramientas (para Claude)
