@@ -4776,10 +4776,12 @@ def _ejecutar_turno_chat(mensajes, usuario, max_iteraciones=4):
         # Procesar tool calls
         herramientas_ejecucion_directa = list(EJECUTORES_DIRECTOS.keys())
         tool_calls_no_mutativos = []
+        print(f"[DEBUG] herramientas_ejecucion_directa: {herramientas_ejecucion_directa}")
 
         for tool_call in tool_calls:
             nombre = tool_call.get("name")
             fargs = tool_call.get("input") or {}
+            print(f"[DEBUG] tool_call nombre: {nombre}, en ejecutores directos: {nombre in herramientas_ejecucion_directa}")
 
             # Herramientas que ejecutan directamente (sin confirmacion)
             if nombre in herramientas_ejecucion_directa:
