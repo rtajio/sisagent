@@ -184,13 +184,34 @@
         .main-content.expanded { margin-left: 0; }
 
         /* Chat responsivo: desplazar contenido cuando el chat está abierto */
-        .main-content.chat-open {
-            margin-right: 420px;
+        .main-content {
+            transition: margin-right 0.3s ease;
         }
-        @media (max-width: 768px) {
+        .main-content.chat-open {
+            margin-right: 430px;  /* 380px chat + 24px right + 26px gap */
+        }
+        @media (max-width: 1024px) {
             .main-content.chat-open {
-                margin-right: 0;
-                opacity: 0.5;
+                margin-right: 0;  /* En tablet/mobile, overlayed es OK */
+            }
+        }
+
+        /* Overlay semi-transparente en mobile cuando chat abierto */
+        body.chat-open::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 9997;  /* Debajo del chat (9998) pero encima de todo lo demás */
+            pointer-events: auto;  /* Clickear el overlay cierra el chat */
+            display: none;
+        }
+        @media (max-width: 1024px) {
+            body.chat-open::after {
+                display: block;
             }
         }
 
@@ -1942,11 +1963,13 @@
                 panel.classList.remove('d-none');
                 const mc = document.getElementById('mainContent');
                 if (mc) mc.classList.add('chat-open');
+                document.body.classList.add('chat-open');  // Para overlay en mobile
             }
             function hideChatPanel() {
                 panel.classList.add('d-none');
                 const mc = document.getElementById('mainContent');
                 if (mc) mc.classList.remove('chat-open');
+                document.body.classList.remove('chat-open');  // Quitar overlay
             }
 
             let history = [];
