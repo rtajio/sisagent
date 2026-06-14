@@ -283,6 +283,7 @@ class Usuario(UserMixin, db.Model):
     nombre_completo = db.Column(db.String(100), nullable=True)
     es_admin = db.Column(db.Boolean, default=False)
     es_admin_sucursal = db.Column(db.Boolean, default=False)
+    gestiona_inventario = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
     # Token de sesión: se regenera al cambiar contraseña o al forzar cierre de sesión
     session_token  = db.Column(db.String(36), nullable=True)
@@ -311,6 +312,12 @@ class Usuario(UserMixin, db.Model):
 
     def es_admin_o_admin_sucursal(self):
         return self.es_admin or self.es_admin_de_sucursal()
+
+    def puede_gestionar_inventario(self):
+        """True si es admin global, admin de sucursal, o supervisor de inventario asignado."""
+        if self.es_admin or self.es_admin_de_sucursal():
+            return True
+        return self.gestiona_inventario and self.sucursal_id is not None
 
     def puede_crear_usuario_en_sucursal(self, sucursal_id):
         if self.es_admin:
@@ -1480,7 +1487,7 @@ def inventario():
         Producto.fecha_vencimiento.is_(None),
         Producto.fecha_vencimiento,
     ).all()
-    puede_gestionar = current_user.es_admin_o_admin_sucursal()
+    puede_gestionar = current_user.puede_gestionar_inventario()
 
     return render_template(
         'inventario.html',
@@ -1495,8 +1502,8 @@ def inventario():
 @app.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
 def nuevo_producto():
-    """Agregar un producto al inventario (solo administradores / admins de sucursal)"""
-    if not current_user.es_admin_o_admin_sucursal():
+    """Agregar un producto al inventario (solo administradores / admins de sucursal / supervisores)"""
+    if not current_user.puede_gestionar_inventario():
         flash('No tienes permisos para gestionar el inventario', 'error')
         return redirect(url_for('inventario'))
 
@@ -1571,13 +1578,13 @@ def nuevo_producto():
 @app.route('/inventario/<int:producto_id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_producto(producto_id):
-    """Editar un producto del inventario (solo administradores / admins de sucursal)"""
-    if not current_user.es_admin_o_admin_sucursal():
+    """Editar un producto del inventario (solo administradores / admins de sucursal / supervisores)"""
+    if not current_user.puede_gestionar_inventario():
         flash('No tienes permisos para gestionar el inventario', 'error')
         return redirect(url_for('inventario'))
 
     producto = Producto.query.get_or_404(producto_id)
-    if not current_user.es_admin and producto.sucursal_id != current_user.sucursal_id:
+    if not (current_user.es_admin or current_user.es_admin_de_sucursal()) and producto.sucursal_id != current_user.sucursal_id:
         flash('No tienes permisos para editar este producto', 'error')
         return redirect(url_for('inventario'))
 
@@ -1643,12 +1650,12 @@ def editar_producto(producto_id):
 @login_required
 def eliminar_producto(producto_id):
     """Quitar (desactivar) un producto del inventario"""
-    if not current_user.es_admin_o_admin_sucursal():
+    if not current_user.puede_gestionar_inventario():
         flash('No tienes permisos para gestionar el inventario', 'error')
         return redirect(url_for('inventario'))
 
     producto = Producto.query.get_or_404(producto_id)
-    if not current_user.es_admin and producto.sucursal_id != current_user.sucursal_id:
+    if not (current_user.es_admin or current_user.es_admin_de_sucursal()) and producto.sucursal_id != current_user.sucursal_id:
         flash('No tienes permisos para eliminar este producto', 'error')
         return redirect(url_for('inventario'))
 
@@ -1988,6 +1995,8 @@ def crear_usuario():
             sucursal_id = int(sucursal_id) if sucursal_id else None
             es_admin = 'es_admin' in request.form
             es_admin_sucursal = 'es_admin_sucursal' in request.form
+
+        gestiona_inventario = 'gestiona_inventario' in request.form
         
         # Verificar si el usuario ya existe
         if Usuario.query.filter_by(username=username).first():
@@ -2005,7 +2014,8 @@ def crear_usuario():
             nombre_completo=nombre_completo,
             sucursal_id=sucursal_id,
             es_admin=es_admin,
-            es_admin_sucursal=es_admin_sucursal
+            es_admin_sucursal=es_admin_sucursal,
+            gestiona_inventario=gestiona_inventario
         )
         
         db.session.add(nuevo_usuario)
@@ -2062,6 +2072,10 @@ def editar_usuario(usuario_id):
                 usuario.sucursal_id = int(sucursal_id)
             usuario.es_admin = 'es_admin' in request.form
             usuario.es_admin_sucursal = 'es_admin_sucursal' in request.form
+
+        # Cualquier admin puede asignar supervisor de inventario
+        if current_user.es_admin or current_user.es_admin_de_sucursal():
+            usuario.gestiona_inventario = 'gestiona_inventario' in request.form
         else:
             # Admin de sucursal solo puede asegurar que el usuario esté en su sucursal
             usuario.sucursal_id = current_user.sucursal_id
@@ -6813,6 +6827,8 @@ def init_db():
                                 "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS origen VARCHAR(20)"))
                             _conn.execute(text(
                                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS vocabulario_voz TEXT"))
+                            _conn.execute(text(
+                                "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS gestiona_inventario BOOLEAN DEFAULT FALSE"))
                             # Columnas de Producto agregadas al modelo despues de crear la tabla
                             # (create_all no las agrega a tablas existentes -> rompia /inventario).
                             _conn.execute(text(
@@ -6840,6 +6856,7 @@ def init_db():
                         "ALTER TABLE operacion ADD COLUMN motivo_descuento VARCHAR(200)",
                         "ALTER TABLE operacion ADD COLUMN origen VARCHAR(20)",
                         "ALTER TABLE usuario ADD COLUMN vocabulario_voz TEXT",
+                        "ALTER TABLE usuario ADD COLUMN gestiona_inventario BOOLEAN DEFAULT 0",
                         # Columnas de Producto agregadas al modelo despues de crear la tabla
                         "ALTER TABLE producto ADD COLUMN foto_mimetype VARCHAR(50)",
                         "ALTER TABLE producto ADD COLUMN fecha_creacion TIMESTAMP",
