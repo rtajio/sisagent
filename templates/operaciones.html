@@ -156,7 +156,7 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>ID</th>
+                                    <th>N°</th>
                                     <th>Hora</th>
                                     <th>Monto</th>
                                     <th>Comisión</th>
@@ -663,7 +663,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Agregar todas las operaciones (ya vienen ordenadas DESC del API)
                 console.log('[updateTable] Renderizando', data.operaciones.length, 'operaciones');
-                data.operaciones.forEach(op => {
+                data.operaciones.forEach((op, index) => {
                     const row = document.createElement('tr');
                     row.id = `fila-${op.id}`;
 
@@ -674,7 +674,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     row.innerHTML = `
-                        <td>${op.id}</td>
+                        <td>${index + 1}</td>
                         <td>${op.hora}</td>
                         <td class="font-weight-bold">S/ ${op.monto.toFixed(2)}</td>
                         <td class="text-success font-weight-bold">S/ ${op.comision.toFixed(2)}</td>

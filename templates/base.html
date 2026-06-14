@@ -185,14 +185,23 @@
 
         /* Chat responsivo: desplazar contenido cuando el chat está abierto */
         .main-content {
-            transition: margin-right 0.3s ease;
+            transition: margin-right 0.3s ease, width 0.3s ease;
         }
         .main-content.chat-open {
-            margin-right: 430px;  /* 380px chat + 24px right + 26px gap */
+            margin-right: 430px;
+            overflow-x: auto;
+        }
+        .main-content.chat-open .table-responsive {
+            max-width: 100%;
+        }
+        .main-content.chat-open .card,
+        .main-content.chat-open .table {
+            width: 100% !important;
+            max-width: 100% !important;
         }
         @media (max-width: 1024px) {
             .main-content.chat-open {
-                margin-right: 0;  /* En tablet/mobile, overlayed es OK */
+                margin-right: 0;
             }
         }
 
