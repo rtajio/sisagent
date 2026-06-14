@@ -5965,9 +5965,9 @@ def api_chat_transcribir():
 
         if es_wakeword:
             # Wake-word: transcripcion LITERAL, SIN sesgo de dominio.
-            # OPTIMIZADO PARA LATENCIA < 0.5s: prompt minimalista, tokens reducidos, timeout agresivo
+            # OPTIMIZADO PARA LATENCIA < 1.5s: prompt minimalista, tokens reducidos
             prompt_transcripcion = 'Transcribe en espanol, solo texto, sin contexto. Vacio si no hay voz clara.'
-            gemini_timeout = 3.0  # 3s (latencia de red Railway + Gemini processing)
+            gemini_timeout = 1.5  # 1.5s (optimizado para detección rápida)
             max_tokens = 50  # Solo 1-2 palabras para frase activadora
         else:
             prompt_transcripcion = (
