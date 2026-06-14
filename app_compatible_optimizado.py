@@ -167,8 +167,14 @@ if os.environ.get('DATABASE_URL'):
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     print(f"[OK] Usando PostgreSQL en Railway: {database_url[:20]}...")
 else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
-    print("[OK] Usando SQLite para desarrollo local")
+    # Priorizar instance/sisagent_consolidada.db si existe
+    instance_db = os.path.join(os.path.dirname(__file__), 'instance', 'sisagent_consolidada.db')
+    if os.path.exists(instance_db):
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{instance_db}'
+        print(f"[OK] Usando SQLite en {instance_db}")
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sisagent_consolidada.db'
+        print("[OK] Usando SQLite para desarrollo local")
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'tu-clave-secreta-aqui')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -808,10 +814,9 @@ def dashboard():
             ahora = get_peru_time()
             hoy = ahora.date()
             # Calcular rango de tiempo para el día en hora de Perú (00:00:00 a 23:59:59)
-            inicio_dia = datetime.combine(hoy, datetime.min.time()).replace(tzinfo=peru_tz)
-            fin_dia = datetime.combine(hoy, datetime.max.time()).replace(tzinfo=peru_tz)
-            fin_dia = fin_dia.replace(hour=23, minute=59, second=59, microsecond=999999)
-            
+            inicio_dia = datetime.combine(hoy, datetime.min.time())
+            fin_dia = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
+
             base_ctx['total_comision_hoy'] = stats.get('comision_hoy', 0.0)
             # Obtener operaciones del día para el usuario usando rango de tiempo
             operaciones_hoy_list = Operacion.query.filter(
@@ -820,6 +825,15 @@ def dashboard():
                 Operacion.hora <= fin_dia
             ).order_by(Operacion.hora.desc()).limit(10).all()
             base_ctx['operaciones_hoy'] = operaciones_hoy_list
+
+            # Obtener ventas del día para el usuario
+            ventas_hoy_list = Venta.query.filter(
+                Venta.usuario_id == current_user.id,
+                Venta.fecha >= inicio_dia,
+                Venta.fecha <= fin_dia
+            ).order_by(Venta.fecha.desc()).limit(10).all()
+            base_ctx['ventas_hoy'] = ventas_hoy_list
+            base_ctx['total_ventas_hoy'] = sum(float(v.monto) for v in ventas_hoy_list)
 
             return render_template('user_dashboard.html', **base_ctx)
     except Exception as e:
@@ -1045,6 +1059,71 @@ def api_operaciones_lista():
         response = make_response(jsonify({
             'success': True,
             'operaciones': operaciones
+        }))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ventas/lista', methods=['GET'])
+@login_required
+def api_ventas_lista():
+    """Devuelve lista JSON de ventas del día para live updates en tabla."""
+    from flask import make_response
+    try:
+        ahora = get_peru_time()
+        hoy = ahora.date()
+        # Crear rango sin tzinfo (la BD almacena fecha sin timezone)
+        inicio_hoy = datetime.combine(hoy, datetime.min.time())
+        fin_hoy = datetime.combine(hoy, datetime.max.time()).replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        if current_user.es_admin:
+            # Admin: ventas de HOY de TODAS las sucursales
+            query = db.session.execute(db.text("""
+                SELECT v.id, v.monto, v.cantidad, v.fecha, p.nombre, u.nombre_completo
+                FROM venta v
+                JOIN producto p ON v.producto_id = p.id
+                JOIN usuario u ON v.usuario_id = u.id
+                WHERE v.fecha >= :inicio AND v.fecha <= :fin
+                ORDER BY v.fecha DESC
+            """), {'inicio': inicio_hoy, 'fin': fin_hoy})
+        elif current_user.es_admin_de_sucursal() or current_user.puede_gestionar_inventario():
+            # Admin/Supervisor de sucursal: ventas de HOY en su sucursal
+            query = db.session.execute(db.text("""
+                SELECT v.id, v.monto, v.cantidad, v.fecha, p.nombre, u.nombre_completo
+                FROM venta v
+                JOIN producto p ON v.producto_id = p.id
+                JOIN usuario u ON v.usuario_id = u.id
+                WHERE v.sucursal_id = :sucursal_id AND v.fecha >= :inicio AND v.fecha <= :fin
+                ORDER BY v.fecha DESC
+            """), {'sucursal_id': current_user.sucursal_id, 'inicio': inicio_hoy, 'fin': fin_hoy})
+        else:
+            # Usuario normal: solo SUS ventas de HOY
+            query = db.session.execute(db.text("""
+                SELECT v.id, v.monto, v.cantidad, v.fecha, p.nombre, u.nombre_completo
+                FROM venta v
+                JOIN producto p ON v.producto_id = p.id
+                JOIN usuario u ON v.usuario_id = u.id
+                WHERE v.usuario_id = :user_id AND v.fecha >= :inicio AND v.fecha <= :fin
+                ORDER BY v.fecha DESC
+            """), {'user_id': current_user.id, 'inicio': inicio_hoy, 'fin': fin_hoy})
+
+        ventas = []
+        for row in query.fetchall():
+            ventas.append({
+                'id': row[0],
+                'monto': float(row[1]),
+                'cantidad': int(row[2]),
+                'fecha': format_peru_time(row[3]),
+                'producto_nombre': row[4],
+                'usuario': row[5],
+            })
+
+        response = make_response(jsonify({
+            'success': True,
+            'ventas': ventas
         }))
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
@@ -6109,17 +6188,43 @@ def api_chat_transcribir():
 
 SYSTEM_PROMPT_GEMINI_LIVE = """Eres el asistente vocal de SISAGENT, un sistema bancario y de ventas en Perú. Respondes hablando.
 
+DIFERENCIA CRÍTICA - OPERACIONES vs VENTAS:
+┌─ OPERACIONES BANCARIAS (para agentes bancarios):
+│  • Qué: dinero que entra/sale → monto (S/) + medio de pago + comisión
+│  • Medios: EFECTIVO, YAPE, PLIN, TARJETA, BCP, IBK, BBVA, etc
+│  • Ejemplo: "Registra 500 soles en efectivo" → operación bancaria
+│  • Comisión: AUTOMÁTICA (S/1 x cada S/100), no preguntes
+│  • NO hay producto involucrado — es dinero puro
+│
+└─ VENTAS DE TIENDA (para tienda/inventario):
+   • Qué: venta de un PRODUCTO específico → cantidad + descuenta stock automático
+   • Productos: se venden con nombre, precio, cantidad
+   • Ejemplo: "Vende 2 coca-colas de 500ml" → venta de tienda
+   • Stock: AUTOMÁTICO (descuenta del inventario cuando confirmas)
+   • NO hay comisión — solo monto total de la venta
+
 Modelo de datos:
-- Operaciones bancarias: monto (S/), comision (S/), medio (EFECTIVO, YAPE, PLIN, TARJETA, BCP, IBK, BBVA, etc. — segun lo habilitado por sucursal). NO existe campo "tipo de operacion".
+- OPERACIONES BANCARIAS: monto (S/), comision (S/), medio (EFECTIVO, YAPE, PLIN, TARJETA, BCP, IBK, BBVA, etc. — segun lo habilitado por sucursal). NO existe campo "tipo de operacion".
 - Comision AUTOMATICA: se calcula sola (S/1 por cada S/100 de monto, redondeado hacia arriba). Al registrar una operacion NUNCA preguntes ni menciones la comision, salvo que el usuario pida explicitamente un descuento o una comision distinta a la automatica (ej: "es casero, cobrale solo 1 sol", "hazle descuento"). En ese caso pasa `comision` y `motivo_descuento` a `registrar_operacion`.
-- Productos: nombre, descripcion, precio, stock, foto, sucursal asignada.
-- Ventas: producto x cantidad, descuenta stock, suma a caja diaria.
+- PRODUCTOS (para ventas): nombre, descripcion, precio, stock, foto, sucursal asignada.
+- VENTAS: producto x cantidad, descuenta stock automáticamente, suma a caja diaria. NO tiene comisión.
 - Sucursales: nombre, direccion, medios de pago habilitados. IMPORTANTE: Si el usuario menciona una sucursal que no reconoces de la lista que te pasé, NO la rechaces. Asume que existe. El usuario sabe su propia sucursal mejor que tú — no discutas por el nombre.
 - Usuarios: rol (admin global, admin de sucursal, usuario regular).
 
 Tu rol:
 1. Consultar informacion (productos, operaciones, ventas, usuarios, sucursales, medios de pago).
 2. Ejecutar acciones (registrar/eliminar venta u operacion, crear/editar/eliminar producto, crear usuario, crear sucursal, etc.) — PERO con confirmacion verbal del usuario.
+
+HEURÍSTICA PARA DETECTAR QUIN ACCIÓN:
+- Si el usuario menciona un PRODUCTO POR NOMBRE ("vende un coca-cola", "dame 2 yogures") → VENTA DE TIENDA
+  • Busca el producto, propone la venta, descuenta stock automáticamente
+  • NO menciones comisión (no aplica en ventas)
+
+- Si el usuario menciona un MONTO + MEDIO DE PAGO ("500 en efectivo", "1000 por yape") → OPERACIÓN BANCARIA
+  • Propone operación, comisión es AUTOMÁTICA
+  • NO preguntes "¿de qué sucursal?"  — el servidor sabe
+
+- Si ambiguo ("registra 100 soles de coca-cola") — prioriza VENTA si hay producto, si no → preguntar "¿es venta o operación?". Pero esto es raro.
 
 Reglas para CUALQUIER accion que MUTE datos (registrar/eliminar/crear/editar venta, operacion, producto, usuario, sucursal, etc. via `proponer_*`):
 - FLUJO CRÍTICO: (1) PROPÓN (llamando proponer_*) (2) ESPERA confirmación del usuario (3) EJECUTA (el servidor hace el registro) (4) RECIÉN ENTONCES responde "Listo, registré..."
