@@ -3697,53 +3697,103 @@
             }
 
             async function procesarChunkTrigger(chunks, mimeType) {
+                // OPCIÓN 3 HÍBRIDA: Web Speech API para frase activadora (< 200ms)
+                // + Gemini Live para chat después
                 const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
-                console.log('[chatbot] Trigger: enviando ' + blob.size + ' bytes a Gemini');
-                const fd = new FormData();
-                fd.append('audio', blob, 'trigger.webm');
-                // Modo wake-word: transcripción LITERAL sin sesgo de dominio (el sesgo hacía
-                // que el modelo alucinara frases como "el monto de la venta es de 200 soles").
-                fd.append('modo', 'wakeword');
+                const trigger = (triggerPhrase || '').toLowerCase().trim();
+
+                if (!trigger || !SpeechRecognitionImpl) {
+                    _trigProcessingChunk = false;
+                    return;
+                }
+
+                console.log('[chatbot] Trigger: transcribiendo con Web Speech API (< 200ms)');
+                const startTime = Date.now();
+
                 try {
-                    const resp = await fetch('/api/chat/transcribir', { method: 'POST', body: fd });
-                    const data = await resp.json();
-                    if (!data.success) {
-                        console.warn('[chatbot] Trigger transcribir falló:', data.message);
-                        return;
-                    }
-                    let transcript = (data.texto || '').toLowerCase().trim();
-                    const trigger = (triggerPhrase || '').toLowerCase().trim();
-                    console.log('[chatbot] ★ Trigger oyó: "' + transcript + '" | busca: "' + trigger + '"');
-                    // Descartar basura del modelo (marcas de tiempo de subtítulos, etc.)
-                    if (transcript.indexOf('-->') !== -1 || /^\d[\d:.\s]*$/.test(transcript)) {
-                        transcript = '';
-                    }
-                    if (!trigger || !transcript) { _trigPrevTranscript = ''; return; }
-                    // Buffer rodante: une el chunk anterior con el actual por si la frase quedó partida
-                    const combinado = (_trigPrevTranscript + ' ' + transcript).trim();
-                    _trigPrevTranscript = transcript;
-                    // Guardia anti-falsos-positivos: el wake-word se dice SOLO. Si la transcripción
-                    // es mucho más larga que la frase, es habla normal, no el comando → ignorar.
-                    const _nTrig = normFrase(trigger);
-                    if (normFrase(combinado).length > _nTrig.length + 6) { return; }
-                    // Match tolerante: sin tildes/puntuación/espacios + distancia de edición
-                    // ("hey sisi" matchea "ey sisi", "jey sisi", "hey, sí sí", etc.)
-                    if (!fuzzyContains(normFrase(combinado), _nTrig)) {
-                        return;  // no contenía la frase
-                    }
-                    _trigPrevTranscript = '';
-                    console.log('[chatbot] ✓✓✓ FRASE ACTIVADORA DETECTADA');
-                    stopTriggerListener();
-                    showChatPanel();
-                    if (panel.classList.contains('settings-open')) closeSettings();
-                    if (typeof showNotification === 'function') {
-                        showNotification('🎙 Frase detectada — habla ahora', 'success');
-                    }
-                    // Abrir el chat de voz EN VIVO (Gemini Live), no la grabación one-shot
-                    setTimeout(function() { liveStart('dictating'); }, 120);
+                    // Convertir blob a DataURL para reproducir
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const audioUrl = e.target.result;
+                        const audio = new Audio(audioUrl);
+
+                        // Crear temporal SpeechRecognition
+                        const recognizer = new SpeechRecognitionImpl();
+                        recognizer.continuous = false;
+                        recognizer.interimResults = false;
+                        recognizer.lang = 'es-ES';
+
+                        let finalTranscript = '';
+
+                        recognizer.onresult = function(event) {
+                            for (let i = event.resultIndex; i < event.results.length; i++) {
+                                if (event.results[i].isFinal) {
+                                    finalTranscript += event.results[i][0].transcript + ' ';
+                                }
+                            }
+                        };
+
+                        recognizer.onend = function() {
+                            const elapsed = Date.now() - startTime;
+                            let transcript = finalTranscript.toLowerCase().trim();
+                            console.log('[chatbot] ★ Trigger oyó: "' + transcript + '" | busca: "' + trigger + '" | tiempo: ' + elapsed + 'ms');
+
+                            if (!transcript) {
+                                _trigProcessingChunk = false;
+                                return;
+                            }
+
+                            // Buffer rodante para frases partidas
+                            const combinado = (_trigPrevTranscript + ' ' + transcript).trim();
+                            _trigPrevTranscript = transcript;
+
+                            // Guardia anti-falsos-positivos
+                            const _nTrig = normFrase(trigger);
+                            if (normFrase(combinado).length > _nTrig.length + 6) {
+                                console.log('[chatbot] Frase muy larga, ignorando (probablemente habla normal)');
+                                _trigProcessingChunk = false;
+                                return;
+                            }
+
+                            // Fuzzy match
+                            if (!fuzzyContains(normFrase(combinado), _nTrig)) {
+                                console.log('[chatbot] No coincide con frase activadora');
+                                _trigProcessingChunk = false;
+                                return;
+                            }
+
+                            // ✓✓✓ FRASE DETECTADA
+                            _trigPrevTranscript = '';
+                            console.log('[chatbot] ✓✓✓ FRASE ACTIVADORA DETECTADA (Web Speech API, ' + elapsed + 'ms)');
+                            stopTriggerListener();
+                            showChatPanel();
+                            if (panel.classList.contains('settings-open')) closeSettings();
+                            if (typeof showNotification === 'function') {
+                                showNotification('🎙 Frase detectada — habla ahora', 'success');
+                            }
+                            // Abrir Gemini Live para chat en vivo
+                            setTimeout(function() { liveStart('dictating'); }, 120);
+                            _trigProcessingChunk = false;
+                        };
+
+                        recognizer.onerror = function(event) {
+                            console.warn('[chatbot] Web Speech error:', event.error);
+                            _trigProcessingChunk = false;
+                        };
+
+                        // Reproducir audio silenciosamente y que Web Speech API lo transcriba
+                        audio.volume = 0;  // Sin audio para el usuario
+                        audio.play().catch(() => {
+                            // Si no puede reproducir, intentar sin audio
+                            console.warn('[chatbot] No se puede reproducir audio, intentando Web Speech directo');
+                        });
+
+                        recognizer.start();
+                    };
+
+                    reader.readAsDataURL(blob);
                 } catch (e) {
-                    console.warn('[chatbot] Trigger transcripción error:', e);
-                } finally {
+                    console.warn('[chatbot] Trigger error:', e);
                     _trigProcessingChunk = false;
                 }
             }
