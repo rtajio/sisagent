@@ -5964,15 +5964,11 @@ def api_chat_transcribir():
         es_wakeword = (request.form.get('modo') or '') == 'wakeword'
 
         if es_wakeword:
-            # Wake-word: transcripcion LITERAL, SIN sesgo de dominio. El sesgo de vocabulario
-            # bancario hacia que el modelo alucinara frases ("el monto de la venta es de 200 soles")
-            # ante un audio corto. Aqui solo queremos lo que se dijo, tal cual, o vacio.
-            prompt_transcripcion = (
-                'Transcribe LITERALMENTE el audio en espanol, palabra por palabra, exactamente lo que '
-                'se oye. NO interpretes, NO completes frases, NO agregues contexto, NO inventes. '
-                'Devuelve solo el texto crudo, sin puntuacion extra ni formato. Si es silencio, ruido, '
-                'respiracion o no se entiende, devuelve CADENA VACIA. Nunca adivines.'
-            )
+            # Wake-word: transcripcion LITERAL, SIN sesgo de dominio.
+            # OPTIMIZADO PARA LATENCIA < 0.5s: prompt minimalista, tokens reducidos, timeout agresivo
+            prompt_transcripcion = 'Transcribe en espanol, solo texto, sin contexto. Vacio si no hay voz clara.'
+            gemini_timeout = 0.35  # 350ms para detección de frase (muy agresivo)
+            max_tokens = 50  # Solo 1-2 palabras para frase activadora
         else:
             prompt_transcripcion = (
                 'Transcribe el siguiente audio en espanol (Peru). CONTEXTO: es un sistema bancario y de '
@@ -5993,6 +5989,8 @@ def api_chat_transcribir():
                     ' NOMBRES REALES del sistema (sucursales, productos y medios de pago); si oyes algo '
                     'parecido a uno de estos, escribelo EXACTAMENTE asi: ' + ', '.join(vocab_terminos) + '.'
                 )
+            gemini_timeout = 10.0  # 10s para transcripción normal (con contexto bancario)
+            max_tokens = 512
 
         payload = {
             'contents': [{
@@ -6008,17 +6006,19 @@ def api_chat_transcribir():
             }],
             'generationConfig': {
                 'temperature': 0.0,
-                'maxOutputTokens': 2048,
+                'maxOutputTokens': max_tokens,  # Reducido para latencia
             },
         }
 
-        # Llamada a Gemini con reintentos automáticos para errores transitorios de red
-        # (getaddrinfo failed, connection reset, etc.) — comunes en Windows con httpx.
+        # Llamada a Gemini con timeout adaptativo
+        # Para wake-word: 350ms (muy agresivo, reintentar si falla)
+        # Para chat normal: 10s (con contexto)
         resp = None
         last_error = None
-        for intento in range(3):
+        reintentos = 1 if es_wakeword else 3  # Solo 1 intento para wake-word
+        for intento in range(reintentos):
             try:
-                resp = _httpx_local.post(url, json=payload, headers=gemini_headers, timeout=90.0)
+                resp = _httpx_local.post(url, json=payload, headers=gemini_headers, timeout=gemini_timeout)
                 break  # éxito
             except _httpx_local.TimeoutException as e:
                 return jsonify({
