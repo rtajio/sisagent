@@ -11,6 +11,7 @@
     {% endif %}
 </div>
 
+<!-- Filtro por sucursal (solo admin global, cuando hay más de una) -->
 {% if current_user.es_admin and sucursales|length > 1 %}
 <form method="GET" class="mb-3">
     <div class="row g-2 align-items-end">
@@ -27,65 +28,71 @@
 </form>
 {% endif %}
 
-{% macro badge_venc(fecha, hoy) %}
-    {% if fecha %}
-    {% set dias = (fecha - hoy).days %}
-    {% if dias < 0 %}<span class="badge bg-danger" title="{{ fecha.strftime('%d/%m/%Y') }}">Vencido</span>
-    {% elif dias == 0 %}<span class="badge bg-danger">Vence hoy</span>
-    {% elif dias <= 30 %}<span class="badge bg-warning text-dark" title="{{ fecha.strftime('%d/%m/%Y') }}">Por vencer: {{ dias }}d</span>
-    {% else %}<span class="badge bg-success">{{ fecha.strftime('%d/%m/%Y') }}</span>
-    {% endif %}
-    {% endif %}
-{% endmacro %}
-
-{% if grupos %}
+{% if productos %}
 <div class="row">
-    {% for g in grupos %}
-    <div class="col-sm-6 col-md-6 col-lg-4 mb-4">
+    {% for producto in productos %}
+    <div class="col-sm-6 col-md-4 col-lg-3 mb-4">
         <div class="card shadow h-100">
-            {% if g.foto_id %}
-            <img src="{{ url_for('foto_producto', producto_id=g.foto_id) }}"
-                 class="card-img-top" style="height: 150px; object-fit: cover;" alt="{{ g.nombre }}">
+            {% if producto.foto %}
+            <img src="{{ url_for('foto_producto', producto_id=producto.id) }}"
+                 class="card-img-top" style="height: 160px; object-fit: cover;" alt="{{ producto.nombre }}">
             {% else %}
-            <div class="card-img-top d-flex align-items-center justify-content-center bg-light text-muted" style="height: 150px;">
+            <div class="card-img-top d-flex align-items-center justify-content-center bg-light text-muted" style="height: 160px;">
                 <i class="fas fa-image fa-3x"></i>
             </div>
             {% endif %}
             <div class="card-body d-flex flex-column">
-                <div class="d-flex justify-content-between align-items-baseline">
-                    <h6 class="font-weight-bold text-gray-800 mb-0">{{ g.nombre }}{% if g.tamano %} · {{ g.tamano }}{% endif %}</h6>
-                    <span class="text-success font-weight-bold">S/ {{ "%.2f"|format(g.precio) }}</span>
+                <h6 class="font-weight-bold text-gray-800 mb-1">{{ producto.nombre }}</h6>
+                {% if producto.descripcion %}
+                <p class="small text-muted mb-2">{{ producto.descripcion }}</p>
+                {% endif %}
+                <div class="mb-1">
+                    <span class="h6 text-success">S/ {{ "%.2f"|format(producto.precio) }}</span>
                 </div>
-                <div class="small text-muted mb-2">
-                    Stock total: {{ g.stock_total }}
-                    {% if current_user.es_admin %}· <i class="fas fa-building"></i> {{ g.sucursal.nombre }}{% endif %}
+                <div class="mb-2">
+                    {% if producto.stock <= 0 %}
+                    <span class="badge bg-danger">Sin stock</span>
+                    {% elif producto.stock <= 5 %}
+                    <span class="badge bg-warning text-dark">Stock bajo: {{ producto.stock }}</span>
+                    {% else %}
+                    <span class="badge bg-success">Stock: {{ producto.stock }}</span>
+                    {% endif %}
                 </div>
-
-                {% for s in g.sabores %}
-                {% if s.sabor %}
-                <div class="mt-1 text-gray-800" style="font-size:13px;">
-                    <i class="fas fa-circle me-1" style="font-size:8px; vertical-align:middle; color:#A0845A;"></i>
-                    <strong>{{ s.sabor }}</strong> <span class="text-muted">· {{ s.stock }} uni</span>
+                {% if producto.lote %}
+                <div class="small text-muted mb-1"><i class="fas fa-layer-group me-1"></i>Lote: <strong>{{ producto.lote }}</strong></div>
+                {% endif %}
+                {% if producto.fecha_vencimiento %}
+                {% set dias = (producto.fecha_vencimiento - hoy).days %}
+                <div class="mb-2">
+                    {% if dias < 0 %}
+                    <span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>Vencido ({{ producto.fecha_vencimiento.strftime('%d/%m/%Y') }})</span>
+                    {% elif dias == 0 %}
+                    <span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>Vence hoy</span>
+                    {% elif dias <= 30 %}
+                    <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Por vencer: {{ dias }} día{{ 's' if dias != 1 else '' }} ({{ producto.fecha_vencimiento.strftime('%d/%m/%Y') }})</span>
+                    {% else %}
+                    <span class="badge bg-success"><i class="fas fa-calendar-check me-1"></i>Vence {{ producto.fecha_vencimiento.strftime('%d/%m/%Y') }}</span>
+                    {% endif %}
                 </div>
                 {% endif %}
-                {% for it in s.lotes %}
-                <div class="d-flex justify-content-between align-items-center py-1" style="border-top:1px solid rgba(160,132,90,.18);">
-                    <div class="small">
-                        {% if it.lote %}<span class="text-muted"><i class="fas fa-layer-group" style="font-size:11px;"></i> {{ it.lote }}</span> · {% endif %}{{ it.stock }} uni
-                    </div>
-                    <div class="d-flex align-items-center gap-1">
-                        {{ badge_venc(it.fecha_vencimiento, hoy) }}
-                        {% if puede_gestionar %}
-                        <a href="{{ url_for('editar_producto', producto_id=it.id) }}" class="btn btn-sm btn-outline-primary py-0 px-1" title="Editar lote"><i class="fas fa-edit"></i></a>
-                        <form method="POST" action="{{ url_for('eliminar_producto', producto_id=it.id) }}" style="display:inline;"
-                              onsubmit="return confirm('¿Quitar este lote de &quot;{{ g.nombre }}{% if g.tamano %} {{ g.tamano }}{% endif %}{% if s.sabor %} {{ s.sabor }}{% endif %}&quot;?')">
-                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Eliminar lote"><i class="fas fa-trash"></i></button>
-                        </form>
-                        {% endif %}
-                    </div>
+                {% if current_user.es_admin %}
+                <div class="small text-muted mb-2">
+                    <i class="fas fa-building me-1"></i>{{ producto.sucursal.nombre }}
                 </div>
-                {% endfor %}
-                {% endfor %}
+                {% endif %}
+                {% if puede_gestionar %}
+                <div class="mt-auto d-flex gap-2">
+                    <a href="{{ url_for('editar_producto', producto_id=producto.id) }}" class="btn btn-sm btn-outline-primary flex-grow-1">
+                        <i class="fas fa-edit"></i> Editar
+                    </a>
+                    <form method="POST" action="{{ url_for('eliminar_producto', producto_id=producto.id) }}"
+                          onsubmit="return confirm('¿Quitar &quot;{{ producto.nombre }}&quot; del inventario?')">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

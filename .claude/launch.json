@@ -5,7 +5,7 @@
       "name": "sisagent",
       "runtimeExecutable": "python",
       "runtimeArgs": ["app.py"],
-      "autoPort": true
+      "port": 5000
     }
   ]
 }

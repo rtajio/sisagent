@@ -56,21 +56,6 @@
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="tamano" class="form-label">Tamaño / presentación <small class="text-muted">(opcional)</small></label>
-                            <input type="text" class="form-control" id="tamano" name="tamano" maxlength="40"
-                                   placeholder="Ej: 1L, 500ml, 200g"
-                                   value="{{ producto.tamano if producto and producto.tamano else '' }}">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="sabor" class="form-label">Sabor / variante <small class="text-muted">(opcional)</small></label>
-                            <input type="text" class="form-control" id="sabor" name="sabor" maxlength="60"
-                                   placeholder="Ej: Fresa, Arándanos, Durazno"
-                                   value="{{ producto.sabor if producto and producto.sabor else '' }}">
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
                             <label for="lote" class="form-label">Lote <small class="text-muted">(opcional)</small></label>
                             <input type="text" class="form-control" id="lote" name="lote" maxlength="50"
                                    placeholder="Ej: L-2026-04"

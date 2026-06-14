@@ -132,23 +132,10 @@
                         </div>
                     </div>
                     {% endif %}
-
-                    {% if current_user.es_admin or current_user.es_admin_de_sucursal() %}
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="gestiona_inventario" name="gestiona_inventario">
-                            <label class="form-check-label" for="gestiona_inventario">
-                                <i class="fas fa-boxes-stacked me-1"></i>
-                                Supervisor de inventario (tienda)
-                            </label>
-                        </div>
-                        <div class="form-text">Puede gestionar todo el inventario de su sucursal (crear, editar y eliminar productos). Para operaciones bancarias sigue siendo un usuario normal.</div>
-                    </div>
-                    {% endif %}
-
+                    
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Información:</strong> Los usuarios sin sucursal asignada no podrán registrar operaciones
+                        <strong>Información:</strong> Los usuarios sin sucursal asignada no podrán registrar operaciones 
                         hasta que se les asigne una sucursal.
                     </div>
                     

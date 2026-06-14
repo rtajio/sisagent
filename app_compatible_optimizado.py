@@ -283,9 +283,6 @@ class Usuario(UserMixin, db.Model):
     nombre_completo = db.Column(db.String(100), nullable=True)
     es_admin = db.Column(db.Boolean, default=False)
     es_admin_sucursal = db.Column(db.Boolean, default=False)
-    # Supervisor de inventario (a nivel de tienda): gestiona TODO el inventario de su sucursal,
-    # pero para operaciones bancarias es un usuario normal de esa sucursal (no admin de sucursal).
-    gestiona_inventario = db.Column(db.Boolean, default=False)
     sucursal_id = db.Column(db.Integer, db.ForeignKey('sucursal.id'))
     # Token de sesión: se regenera al cambiar contraseña o al forzar cierre de sesión
     session_token  = db.Column(db.String(36), nullable=True)
@@ -314,13 +311,6 @@ class Usuario(UserMixin, db.Model):
 
     def es_admin_o_admin_sucursal(self):
         return self.es_admin or self.es_admin_de_sucursal()
-
-    def puede_gestionar_inventario(self):
-        """CRUD de inventario: admin global, admin de sucursal, o supervisor de inventario
-        (a nivel tienda). El supervisor de inventario NO administra operaciones bancarias."""
-        if self.es_admin or self.es_admin_de_sucursal():
-            return True
-        return bool(self.gestiona_inventario) and self.sucursal_id is not None
 
     def puede_crear_usuario_en_sucursal(self, sucursal_id):
         if self.es_admin:
@@ -398,8 +388,6 @@ class Producto(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=lambda: get_peru_time().replace(tzinfo=None))
     fecha_vencimiento = db.Column(db.Date, nullable=True)  # NULL si no vence
     lote = db.Column(db.String(50), nullable=True)  # identificador de lote/tanda (para distinguir mismo producto)
-    tamano = db.Column(db.String(40), nullable=True)  # presentación/tamaño (ej: 1L, 500ml) — variante
-    sabor = db.Column(db.String(60), nullable=True)   # sabor/variante (ej: Fresa, Arándanos) — variante
     sucursal = db.relationship('Sucursal', backref='productos')
 
 class Venta(db.Model):
@@ -1485,50 +1473,18 @@ def inventario():
         sucursal_id = current_user.sucursal_id
         query = Producto.query.filter_by(activo=True, sucursal_id=current_user.sucursal_id)
 
-    # Ordenar por nombre/tamaño/sabor y, dentro, por vencimiento más próximo primero
-    # (los sin fecha al final) para armar la jerarquía y que los lotes por vencer salten a la vista.
+    # Ordenar por nombre y, dentro del mismo producto, por vencimiento mas proximo primero
+    # (los sin fecha al final) para que los lotes por vencer salten a la vista.
     productos = query.order_by(
         Producto.nombre,
-        Producto.tamano,
-        Producto.sabor,
         Producto.fecha_vencimiento.is_(None),
         Producto.fecha_vencimiento,
     ).all()
-    puede_gestionar = current_user.puede_gestionar_inventario()
-
-    # Agrupar "con variantes": tarjeta por (nombre, tamaño) → sabores → lotes (cada Producto = un lote).
-    from collections import OrderedDict
-    grupos = OrderedDict()
-    for p in productos:
-        gkey = (p.nombre, p.tamano or '')
-        if gkey not in grupos:
-            grupos[gkey] = {
-                'nombre': p.nombre,
-                'tamano': p.tamano,
-                'precio': float(p.precio),
-                'sucursal': p.sucursal,
-                'foto_id': p.id if p.foto else None,
-                'sabores': OrderedDict(),
-            }
-        g = grupos[gkey]
-        if g['foto_id'] is None and p.foto:
-            g['foto_id'] = p.id
-        skey = p.sabor or ''
-        if skey not in g['sabores']:
-            g['sabores'][skey] = {'sabor': p.sabor, 'lotes': []}
-        g['sabores'][skey]['lotes'].append(p)
-
-    grupos_list = []
-    for g in grupos.values():
-        sabores = list(g['sabores'].values())
-        total = sum(it.stock for s in sabores for it in s['lotes'])
-        for s in sabores:
-            s['stock'] = sum(it.stock for it in s['lotes'])
-        grupos_list.append({**g, 'sabores': sabores, 'stock_total': total})
+    puede_gestionar = current_user.es_admin_o_admin_sucursal()
 
     return render_template(
         'inventario.html',
-        grupos=grupos_list,
+        productos=productos,
         sucursales=sucursales,
         sucursal_id=sucursal_id,
         puede_gestionar=puede_gestionar,
@@ -1540,7 +1496,7 @@ def inventario():
 @login_required
 def nuevo_producto():
     """Agregar un producto al inventario (solo administradores / admins de sucursal)"""
-    if not current_user.puede_gestionar_inventario():
+    if not current_user.es_admin_o_admin_sucursal():
         flash('No tienes permisos para gestionar el inventario', 'error')
         return redirect(url_for('inventario'))
 
@@ -1598,8 +1554,6 @@ def nuevo_producto():
                 sucursal_id=sucursal_id,
                 lote=lote,
                 fecha_vencimiento=fecha_venc,
-                tamano=(request.form.get('tamano') or '').strip() or None,
-                sabor=(request.form.get('sabor') or '').strip() or None,
             )
             db.session.add(producto)
             db.session.commit()
@@ -1618,7 +1572,7 @@ def nuevo_producto():
 @login_required
 def editar_producto(producto_id):
     """Editar un producto del inventario (solo administradores / admins de sucursal)"""
-    if not current_user.puede_gestionar_inventario():
+    if not current_user.es_admin_o_admin_sucursal():
         flash('No tienes permisos para gestionar el inventario', 'error')
         return redirect(url_for('inventario'))
 
@@ -1669,8 +1623,6 @@ def editar_producto(producto_id):
             producto.stock = stock
             producto.lote = lote
             producto.fecha_vencimiento = fecha_venc
-            producto.tamano = (request.form.get('tamano') or '').strip() or None
-            producto.sabor = (request.form.get('sabor') or '').strip() or None
             if foto is not None:
                 producto.foto = foto
                 producto.foto_mimetype = foto_mimetype
@@ -1691,7 +1643,7 @@ def editar_producto(producto_id):
 @login_required
 def eliminar_producto(producto_id):
     """Quitar (desactivar) un producto del inventario"""
-    if not current_user.puede_gestionar_inventario():
+    if not current_user.es_admin_o_admin_sucursal():
         flash('No tienes permisos para gestionar el inventario', 'error')
         return redirect(url_for('inventario'))
 
@@ -2036,9 +1988,7 @@ def crear_usuario():
             sucursal_id = int(sucursal_id) if sucursal_id else None
             es_admin = 'es_admin' in request.form
             es_admin_sucursal = 'es_admin_sucursal' in request.form
-        # Supervisor de inventario (tienda): lo puede otorgar admin global o admin de sucursal.
-        gestiona_inventario = 'gestiona_inventario' in request.form
-
+        
         # Verificar si el usuario ya existe
         if Usuario.query.filter_by(username=username).first():
             flash('El nombre de usuario ya existe', 'error')
@@ -2055,10 +2005,9 @@ def crear_usuario():
             nombre_completo=nombre_completo,
             sucursal_id=sucursal_id,
             es_admin=es_admin,
-            es_admin_sucursal=es_admin_sucursal,
-            gestiona_inventario=gestiona_inventario
+            es_admin_sucursal=es_admin_sucursal
         )
-
+        
         db.session.add(nuevo_usuario)
         db.session.commit()
         flash('Usuario creado exitosamente', 'success')
@@ -2116,9 +2065,7 @@ def editar_usuario(usuario_id):
         else:
             # Admin de sucursal solo puede asegurar que el usuario esté en su sucursal
             usuario.sucursal_id = current_user.sucursal_id
-        # Supervisor de inventario (tienda): lo puede otorgar admin global o admin de sucursal.
-        usuario.gestiona_inventario = 'gestiona_inventario' in request.form
-
+        
         db.session.commit()
         flash('Usuario actualizado', 'success')
         return redirect(url_for('admin_usuarios'))
@@ -4148,7 +4095,7 @@ def _tool_productos_por_agotar(args, usuario):
 # ---------- Handlers de propuesta (validan, devuelven preview, NO tocan BD) ----------
 
 def _tool_crear_producto(args, usuario):
-    if not usuario.puede_gestionar_inventario():
+    if not usuario.es_admin_o_admin_sucursal():
         raise ValueError("No tienes permisos para gestionar el inventario.")
     nombre = (args.get("nombre") or "").strip()
     if not nombre:
@@ -4181,7 +4128,7 @@ def _tool_crear_producto(args, usuario):
 
 
 def _tool_editar_producto(args, usuario):
-    if not usuario.puede_gestionar_inventario():
+    if not usuario.es_admin_o_admin_sucursal():
         raise ValueError("No tienes permisos para gestionar el inventario.")
     pid = args.get("producto_id")
     if not pid:
@@ -4236,7 +4183,7 @@ def _tool_editar_producto(args, usuario):
 
 
 def _tool_eliminar_producto(args, usuario):
-    if not usuario.puede_gestionar_inventario():
+    if not usuario.es_admin_o_admin_sucursal():
         raise ValueError("No tienes permisos para gestionar el inventario.")
     pid = args.get("producto_id")
     if not pid:
@@ -6866,8 +6813,6 @@ def init_db():
                                 "ALTER TABLE operacion ADD COLUMN IF NOT EXISTS origen VARCHAR(20)"))
                             _conn.execute(text(
                                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS vocabulario_voz TEXT"))
-                            _conn.execute(text(
-                                "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS gestiona_inventario BOOLEAN DEFAULT FALSE"))
                             # Columnas de Producto agregadas al modelo despues de crear la tabla
                             # (create_all no las agrega a tablas existentes -> rompia /inventario).
                             _conn.execute(text(
@@ -6878,10 +6823,6 @@ def init_db():
                                 "ALTER TABLE producto ADD COLUMN IF NOT EXISTS fecha_vencimiento DATE"))
                             _conn.execute(text(
                                 "ALTER TABLE producto ADD COLUMN IF NOT EXISTS lote VARCHAR(50)"))
-                            _conn.execute(text(
-                                "ALTER TABLE producto ADD COLUMN IF NOT EXISTS tamano VARCHAR(40)"))
-                            _conn.execute(text(
-                                "ALTER TABLE producto ADD COLUMN IF NOT EXISTS sabor VARCHAR(60)"))
                         print("[OK] Columnas verificadas (PostgreSQL)")
                     except Exception as e:
                         if "already exists" in str(e) or "duplicate" in str(e).lower():
@@ -6899,14 +6840,11 @@ def init_db():
                         "ALTER TABLE operacion ADD COLUMN motivo_descuento VARCHAR(200)",
                         "ALTER TABLE operacion ADD COLUMN origen VARCHAR(20)",
                         "ALTER TABLE usuario ADD COLUMN vocabulario_voz TEXT",
-                        "ALTER TABLE usuario ADD COLUMN gestiona_inventario BOOLEAN DEFAULT 0",
                         # Columnas de Producto agregadas al modelo despues de crear la tabla
                         "ALTER TABLE producto ADD COLUMN foto_mimetype VARCHAR(50)",
                         "ALTER TABLE producto ADD COLUMN fecha_creacion TIMESTAMP",
                         "ALTER TABLE producto ADD COLUMN fecha_vencimiento DATE",
                         "ALTER TABLE producto ADD COLUMN lote VARCHAR(50)",
-                        "ALTER TABLE producto ADD COLUMN tamano VARCHAR(40)",
-                        "ALTER TABLE producto ADD COLUMN sabor VARCHAR(60)",
                     ]:
                         try:
                             with db.engine.connect() as _conn:
