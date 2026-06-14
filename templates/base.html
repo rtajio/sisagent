@@ -2521,10 +2521,10 @@
             // VAD (Voice Activity Detection): paramos automáticamente al detectar silencio.
             const VAD_THRESHOLD = 18;          // 0-255, umbral promedio que distingue voz de silencio
             const VAD_SILENCE_MS = 2500;       // ms de silencio continuo para auto-stop (subido de 1500: tolera pausas naturales al hablar)
-            const TRIGGER_VAD_THRESHOLD = 20;   // sube de 14: evita que el ruido ambiente dispare grabaciones (falsos positivos del wake-word)
-            const TRIGGER_SILENCE_MS = 700;     // 700ms: captura un chunk más completo (frases cortas como "sisi" daban "no hay voz audible" con 350ms)
-            const TRIGGER_MIN_SPEECH_MS = 250;  // BAJADO de 300→250ms
-            const TRIGGER_MAX_CHUNK_MS = 3000;  // BAJADO de 6000→3000ms — chunks más cortos = transcripción más rápida
+            const TRIGGER_VAD_THRESHOLD = 40;   // AUMENTADO: evita ruido/micrófono débil. Gemini alucina con audio muy ruidoso
+            const TRIGGER_SILENCE_MS = 1500;    // AUMENTADO: 1.5s silencio antes de procesar. Deja que el usuario hable completo
+            const TRIGGER_MIN_SPEECH_MS = 1000; // AUMENTADO: requiere mínimo 1s de habla. Audio muy corto causa alucinaciones en Gemini
+            const TRIGGER_MAX_CHUNK_MS = 5000;  // AUMENTADO: 5s máximo. Chunks más grandes = mejor contexto para Gemini
 
             let mediaRecorder = null;
             let recordingStream = null;
