@@ -1684,9 +1684,10 @@ def foto_producto(producto_id):
 def ventas():
     """Listado de ventas del día.
 
-    Visibilidad (igual que en Operaciones):
+    Visibilidad:
       - Admin global: todas las ventas (puede filtrar por sucursal)
       - Admin de sucursal: las ventas de su sucursal
+      - Supervisor de tienda: todas las ventas de su sucursal
       - Usuario normal: solo SUS PROPIAS ventas
     """
     sucursales = sucursales_visibles_para(current_user)
@@ -1696,10 +1697,12 @@ def ventas():
         query = Venta.query
         if sucursal_id:
             query = query.filter(Venta.sucursal_id == sucursal_id)
-    elif current_user.es_admin_de_sucursal():
+    elif current_user.es_admin_de_sucursal() or current_user.puede_gestionar_inventario():
+        # Supervisor de tienda ve todas las ventas de su sucursal
         sucursal_id = current_user.sucursal_id
         query = Venta.query.filter(Venta.sucursal_id == current_user.sucursal_id)
     else:
+        # Usuario normal solo ve sus propias ventas
         sucursal_id = current_user.sucursal_id
         query = Venta.query.filter(Venta.usuario_id == current_user.id)
 
@@ -1832,8 +1835,14 @@ def editar_venta(venta_id):
     """
     venta = Venta.query.get_or_404(venta_id)
 
-    if not current_user.es_admin and venta.usuario_id != current_user.id:
-        flash('Solo puedes editar las ventas que tú mismo registraste', 'error')
+    # Admin global, admin de sucursal, supervisor de tienda, o dueño de la venta
+    puede_editar = (current_user.es_admin or
+                    current_user.es_admin_de_sucursal() or
+                    current_user.puede_gestionar_inventario() or
+                    venta.usuario_id == current_user.id)
+
+    if not puede_editar:
+        flash('No tienes permisos para editar esta venta', 'error')
         return redirect(url_for('ventas'))
 
     productos = Producto.query.filter_by(sucursal_id=venta.sucursal_id, activo=True).order_by(Producto.nombre).all()
@@ -4366,7 +4375,9 @@ def _tool_eliminar_venta(args, usuario):
     if not usuario.es_admin:
         if venta.sucursal_id != usuario.sucursal_id:
             raise ValueError("No tienes permisos para eliminar ventas de otra sucursal.")
-        if not usuario.es_admin_de_sucursal() and venta.usuario_id != usuario.id:
+        # Admin de sucursal y supervisor de tienda pueden eliminar cualquier venta de su sucursal
+        puede_eliminar = usuario.es_admin_de_sucursal() or usuario.puede_gestionar_inventario() or venta.usuario_id == usuario.id
+        if not puede_eliminar:
             raise ValueError("Solo puedes eliminar las ventas que tú registraste.")
     return {
         "_titulo": "Confirmar eliminación de venta",
