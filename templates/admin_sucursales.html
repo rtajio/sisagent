@@ -44,7 +44,7 @@
                 <tbody>
                     {% for sucursal in sucursales %}
                     <tr>
-                        <td>{{ sucursal.id }}</td>
+                        <td>{{ loop.index }}</td>
                         <td class="font-weight-bold">{{ sucursal.nombre }}</td>
                         <td>{{ sucursal.direccion or 'Sin dirección' }}</td>
                         <td>

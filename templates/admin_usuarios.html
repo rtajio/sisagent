@@ -39,7 +39,7 @@
                 <tbody>
                     {% for usuario in usuarios %}
                     <tr id="row-usuario-{{ usuario.id }}">
-                        <td>{{ usuario.id }}</td>
+                        <td>{{ loop.index }}</td>
                         <td>{{ usuario.username }}</td>
                         <td>{{ usuario.nombre_completo|default(usuario.username) }}</td>
                         {% if current_user.es_admin %}
