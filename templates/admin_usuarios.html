@@ -81,16 +81,20 @@
                             {% endif %}
                         </td>
                         <td>
+                            {# Un admin_sucursal NO puede gestionar admins globales ni otros admin_sucursal #}
+                            {% set puede_gestionar = current_user.es_admin or (not usuario.es_admin and not usuario.es_admin_sucursal) %}
                             <div class="d-flex gap-1 flex-wrap">
+                                {% if puede_gestionar %}
                                 <!-- Editar -->
                                 <a class="btn btn-sm btn-outline-warning"
                                    href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}"
                                    title="Editar usuario">
                                     <i class="fas fa-edit"></i>
                                 </a>
+                                {% endif %}
 
-                                <!-- Cerrar sesión forzada (no aplica para uno mismo) -->
-                                {% if usuario.id != current_user.id %}
+                                <!-- Cerrar sesión forzada (no aplica para uno mismo ni para admins si no eres admin global) -->
+                                {% if usuario.id != current_user.id and puede_gestionar %}
                                 <button class="btn btn-sm btn-outline-secondary btn-cerrar-sesion"
                                         data-id="{{ usuario.id }}"
                                         data-username="{{ usuario.username }}"
@@ -99,7 +103,7 @@
                                 </button>
                                 {% endif %}
 
-                                <!-- Eliminar -->
+                                <!-- Eliminar (solo admin global) -->
                                 {% if current_user.es_admin and usuario.username not in ['admin', 'admin1'] %}
                                 <form method="POST"
                                       action="{{ url_for('eliminar_usuario', usuario_id=usuario.id) }}"

@@ -2100,8 +2100,11 @@ def admin_usuarios():
     query = Usuario.query
     
     # Si es admin de sucursal, filtrar solo usuarios de su sucursal
+    # y EXCLUIR admins globales (no deben ser visibles ni gestionables)
     if current_user.es_admin_de_sucursal() and not current_user.es_admin:
-        query = query.filter_by(sucursal_id=current_user.sucursal_id)
+        query = query.filter_by(sucursal_id=current_user.sucursal_id).filter(
+            Usuario.es_admin == False
+        )
     
     usuarios_paginated = query.paginate(
         page=page, per_page=20, error_out=False
@@ -2179,9 +2182,12 @@ def editar_usuario(usuario_id):
         return redirect(url_for('admin_usuarios'))
     
     usuario = Usuario.query.get_or_404(usuario_id)
-    
-    # Si es admin de sucursal, solo puede editar usuarios de su sucursal
+
+    # Si es admin de sucursal, solo puede editar usuarios regulares de su sucursal
     if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        if usuario.es_admin or usuario.es_admin_sucursal:
+            flash('No tienes permisos para editar a un administrador', 'error')
+            return redirect(url_for('admin_usuarios'))
         if usuario.sucursal_id != current_user.sucursal_id:
             flash('No tienes permisos para editar este usuario', 'error')
             return redirect(url_for('admin_usuarios'))
@@ -2640,8 +2646,13 @@ def forzar_cierre_sesion(usuario_id):
         flash('No puedes cerrar tu propia sesión desde aquí', 'warning')
         return redirect(url_for('admin_usuarios'))
 
-    # Admin de sucursal solo puede afectar usuarios de su sucursal
+    # Admin de sucursal solo puede afectar usuarios regulares de su sucursal
     if current_user.es_admin_de_sucursal() and not current_user.es_admin:
+        if usuario.es_admin or usuario.es_admin_sucursal:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'ok': False, 'error': 'No puedes cerrar la sesión de un administrador'}), 403
+            flash('No puedes cerrar la sesión de un administrador', 'error')
+            return redirect(url_for('admin_usuarios'))
         if usuario.sucursal_id != current_user.sucursal_id:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify({'ok': False, 'error': 'Sin permisos sobre este usuario'}), 403
