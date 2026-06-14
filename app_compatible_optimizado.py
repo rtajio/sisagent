@@ -23,6 +23,9 @@ import anthropic
 import threading
 from sqlalchemy import or_
 from flask_sock import Sock
+import difflib
+import re
+import unicodedata
 
 # Configuración de zona horaria (UTC-5 para Perú)
 peru_tz = pytz.timezone('America/Lima')
@@ -3585,6 +3588,63 @@ def _resolver_sucursal_para_accion(sucursal_id_args, usuario):
 
 # ---------- Handlers de herramientas de SOLO LECTURA ----------
 
+def _normalizar_texto(texto):
+    """Normaliza texto: minúsculas, sin acentos, sin puntuación especial."""
+    if not texto:
+        return ""
+    # Convertir a lowercase
+    texto = texto.lower()
+    # Remover acentos (NFD decomposición)
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+    # Remover caracteres especiales, mantener solo alphanuméricas y espacios
+    texto = re.sub(r'[^a-z0-9\s]', '', texto)
+    # Remover espacios múltiples
+    texto = ' '.join(texto.split())
+    return texto
+
+def _buscar_producto_fuzzy(termino, productos_list):
+    """Busca productos por similitud usando difflib.
+
+    Retorna lista de (producto, score) ordenada por relevancia.
+    Score entre 0-1 donde 1 es match exacto.
+    """
+    termino_norm = _normalizar_texto(termino)
+    if not termino_norm:
+        return []
+
+    resultados = []
+    for producto in productos_list:
+        nombre_norm = _normalizar_texto(producto.nombre)
+        # Combinar nombre base + tamaño + sabor para búsqueda
+        nombre_completo = nombre_norm
+        if producto.tamano:
+            nombre_completo += " " + _normalizar_texto(producto.tamano)
+        if producto.sabor:
+            nombre_completo += " " + _normalizar_texto(producto.sabor)
+
+        # Calcular similitud usando SequenceMatcher
+        ratio = difflib.SequenceMatcher(None, termino_norm, nombre_completo).ratio()
+
+        # Bonus: si el término está contenido como substring en el nombre normalizado
+        if termino_norm in nombre_completo:
+            ratio = max(ratio, 0.85)
+
+        # Bonus: si coincide la palabra exacta (ej: "coca" en "coca cola")
+        palabras_termino = termino_norm.split()
+        palabras_nombre = nombre_completo.split()
+        if any(p in palabras_nombre for p in palabras_termino):
+            ratio = max(ratio, 0.90)
+
+        if ratio > 0.65:  # Umbral mínimo de similitud
+            resultados.append((producto, ratio))
+
+    # Ordenar por score descendente
+    resultados.sort(key=lambda x: x[1], reverse=True)
+    return resultados
+
 def _tool_buscar_productos(args, usuario):
     termino = (args.get("termino") or "").strip()
     if not termino:
@@ -3595,20 +3655,19 @@ def _tool_buscar_productos(args, usuario):
         return {"productos": [], "mensaje": "No tienes ninguna sucursal asignada."}
 
     sucursal_ids = [s.id for s in sucursales]
-    palabras = [p for p in termino.split() if p]
 
-    query = Producto.query.filter(
+    # Obtener TODOS los productos activos de las sucursales visibles
+    productos_db = Producto.query.filter(
         Producto.sucursal_id.in_(sucursal_ids),
         Producto.activo == True,
-    )
-    for palabra in palabras:
-        like = f"%{palabra}%"
-        query = query.filter(or_(
-            Producto.nombre.ilike(like),
-            Producto.descripcion.ilike(like),
-        ))
+    ).all()
 
-    productos = query.order_by(Producto.nombre).limit(8).all()
+    # Aplicar fuzzy matching
+    resultados_fuzzy = _buscar_producto_fuzzy(termino, productos_db)
+
+    # Tomar los 8 mejores resultados (score > 0.65)
+    productos = [prod for prod, score in resultados_fuzzy[:8]]
+
     return {
         "productos": [_serializar_producto_chat(p) for p in productos],
         "total_encontrados": len(productos),

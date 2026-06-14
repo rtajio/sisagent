@@ -43,11 +43,23 @@
                         <select class="form-control" id="producto_id" name="producto_id" required>
                             <option value="">-- Selecciona un producto --</option>
                             {% for producto in productos %}
+                            {% set variante_parts = [] %}
+                            {% if producto.tamano %}
+                                {% set variante_parts = variante_parts + [producto.tamano] %}
+                            {% endif %}
+                            {% if producto.sabor %}
+                                {% set variante_parts = variante_parts + [producto.sabor] %}
+                            {% endif %}
+                            {% if variante_parts|length > 0 %}
+                                {% set variante_label = producto.nombre + ' / ' + (variante_parts|join(' / ')) %}
+                            {% else %}
+                                {% set variante_label = producto.nombre %}
+                            {% endif %}
                             <option value="{{ producto.id }}"
                                     data-precio="{{ producto.precio }}"
                                     data-stock="{{ producto.stock }}"
                                     {% if producto.stock <= 0 %}disabled{% endif %}>
-                                {{ producto.nombre }} (S/ {{ '%.2f'|format(producto.precio) }} · stock: {{ producto.stock }})
+                                {{ variante_label }} (S/ {{ '%.2f'|format(producto.precio) }} · stock: {{ producto.stock }})
                             </option>
                             {% endfor %}
                         </select>
