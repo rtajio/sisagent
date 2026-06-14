@@ -1924,6 +1924,47 @@ def editar_venta(venta_id):
     return render_template('editar_venta.html', venta=venta, productos=productos)
 
 
+@app.route('/ventas/<int:venta_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_venta(venta_id):
+    """Eliminar una venta registrada. Restaura el stock del producto y ajusta la caja."""
+    venta = Venta.query.get_or_404(venta_id)
+
+    # Admin global, admin de sucursal, supervisor de tienda, o dueño de la venta
+    puede_eliminar = (current_user.es_admin or
+                      current_user.es_admin_de_sucursal() or
+                      (current_user.puede_gestionar_inventario() and venta.sucursal_id == current_user.sucursal_id) or
+                      venta.usuario_id == current_user.id)
+
+    if not puede_eliminar:
+        flash('No tienes permisos para eliminar esta venta', 'error')
+        return redirect(url_for('ventas'))
+
+    try:
+        # Restaurar stock del producto
+        if venta.producto:
+            venta.producto.stock += venta.cantidad
+
+        # Ajustar la caja de ventas del día
+        fecha_caja = venta.fecha.date()
+        caja = CajaVentas.query.filter_by(fecha=fecha_caja, sucursal_id=venta.sucursal_id).first()
+        if caja:
+            caja.total_vendido = float(caja.total_vendido) - float(venta.monto)
+            caja.saldo = float(caja.saldo) - float(venta.monto)
+
+        # Eliminar la venta
+        db.session.delete(venta)
+        db.session.commit()
+        clear_cache()
+
+        flash('Venta eliminada correctamente', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar la venta: {str(e)}', 'error')
+
+    return redirect(url_for('ventas'))
+
+
 @app.route('/api/ventas/resumen')
 @login_required
 def api_ventas_resumen():
@@ -2106,20 +2147,20 @@ def activar_supervisores():
         return redirect(url_for('dashboard'))
 
     # Activar supervisor para usuarios que NO son admin ni admin_sucursal, pero tienen sucursal
-    usuarios_activados = Usuario.query.filter(
+    usuarios_para_activar = Usuario.query.filter(
         Usuario.es_admin == False,
         Usuario.es_admin_sucursal == False,
-        Usuario.sucursal_id.isnot(None),
-        Usuario.gestiona_inventario == False
+        Usuario.sucursal_id.isnot(None)
     ).all()
 
     count = 0
-    for u in usuarios_activados:
-        u.gestiona_inventario = True
-        count += 1
+    for u in usuarios_para_activar:
+        if not u.gestiona_inventario:  # Solo si no está ya activado
+            u.gestiona_inventario = True
+            count += 1
 
     db.session.commit()
-    flash(f'{count} usuario(s) activado(s) como supervisores de tienda', 'success')
+    flash(f'{count} usuario(s) activado(s) como supervisores de tienda (total usuarios calificados: {len(usuarios_para_activar)})', 'success')
     return redirect(url_for('admin_usuarios'))
 
 # Rutas mínimas para medios de pago (compatibilidad)
