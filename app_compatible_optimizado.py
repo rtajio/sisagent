@@ -326,6 +326,16 @@ class Usuario(UserMixin, db.Model):
             return self.sucursal_id == sucursal_id
         return False
 
+class ChatbotSettings(db.Model):
+    __tablename__ = 'chatbot_settings'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), unique=True, nullable=False)
+    trigger_phrase = db.Column(db.String(100), default='REGISTRAR')
+    end_phrase = db.Column(db.String(100), default='cierra el chat')
+    hotkey = db.Column(db.Text, nullable=True)  # JSON: {ctrl, alt, shift, code, label}
+    continuous_listening = db.Column(db.Boolean, default=True)
+    usuario = db.relationship('Usuario', backref='chatbot_settings', uselist=False)
+
 class Operacion(db.Model):
     __tablename__ = 'operacion'
     id = db.Column(db.Integer, primary_key=True)
@@ -7235,6 +7245,87 @@ def api_get_learned_phrases(user_id):
         })
 
     except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chatbot/settings', methods=['GET'])
+@login_required
+def api_get_chatbot_settings():
+    """Cargar ajustes de chatbot del usuario"""
+    try:
+        settings = ChatbotSettings.query.filter_by(usuario_id=current_user.id).first()
+
+        if not settings:
+            # Retornar defaults si no existen
+            return jsonify({
+                'success': True,
+                'settings': {
+                    'trigger_phrase': 'REGISTRAR',
+                    'end_phrase': 'cierra el chat',
+                    'hotkey': None,
+                    'continuous_listening': True
+                }
+            })
+
+        return jsonify({
+            'success': True,
+            'settings': {
+                'trigger_phrase': settings.trigger_phrase,
+                'end_phrase': settings.end_phrase,
+                'hotkey': json.loads(settings.hotkey) if settings.hotkey else None,
+                'continuous_listening': settings.continuous_listening
+            }
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/chatbot/settings', methods=['POST'])
+@login_required
+def api_save_chatbot_settings():
+    """Guardar ajustes de chatbot del usuario"""
+    try:
+        data = request.get_json() or {}
+
+        trigger_phrase = (data.get('trigger_phrase') or '').strip()
+        end_phrase = (data.get('end_phrase') or '').strip()
+        hotkey = data.get('hotkey')  # {ctrl, alt, shift, code, label} o null
+        continuous_listening = data.get('continuous_listening', True)
+
+        # Validar frase activadora
+        if not trigger_phrase or len(trigger_phrase) > 100:
+            return jsonify({'success': False, 'message': 'Frase activadora inválida'}), 400
+
+        # Obtener o crear ajustes
+        settings = ChatbotSettings.query.filter_by(usuario_id=current_user.id).first()
+        if not settings:
+            settings = ChatbotSettings(usuario_id=current_user.id)
+            db.session.add(settings)
+
+        # Actualizar
+        settings.trigger_phrase = trigger_phrase
+        settings.end_phrase = end_phrase
+        settings.hotkey = json.dumps(hotkey) if hotkey else None
+        settings.continuous_listening = bool(continuous_listening)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Ajustes guardados',
+            'settings': {
+                'trigger_phrase': settings.trigger_phrase,
+                'end_phrase': settings.end_phrase,
+                'hotkey': hotkey,
+                'continuous_listening': settings.continuous_listening
+            }
+        })
+
+    except Exception as e:
+        db.session.rollback()
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
 

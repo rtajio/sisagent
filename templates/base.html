@@ -2456,37 +2456,48 @@
 
             // ===== Configuración (frase activadora + escucha continua) =====
             function loadVoiceSettings() {
-                try {
-                    const phrase = localStorage.getItem(TRIGGER_STORAGE_KEY);
-                    if (phrase && phrase.trim()) triggerPhrase = phrase.trim();
-                    const endP = localStorage.getItem(ENDPHRASE_STORAGE_KEY);
-                    if (endP !== null) endPhrase = endP.trim();  // '' guardado = desactivada a propósito
-                    const hk = localStorage.getItem(HOTKEY_STORAGE_KEY);
-                    if (hk) { try { voiceHotkey = JSON.parse(hk); } catch (e) { voiceHotkey = null; } }
-                    const stored = localStorage.getItem(CONTINUOUS_STORAGE_KEY);
-                    if (stored !== null) {
-                        triggerListeningEnabled = stored === '1';
-                    } else {
-                        triggerListeningEnabled = true;  // DEFAULT: activada si no hay preferencia guardada
-                    }
-                    // HOTKEY POR DEFECTO: Ctrl+Shift+V (si no hay guardado)
-                    if (!voiceHotkey) {
+                // Cargar desde API (BD)
+                fetch('/api/chatbot/settings')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success && data.settings) {
+                            triggerPhrase = data.settings.trigger_phrase || 'REGISTRAR';
+                            endPhrase = data.settings.end_phrase || 'cierra el chat';
+                            voiceHotkey = data.settings.hotkey || { code: 'KeyV', ctrl: true, shift: true, alt: false, meta: false, label: 'Ctrl + Shift + V' };
+                            triggerListeningEnabled = data.settings.continuous_listening !== false;
+                            console.log('[voice-settings] Cargados desde BD');
+                        }
+                    })
+                    .catch(e => {
+                        console.warn('[voice-settings] Error cargando:', e);
+                        // Fallback a defaults
+                        triggerPhrase = 'REGISTRAR';
+                        endPhrase = 'cierra el chat';
                         voiceHotkey = { code: 'KeyV', ctrl: true, shift: true, alt: false, meta: false, label: 'Ctrl + Shift + V' };
-                        console.log('[hotkey] Usando default: Ctrl+Shift+V');
-                    }
-                } catch (e) {
-                    console.warn('[voice-settings] Error cargando:', e);
-                    triggerListeningEnabled = true;  // Fallback
-                }
+                        triggerListeningEnabled = true;
+                    });
             }
             function saveVoiceSettings() {
-                try {
-                    localStorage.setItem(TRIGGER_STORAGE_KEY, triggerPhrase);
-                    localStorage.setItem(ENDPHRASE_STORAGE_KEY, endPhrase);
-                    if (voiceHotkey) localStorage.setItem(HOTKEY_STORAGE_KEY, JSON.stringify(voiceHotkey));
-                    else localStorage.removeItem(HOTKEY_STORAGE_KEY);
-                    localStorage.setItem(CONTINUOUS_STORAGE_KEY, triggerListeningEnabled ? '1' : '0');
-                } catch (e) {}
+                // Guardar en API (BD)
+                fetch('/api/chatbot/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        trigger_phrase: triggerPhrase,
+                        end_phrase: endPhrase,
+                        hotkey: voiceHotkey,
+                        continuous_listening: triggerListeningEnabled
+                    })
+                })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            console.log('[voice-settings] Guardados en BD');
+                        } else {
+                            console.warn('[voice-settings] Error guardando:', data.message);
+                        }
+                    })
+                    .catch(e => console.warn('[voice-settings] Error de red:', e));
             }
             function openSettings() {
                 triggerInput.value = triggerPhrase;
