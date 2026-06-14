@@ -31,7 +31,7 @@
 
 <!-- Estadísticas de la sucursal -->
 <div class="row mb-4">
-    <div class="col-xl-4 col-md-6 mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
         <div class="card border-left-primary shadow h-100 py-2">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
@@ -51,7 +51,7 @@
         </div>
     </div>
 
-    <div class="col-xl-4 col-md-6 mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
         <div class="card border-left-success shadow h-100 py-2">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
@@ -71,7 +71,7 @@
         </div>
     </div>
 
-    <div class="col-xl-4 col-md-6 mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
         <div class="card border-left-info shadow h-100 py-2">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
@@ -90,7 +90,173 @@
             </div>
         </div>
     </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Ventas Hoy
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            S/ {{ "%.2f"|format(total_ventas_hoy|default(0.0)) }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-shopping-cart fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
+<!-- Operaciones recientes de la sucursal -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-clock me-2"></i>
+                    Operaciones Recientes - Hoy
+                </h6>
+                <a href="{{ url_for('operaciones') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-eye me-1"></i>
+                    Ver Todas
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>N&deg;</th>
+                                <th>Hora</th>
+                                <th>Monto</th>
+                                <th>Comisi&oacute;n</th>
+                                <th>Medio</th>
+                                <th>Usuario</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-operaciones-suc">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-center py-4" id="empty-ops-suc" style="display: none;">
+                    <i class="fas fa-clock fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No hay operaciones registradas hoy</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ventas recientes de la sucursal -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    Ventas Recientes - Hoy
+                </h6>
+                <a href="{{ url_for('ventas') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-eye me-1"></i>
+                    Ver Todas
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>N&deg;</th>
+                                <th>Hora</th>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                                <th>Total (S/)</th>
+                                <th>Usuario</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-ventas-suc">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-center py-4" id="empty-ventas-suc" style="display: none;">
+                    <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No hay ventas registradas hoy</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Live Updates: Operaciones de la sucursal
+(function() {
+    const tbody = document.getElementById('tbody-operaciones-suc');
+    const empty = document.getElementById('empty-ops-suc');
+    if (!tbody) return;
+    function update() {
+        fetch('/api/operaciones/lista', { credentials: 'include' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) return;
+                tbody.innerHTML = '';
+                if (!data.operaciones.length) { empty.style.display = 'block'; return; }
+                empty.style.display = 'none';
+                data.operaciones.forEach((op, i) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${i + 1}</td>
+                        <td>${op.hora}</td>
+                        <td class="font-weight-bold">S/ ${op.monto.toFixed(2)}</td>
+                        <td class="text-success font-weight-bold">S/ ${op.comision.toFixed(2)}</td>
+                        <td><span class="badge bg-primary">${op.medio}</span></td>
+                        <td>${op.usuario || ''}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }).catch(() => {});
+    }
+    setInterval(update, 30000);
+    update();
+})();
+
+// Live Updates: Ventas de la sucursal
+(function() {
+    const tbody = document.getElementById('tbody-ventas-suc');
+    const empty = document.getElementById('empty-ventas-suc');
+    if (!tbody) return;
+    function update() {
+        fetch('/api/ventas/lista', { credentials: 'include' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) return;
+                tbody.innerHTML = '';
+                if (!data.ventas.length) { empty.style.display = 'block'; return; }
+                empty.style.display = 'none';
+                data.ventas.forEach((v, i) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${i + 1}</td>
+                        <td>${v.fecha}</td>
+                        <td>${v.producto_nombre || '—'}</td>
+                        <td class="text-center">${v.cantidad}</td>
+                        <td class="font-weight-bold text-success">S/ ${v.monto.toFixed(2)}</td>
+                        <td>${v.usuario || ''}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }).catch(() => {});
+    }
+    setInterval(update, 30000);
+    update();
+})();
+</script>
 {% endblock %}
 

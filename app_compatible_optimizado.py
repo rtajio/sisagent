@@ -747,6 +747,15 @@ def dashboard():
             base_ctx['comisiones_hoy'] = comisiones_hoy_list
             base_ctx['comisiones_mes'] = comisiones_mes_dict_final
 
+            # Ventas totales del día (todas las sucursales)
+            total_ventas_hoy = db.session.query(
+                db.func.coalesce(db.func.sum(Venta.monto), 0.0)
+            ).filter(
+                Venta.fecha >= inicio_hoy,
+                Venta.fecha <= fin_hoy
+            ).scalar() or 0.0
+            base_ctx['total_ventas_hoy'] = float(total_ventas_hoy)
+
             return render_template('admin_dashboard.html', **base_ctx)
         elif current_user.es_admin_de_sucursal():
             # Dashboard para administrador de sucursal
@@ -807,6 +816,16 @@ def dashboard():
             base_ctx['usuarios_sucursal'] = usuarios_sucursal
             base_ctx['comisiones_usuarios_hoy'] = comisiones_usuarios_hoy
             base_ctx['sucursal'] = current_user.sucursal
+
+            # Ventas del día para la sucursal
+            total_ventas_hoy = db.session.query(
+                db.func.coalesce(db.func.sum(Venta.monto), 0.0)
+            ).filter(
+                Venta.sucursal_id == sucursal_id,
+                Venta.fecha >= inicio_hoy,
+                Venta.fecha <= fin_hoy
+            ).scalar() or 0.0
+            base_ctx['total_ventas_hoy'] = float(total_ventas_hoy)
 
             return render_template('admin_sucursal_dashboard.html', **base_ctx)
         else:
