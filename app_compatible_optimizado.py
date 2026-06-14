@@ -2096,6 +2096,32 @@ def editar_usuario(usuario_id):
     sucursales = Sucursal.query.filter_by(activa=True).all() if current_user.es_admin else [current_user.sucursal] if current_user.sucursal else []
     return render_template('editar_usuario.html', usuario=usuario, sucursales=sucursales)
 
+@app.route('/admin/activar-supervisores', methods=['GET'])
+@login_required
+def activar_supervisores():
+    """Activar gestiona_inventario=True para todos los usuarios no-admin con sucursal asignada.
+    (Endpoint temporal para setup inicial)"""
+    if not current_user.es_admin:
+        flash('Acceso denegado', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Activar supervisor para usuarios que NO son admin ni admin_sucursal, pero tienen sucursal
+    usuarios_activados = Usuario.query.filter(
+        Usuario.es_admin == False,
+        Usuario.es_admin_sucursal == False,
+        Usuario.sucursal_id.isnot(None),
+        Usuario.gestiona_inventario == False
+    ).all()
+
+    count = 0
+    for u in usuarios_activados:
+        u.gestiona_inventario = True
+        count += 1
+
+    db.session.commit()
+    flash(f'{count} usuario(s) activado(s) como supervisores de tienda', 'success')
+    return redirect(url_for('admin_usuarios'))
+
 # Rutas mínimas para medios de pago (compatibilidad)
 @app.route('/admin/medios')
 @login_required
